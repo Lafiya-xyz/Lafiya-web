@@ -44,7 +44,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@v3
       - run: supabase start
       - run: npm run test:integration
       - run: supabase stop
@@ -67,7 +67,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@v3
       - run: supabase start
       - run: supabase db reset
       - run: npm run build
