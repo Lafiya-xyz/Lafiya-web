@@ -61,15 +61,18 @@ export default async function PublicCardPage({
   const card = data[0];
   const recordHash = computeRecordHash(card);
 
-  let attestation = null;
+ let attestation = null;
+  let attestationStatus: "verified" | "not_verified" | "unavailable" =
+    "not_verified";
   try {
     attestation = await getAttestation(recordHash);
+    attestationStatus = attestation !== null ? "verified" : "not_verified";
   } catch (err) {
     logError("Failed to retrieve attestation from Stellar", err, {
       route: "/card/[id]",
       recordHash,
     });
-    throw err;
+    attestationStatus = "unavailable";
   }
 
   return (
@@ -84,7 +87,7 @@ export default async function PublicCardPage({
         id="main-content"
         className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 px-6 py-16"
       >
-        <VerifiedBadge verified={attestation !== null} />
+        <VerifiedBadge status={attestationStatus} />
 
         <div className="flex items-center gap-4">
           {card.photo_url ? (

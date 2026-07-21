@@ -48,7 +48,7 @@ export const DEMO_VERIFIED_RECORD_HASH = "a".repeat(64);
  */
 export const ATTESTATION_TIMEOUT_MS = 2000;
 
-const MOCK_ATTESTATIONS = new Map<string, Attestation>([
+export const MOCK_ATTESTATIONS = new Map<string, Attestation>([
   [
     DEMO_VERIFIED_RECORD_HASH,
     {
@@ -58,6 +58,26 @@ const MOCK_ATTESTATIONS = new Map<string, Attestation>([
     },
   ],
 ]);
+/**
+ * Test-only seam: lets an out-of-process E2E test register a mock
+ * attestation for a specific recordHash before visiting the public card
+ * page. Real card hashes are SHA-256 digests, so they can never naturally
+ * match the fixed DEMO_VERIFIED_RECORD_HASH — this is how a "verified"
+ * state is reached in visual/E2E tests without faking application logic.
+ * Inert (throws) unless ALLOW_TEST_ATTESTATION_SEED=true, which only the
+ * Playwright webServer config sets — never set in production.
+ */
+export function setMockAttestationForTesting(
+  recordHash: string,
+  attestation: Attestation,
+): void {
+  if (process.env.ALLOW_TEST_ATTESTATION_SEED !== "true") {
+    throw new Error(
+      "setMockAttestationForTesting is disabled outside test environments",
+    );
+  }
+  MOCK_ATTESTATIONS.set(recordHash, attestation);
+}
 
 // simulateTransaction needs a source account, but since we never submit the
 // transaction it's just a placeholder — any well-formed account works. Built
