@@ -41,6 +41,7 @@
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.3",
     "axe-core": "^4.12.1",
+    "braces": "^3.0.3",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "jsdom": "^29.1.1",
