@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { createClient } from "@/lib/supabase/server";
 import { upsertProfile } from "./actions";
+
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+}));
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn().mockResolvedValue({}),
 }));
-
-const mockCreateClient =
-  await import("@/lib/supabase/server") as Promise<typeof import("@/lib/supabase/server")>;
 
 describe("upsertProfile optimistic concurrency", () => {
   const authUser = { id: crypto.randomUUID() };
@@ -20,6 +22,9 @@ describe("upsertProfile optimistic concurrency", () => {
         data: { user_id: authUser.id, updated_at: "now" },
       });
     const mockSelect = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        maybeSingle: mockMaybeSingle,
+      }),
       maybeSingle: mockMaybeSingle,
     });
     const mockFrom = vi.fn().mockReturnValue({
@@ -27,25 +32,27 @@ describe("upsertProfile optimistic concurrency", () => {
       upsert: mockUpsert,
     });
 
-    (mockCreateClient.createClient as ReturnType<typeof vi.fn>).mockResolvedValue({
+    vi.mocked(createClient).mockResolvedValue({
       auth: {
         getUser: vi.fn().mockResolvedValue({
           data: { user: authUser },
         }),
       },
       from: mockFrom,
-    });
+    } as unknown as Awaited<ReturnType<typeof createClient>>);
   });
 
   const staleFormData = (expected: string, name = "New Name") => {
     const data = new FormData();
     data.set("expectedUpdatedAt", expected);
     data.set("name", name);
+    data.set("bloodGroup", "unknown");
+    data.set("genotype", "unknown");
     return data;
   };
 
   it("returns a conflict error when updated_at changed since form was loaded", async () => {
-    (mockCreateClient.createClient as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    vi.mocked(createClient).mockResolvedValueOnce({
       auth: {
         getUser: vi.fn().mockResolvedValue({
           data: { user: authUser },
@@ -55,6 +62,13 @@ describe("upsertProfile optimistic concurrency", () => {
         return {
           select() {
             return {
+              eq() {
+                return {
+                  maybeSingle() {
+                    return Promise.resolve({ data: { user_id: authUser.id, updated_at: "newer" } });
+                  },
+                };
+              },
               maybeSingle() {
                 return Promise.resolve({ data: { user_id: authUser.id, updated_at: "newer" } });
               },
@@ -62,7 +76,7 @@ describe("upsertProfile optimistic concurrency", () => {
           },
         };
       },
-    });
+    } as unknown as Awaited<ReturnType<typeof createClient>>);
 
     const result = await upsertProfile(undefined, staleFormData("stale"));
 
@@ -74,7 +88,7 @@ describe("upsertProfile optimistic concurrency", () => {
 
   it("allows a save when the submitted updated_at matches the current row", async () => {
     let upsertCalls = 0;
-    (mockCreateClient.createClient as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    vi.mocked(createClient).mockResolvedValueOnce({
       auth: {
         getUser: vi.fn().mockResolvedValue({
           data: { user: authUser },
@@ -84,6 +98,13 @@ describe("upsertProfile optimistic concurrency", () => {
         return {
           select() {
             return {
+              eq() {
+                return {
+                  maybeSingle() {
+                    return Promise.resolve({ data: { user_id: authUser.id, updated_at: "now" } });
+                  },
+                };
+              },
               maybeSingle() {
                 return Promise.resolve({ data: { user_id: authUser.id, updated_at: "now" } });
               },
@@ -95,7 +116,7 @@ describe("upsertProfile optimistic concurrency", () => {
           },
         };
       },
-    });
+    } as unknown as Awaited<ReturnType<typeof createClient>>);
 
     const result = await upsertProfile(undefined, staleFormData("now"));
 
