@@ -19,7 +19,7 @@
     "bundle:check": "node scripts/check-bundle-size.mjs"
   },
   "dependencies": {
-    "@stellar/stellar-sdk": "^16.0.1",
+    "@stellar/stellar-sdk": "^16.1.0",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.2",
     "libphonenumber-js": "^1.13.9",
