@@ -2,12 +2,16 @@ import { render, screen } from "@testing-library/react";
 import * as React from "react";
 import { describe, expect, it, vi } from "vitest";
 
-// Mock env variables before they are parsed by lib/env
+// Mock env variables before they are parsed by lib/env / lib/env-server.
+// serverEnv lives in lib/env-server.ts (not lib/env.ts), so it needs its own
+// mock rather than being folded into the @/lib/env mock.
 vi.mock("@/lib/env", () => ({
   clientEnv: {
     NEXT_PUBLIC_SUPABASE_URL: "http://localhost:54321",
     NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
   },
+}));
+vi.mock("@/lib/env-server", () => ({
   serverEnv: {
     NEXT_PUBLIC_SUPABASE_URL: "http://localhost:54321",
     NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
@@ -25,7 +29,7 @@ vi.mock("react", async (importOriginal) => {
   const original = await importOriginal<typeof import("react")>();
   return {
     ...original,
-    useActionState: (action: any, initialState: any) =>
+    useActionState: (action: unknown, initialState: unknown) =>
       mockUseActionState(action, initialState),
   };
 });

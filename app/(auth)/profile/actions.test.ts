@@ -2,12 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { upsertProfile } from "./actions";
 
+// revalidatePath requires a real Next.js request/render context (it throws
+// "static generation store missing" outside one); stub it for this
+// server-action unit test, matching the actions.ts happy path calling it.
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+}));
+
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn().mockResolvedValue({}),
 }));
 
-const mockCreateClient =
-  await import("@/lib/supabase/server") as Promise<typeof import("@/lib/supabase/server")>;
+const mockCreateClient = await import("@/lib/supabase/server");
 
 describe("upsertProfile optimistic concurrency", () => {
   const authUser = { id: crypto.randomUUID() };
@@ -20,7 +26,7 @@ describe("upsertProfile optimistic concurrency", () => {
         data: { user_id: authUser.id, updated_at: "now" },
       });
     const mockSelect = vi.fn().mockReturnValue({
-      maybeSingle: mockMaybeSingle,
+      eq: vi.fn().mockReturnValue({ maybeSingle: mockMaybeSingle }),
     });
     const mockFrom = vi.fn().mockReturnValue({
       select: mockSelect,
@@ -41,6 +47,11 @@ describe("upsertProfile optimistic concurrency", () => {
     const data = new FormData();
     data.set("expectedUpdatedAt", expected);
     data.set("name", name);
+    // A real form submission always includes these <select> fields with a
+    // defaultValue; set them explicitly so an object-spread `undefined`
+    // doesn't override the existing row's default before Zod validation.
+    data.set("bloodGroup", "unknown");
+    data.set("genotype", "unknown");
     return data;
   };
 
@@ -55,8 +66,12 @@ describe("upsertProfile optimistic concurrency", () => {
         return {
           select() {
             return {
-              maybeSingle() {
-                return Promise.resolve({ data: { user_id: authUser.id, updated_at: "newer" } });
+              eq() {
+                return {
+                  maybeSingle() {
+                    return Promise.resolve({ data: { user_id: authUser.id, updated_at: "newer" } });
+                  },
+                };
               },
             };
           },
@@ -84,8 +99,12 @@ describe("upsertProfile optimistic concurrency", () => {
         return {
           select() {
             return {
-              maybeSingle() {
-                return Promise.resolve({ data: { user_id: authUser.id, updated_at: "now" } });
+              eq() {
+                return {
+                  maybeSingle() {
+                    return Promise.resolve({ data: { user_id: authUser.id, updated_at: "now" } });
+                  },
+                };
               },
             };
           },

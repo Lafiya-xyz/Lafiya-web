@@ -4,10 +4,11 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 
 import { computeRecordHash } from "@/lib/attestation/recordHash";
+import { logError } from "@/lib/logging/logger";
 import { createClient } from "@/lib/supabase/server";
 import { getAttestation } from "@/lib/stellar/attestation";
 
-import { VerifiedBadge } from "./verified-badge";
+import { VerifiedBadge, type VerificationStatus } from "./verified-badge";
 
 // Caching strategy: this page is ISR with a short TTL rather than
 // force-dynamic. Card data changes rarely (only when a patient edits their
@@ -61,18 +62,16 @@ export default async function PublicCardPage({
   const card = data[0];
   const recordHash = computeRecordHash(card);
 
- let attestation = null;
-  let attestationStatus: "verified" | "not_verified" | "unavailable" =
-    "not_verified";
+  let status: VerificationStatus;
   try {
-    attestation = await getAttestation(recordHash);
-    attestationStatus = attestation !== null ? "verified" : "not_verified";
+    const attestation = await getAttestation(recordHash);
+    status = attestation !== null ? "verified" : "not_verified";
   } catch (err) {
     logError("Failed to retrieve attestation from Stellar", err, {
       route: "/card/[id]",
       recordHash,
     });
-    attestationStatus = "unavailable";
+    status = "unavailable";
   }
 
   return (
@@ -87,7 +86,7 @@ export default async function PublicCardPage({
         id="main-content"
         className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 px-6 py-16"
       >
-        <VerifiedBadge status={attestationStatus} />
+        <VerifiedBadge status={status} />
 
         <div className="flex items-center gap-4">
           {card.photo_url ? (

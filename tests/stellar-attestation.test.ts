@@ -13,6 +13,25 @@ vi.hoisted(() => {
   process.env.ATTESTATION_CONTRACT_ID = "C1111111111111111111111111111111111111111111111111111111111111111";
 });
 
+// getAttestation wraps its lookup in next/cache's unstable_cache, which
+// requires a full Next.js request/render context to have an incremental
+// cache available. Outside that context (here, under Vitest) it throws, so
+// tests stub it with a simple in-memory memoizer instead.
+vi.mock("next/cache", () => ({
+  unstable_cache: (fn: (...args: unknown[]) => unknown) => {
+    const cacheStore = new Map<string, unknown>();
+    return async (...args: unknown[]) => {
+      const key = JSON.stringify(args);
+      if (cacheStore.has(key)) {
+        return cacheStore.get(key);
+      }
+      const result = await fn(...args);
+      cacheStore.set(key, result);
+      return result;
+    };
+  },
+}));
+
 // Recorded-RPC-fixture style mock: no network, fully deterministic. We drive
 // the simulation outcome per-test via mutable holders so we can assert both
 // the happy path (Attestation decoded) and the missing-record path (null).

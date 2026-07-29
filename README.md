@@ -429,6 +429,12 @@ For issues and questions:
 - GitHub Issues: [Create an issue](https://github.com/lafiya-xyz/lafiya-web/issues)
 - SECURITY policy: [SECURITY.md](SECURITY.md)
 
+## Testing
+
+- `npm test` — unit/component tests (Vitest, jsdom)
+- `npm run test:integration` — Supabase RLS/RPC integration tests against a local `supabase start` instance
+- `npm run test:e2e` — Playwright end-to-end tests covering the full patient journey: signup → profile save → QR/link retrieval → unauthenticated public card view. Requires a local Supabase instance (`supabase start`) and a built/running app (handled automatically by `playwright.config.ts`'s `webServer`).
+
 ## Disclaimer
 
 Lafiya is an information aid, **not a medical device** and **not a substitute for professional medical judgment**. Verified indicators reflect that a record was attested by a registered health worker; they are not a clinical guarantee. Treatment decisions remain the responsibility of the attending clinician.

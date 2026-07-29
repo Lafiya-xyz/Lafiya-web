@@ -19,19 +19,20 @@ vi.mock('@/lib/supabase/server', () => {
 describe('upsertProfile validation', () => {
   it('returns fieldErrors for multiple invalid fields', async () => {
     const formData = new FormData();
+    // upsertProfile requires a concurrency token on every save; the mocked
+    // `existing` row is null, so any non-empty value satisfies the check.
+    formData.set('expectedUpdatedAt', 'test-token');
     formData.set('name', ''); // empty name triggers required
     formData.set('dateOfBirth', 'not-a-date'); // invalid date
     formData.set('bloodGroup', 'unknown');
     formData.set('genotype', 'unknown');
-    // required array fields can be empty
-    formData.set('allergies', []);
-    formData.set('medications', []);
-    formData.set('chronicConditions', []);
+    // required array fields can be empty: omitted entirely, matching how
+    // getTagList/getAll naturally return [] for a field never set.
     formData.set('emergencyContactsJson', '[]');
 
     const result = await upsertProfile(undefined, formData);
-    expect(result.fieldErrors).toBeDefined();
-    expect(result.fieldErrors?.['name']).toBe('Name is required');
-    expect(result.fieldErrors?.['dateOfBirth']).toBe('Enter a valid date');
+    expect(result.errors).toBeDefined();
+    expect(result.errors?.['name']).toBe('Name is required');
+    expect(result.errors?.['dateOfBirth']).toBe('Enter a valid date');
   });
 });

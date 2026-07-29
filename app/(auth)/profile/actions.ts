@@ -16,6 +16,52 @@ export interface ProfileFormState {
   success?: boolean;
 }
 
+// --- Data export (Issue #12) ---
+
+export type ProfileExport = {
+  exportedAt: string;
+  schemaVersion: 1;
+  profile: Record<string, unknown>;
+};
+
+/**
+ * Returns the authenticated caller's own `profiles` row as a
+ * structured export object. Relies on Supabase RLS — no service
+ * role key is used, so a user can never fetch another user's row.
+ */
+export async function exportMyProfileData(): Promise<
+  { data: ProfileExport } | { error: string }
+> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { error: "Not authenticated" };
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("user_id", user.id)
+    .single();
+
+  if (profileError || !profile) {
+    return { error: "Could not load profile data" };
+  }
+
+  return {
+    data: {
+      exportedAt: new Date().toISOString(),
+      schemaVersion: 1,
+      profile,
+    },
+  };
+}
+
 /** Reads a repeated text-list field, dropping blank rows left by the +/- UI. */
 function getTagList(formData: FormData, name: string): string[] {
   return formData

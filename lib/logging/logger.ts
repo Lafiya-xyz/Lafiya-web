@@ -77,7 +77,7 @@ export function redactSensitiveData(
         errorObj[key] = "[REDACTED]";
       } else {
         errorObj[key] = redactSensitiveData(
-          (data as Record<string, unknown>)[key],
+          (data as unknown as Record<string, unknown>)[key],
           visited,
         );
       }

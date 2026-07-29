@@ -1,14 +1,6 @@
 import { createHash } from "node:crypto";
 
 import type { EmergencyCardRow } from "@/lib/supabase/types";
-
-/**
- * Deterministic SHA-256 over the emergency-relevant facts of a card — the
- * value that would be looked up on-chain once lafiya-contracts exists (see
- * README.md > Attestation & Trust Layer). Excludes photo_url: attestation
- * covers the emergency medical facts, not the cosmetic/identity photo.
- * Array fields are sorted first so field order never changes the hash.
- */
 import { getAttestation } from "@/lib/stellar/attestation";
 
 /**
@@ -23,6 +15,14 @@ export async function validateAttestation(recordHash: string): Promise<boolean> 
   return true;
 }
 
+/**
+ * Deterministic SHA-256 over the emergency-relevant facts of a card — the
+ * value that would be looked up on-chain once lafiya-contracts exists (see
+ * README.md > Attestation & Trust Layer). Excludes photo_url: attestation
+ * covers the emergency medical facts, not the cosmetic/identity photo.
+ * Array fields are sorted first so field order never changes the hash.
+ */
+export function computeRecordHash(card: EmergencyCardRow): string {
   const canonical = JSON.stringify({
     name: card.name,
     age: card.age,
