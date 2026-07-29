@@ -1,7 +1,48 @@
 import { test, expect } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
+import { createHash } from "node:crypto";
 
-import { computeRecordHash } from "../lib/attestation/recordHash";
+// Duplicated from lib/attestation/recordHash.ts rather than imported: that
+// module also exports validateAttestation, which pulls in
+// lib/stellar/attestation.ts -> lib/env-server.ts -> the "server-only"
+// package. That guard throws unconditionally unless the "react-server"
+// resolve condition is set, which Playwright's plain Node test process
+// never sets (only Next.js's RSC build does) — so importing it here would
+// crash every test file, not just this one. Keep this in sync with the
+// real implementation if the canonicalization ever changes.
+function computeRecordHash(card: {
+  name: string;
+  age: number | null;
+  blood_group: string;
+  genotype: string;
+  allergies: string[];
+  medications: string[];
+  chronic_conditions: string[];
+  emergency_contacts: Array<{ name: string; phone: string; relationship: string }>;
+  language: string | null;
+}): string {
+  const canonical = JSON.stringify({
+    name: card.name,
+    age: card.age,
+    bloodGroup: card.blood_group,
+    genotype: card.genotype,
+    allergies: [...card.allergies].sort(),
+    medications: [...card.medications].sort(),
+    chronicConditions: [...card.chronic_conditions].sort(),
+    emergencyContacts: [...card.emergency_contacts]
+      .map((contact) => ({
+        name: contact.name,
+        phone: contact.phone,
+        relationship: contact.relationship,
+      }))
+      .sort((a, b) =>
+        `${a.name}${a.phone}`.localeCompare(`${b.name}${b.phone}`),
+      ),
+    language: card.language,
+  });
+
+  return createHash("sha256").update(canonical).digest("hex");
+}
 
 const SUPABASE_URL = "http://127.0.0.1:54321";
 const SERVICE_ROLE_KEY =
@@ -57,7 +98,7 @@ test.describe("Visual regression: public card + verified badge", () => {
 
     const recordHash = computeRecordHash(rpcRows[0]);
 
-    const res = await fetch("http://localhost:3000/api/test/attestation", {
+    const res = await fetch(`http://localhost:3000/api/attestation/${recordHash}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ recordHash }),
