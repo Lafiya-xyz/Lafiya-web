@@ -5,7 +5,7 @@ import { VerifiedBadge } from "./verified-badge";
 
 describe("VerifiedBadge", () => {
   it("shows the verified state when an attestation exists", () => {
-    const { container } = render(<VerifiedBadge verified />);
+    const { container } = render(<VerifiedBadge status="verified" />);
     expect(screen.getByText("Verified by a health worker")).toBeInTheDocument();
     expect(screen.queryByText("Not yet verified")).not.toBeInTheDocument();
 
@@ -17,7 +17,7 @@ describe("VerifiedBadge", () => {
   });
 
   it("shows the unverified state when no attestation exists", () => {
-    const { container } = render(<VerifiedBadge verified={false} />);
+    const { container } = render(<VerifiedBadge status="not_verified" />);
     expect(screen.getByText("Not yet verified")).toBeInTheDocument();
     expect(
       screen.queryByText("Verified by a health worker"),

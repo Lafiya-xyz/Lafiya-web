@@ -46,9 +46,6 @@ export function TagListField({
               aria-describedby={error ? `${name}-error` : undefined}
               className="w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
             />
-            {fieldErrors?.[`${name}.${index}`] && (
-              <p id={`${name}-${index}-error`} className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors[`${name}.${index}`]}</p>
-            )}
             <button
               type="button"
               onClick={() => setValues(values.filter((_, i) => i !== index))}

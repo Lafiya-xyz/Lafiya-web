@@ -8,9 +8,10 @@ import {
   rpc,
   scValToNative,
 } from "@stellar/stellar-sdk";
+import { unstable_cache } from "next/cache";
 
 import type { Attestation } from "@/lib/attestation/types";
-import { serverEnv } from "@/lib/env";
+import { serverEnv } from "@/lib/env-server";
 
 /**
  * Live M1 attestation lookup.
@@ -28,8 +29,16 @@ import { serverEnv } from "@/lib/env";
  * without a contract. This fallback is intentional and documented; flip it off
  * by setting `ATTESTATION_CONTRACT_ID` in the environment.
  *
- * The function signature is unchanged from the pre-M1 stub, so neither caller
- * (the public card page nor the attestation Route Handler) needs to change.
+ * --- Caching (Issue #17) ---
+ * Attestations change rarely relative to how often a card is viewed, and each
+ * live lookup is a Soroban RPC round trip. Results are cached per
+ * `recordHash` for `ATTESTATION_CACHE_TTL_SECONDS` (default 120s) using
+ * Next's `unstable_cache`, so repeat views within the TTL window hit the
+ * data cache instead of RPC. Entries are tagged `attestation:<recordHash>`
+ * so a future "new attestation recorded" signal can call
+ * `revalidateTag(\`attestation:${recordHash}\`)` to invalidate proactively.
+ *
+ * The public function signature is unchanged, so no caller needs to change.
  */
 
 /** Fixture hash for local dev/demo only — not a real record's hash. */
@@ -37,16 +46,22 @@ export const DEMO_VERIFIED_RECORD_HASH = "a".repeat(64);
 
 /**
  * Maximum milliseconds to wait for a Soroban RPC response before treating
- * the attestation lookup as a failure. This timeout fires *inside*
- * `getAttestation`, before the result is returned to callers, so that a
- * hanging RPC endpoint counts toward the circuit-breaker failure threshold
- * and trips the breaker after `failureThreshold` consecutive slow calls.
+ * the attestation lookup as a failure.
  *
  * Callers (e.g. the public card page) should treat a rejection from
  * `getAttestation` as "verification status unavailable" rather than a
  * hard error — the card must still render the emergency data.
  */
 export const ATTESTATION_TIMEOUT_MS = 2000;
+
+/**
+ * How long a cached attestation lookup is considered fresh, in seconds.
+ * Configurable via env so it can be tuned without a code change.
+ * Default: 120s.
+ */
+export const ATTESTATION_CACHE_TTL_SECONDS = Number(
+  process.env.ATTESTATION_CACHE_TTL_SECONDS ?? 120,
+);
 
 export const MOCK_ATTESTATIONS = new Map<string, Attestation>([
   [
@@ -87,7 +102,11 @@ function simulationSource() {
   return new Account(Keypair.random().publicKey(), "0");
 }
 
-export async function getAttestation(
+/**
+ * Uncached lookup — original implementation, unchanged in behavior.
+ * `getAttestation` wraps this with a per-recordHash cache.
+ */
+async function fetchAttestationUncached(
   recordHash: string,
 ): Promise<Attestation | null> {
   // Local-dev / pre-deploy fallback: no contract configured yet.
@@ -129,11 +148,33 @@ export async function getAttestation(
 }
 
 /**
+ * Cached lookup, keyed by `recordHash`. Each distinct hash gets its own
+ * cache entry, so results never leak across different records.
+ */
+export async function getAttestation(
+  recordHash: string,
+): Promise<Attestation | null> {
+  const cached = unstable_cache(
+    async (hash: string) => fetchAttestationUncached(hash),
+    ["attestation", recordHash],
+    {
+      revalidate: ATTESTATION_CACHE_TTL_SECONDS,
+      tags: ["attestation", `attestation:${recordHash}`],
+    },
+  );
+
+  return cached(recordHash);
+}
+
+// TODO(#17 follow-up): once contract writes emit a "new attestation
+// recorded" signal, call revalidateTag(`attestation:${recordHash}`)
+// immediately after that signal for faster-than-TTL invalidation.
+
+/**
  * The contract returns the `Attestation` struct
  * ({ record_hash, attester, timestamp }). Decoding is defensive: we don't
- * assume the exact SCVal key casing (Rust struct field names may surface as
- * snake_case or camelCase depending on the spec), and we validate types so a
- * malformed on-chain value can't quietly poison the verified indicator.
+ * assume the exact SCVal key casing, and we validate types so a malformed
+ * on-chain value can't quietly poison the verified indicator.
  */
 function decodeAttestation(value: unknown, recordHash: string): Attestation | null {
   if (typeof value !== "object" || value === null) {
@@ -159,7 +200,6 @@ function extractAddress(value: unknown): string | null {
   if (typeof value === "string") {
     return value;
   }
-  // An Address SCVal decodes to a string via its toString(); guard anyway.
   if (value && typeof (value as { toString?: () => string }).toString === "function") {
     const str = String(value);
     if (str.startsWith("G") || str.startsWith("C")) {
@@ -173,7 +213,6 @@ function extractTimestamp(value: unknown): number | null {
   if (typeof value === "number") {
     return value;
   }
-  // u64/i64 SCVal decode to bigint; convert losslessly within JS safe range.
   if (typeof value === "bigint") {
     const num = Number(value);
     return Number.isSafeInteger(num) ? num : null;
