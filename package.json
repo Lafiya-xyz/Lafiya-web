@@ -46,7 +46,7 @@
     "axe-core": "^4.12.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
-    "jsdom": "^29.1.1",
+    "jsdom": "^30.0.1",
     "prettier": "^3.9.4",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "tailwindcss": "^4",
