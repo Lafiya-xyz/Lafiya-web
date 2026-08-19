@@ -11,7 +11,7 @@ import {
 } from "@/lib/attestation/recordSecret";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import type { ProfileRow } from "@/lib/supabase/types";
+import type { ConsentLogRow, ProfileRow } from "@/lib/supabase/types";
 import { profileFormSchema } from "@/lib/validation/profile";
 
 import { logError } from "@/lib/logging/logger";
@@ -26,8 +26,9 @@ export interface ProfileFormState {
 
 export type ProfileExport = {
   exportedAt: string;
-  schemaVersion: 1;
+  schemaVersion: 2;
   profile: Record<string, unknown>;
+  consentLogs: ConsentLogRow[];
 };
 
 /**
@@ -59,11 +60,22 @@ export async function exportMyProfileData(): Promise<
     return { error: "Could not load profile data" };
   }
 
+  const { data: consentLogs, error: consentError } = await supabase
+    .from("consent_logs")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("accepted_at", { ascending: true });
+
+  if (consentError) {
+    return { error: "Could not load consent data" };
+  }
+
   return {
     data: {
       exportedAt: new Date().toISOString(),
-      schemaVersion: 1,
+      schemaVersion: 2,
       profile,
+      consentLogs: consentLogs ?? [],
     },
   };
 }

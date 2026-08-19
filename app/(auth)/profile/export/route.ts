@@ -17,6 +17,7 @@ export async function GET() {
     headers: {
       "Content-Type": "application/json",
       "Content-Disposition": `attachment; filename="${filename}"`,
+      "X-Lafiya-Export-Schema-Version": String(result.data.schemaVersion),
     },
   });
 }
