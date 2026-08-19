@@ -15,11 +15,71 @@ import type { ProfileRow } from "@/lib/supabase/types";
 import { profileFormSchema } from "@/lib/validation/profile";
 
 import { logError } from "@/lib/logging/logger";
+import { CURRENT_POLICY_VERSION } from "@/lib/consent/policy";
+import type { ConsentLogRow } from "@/lib/supabase/types";
 
 export interface ProfileFormState {
   error?: string;
   errors?: Record<string, string>;
   success?: boolean;
+}
+
+export type ConsentActionState = {
+  error?: string;
+  success?: boolean;
+};
+
+export async function getMyConsentHistory(): Promise<
+  { data: ConsentLogRow[] } | { error: string }
+> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { error: "Not authenticated" };
+  }
+
+  const { data, error } = await supabase
+    .from("consent_logs")
+    .select("id, user_id, policy_version, accepted_at")
+    .eq("user_id", user.id)
+    .order("accepted_at", { ascending: false });
+
+  if (error) {
+    return { error: "Could not load consent history" };
+  }
+
+  return { data: data ?? [] };
+}
+
+export async function acknowledgeCurrentPolicy(
+  _prevState: ConsentActionState | undefined,
+  _formData: FormData,
+): Promise<ConsentActionState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { error: "Not authenticated" };
+  }
+
+  const { error } = await supabase.from("consent_logs").insert({
+    user_id: user.id,
+    policy_version: CURRENT_POLICY_VERSION,
+  });
+
+  if (error && error.code !== "23505") {
+    return { error: "Could not record policy acknowledgement" };
+  }
+
+  revalidatePath("/profile");
+  return { success: true };
 }
 
 // --- Data export (Issue #12) ---

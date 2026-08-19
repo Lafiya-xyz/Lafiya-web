@@ -10,8 +10,10 @@ import { getBaseUrl } from "@/lib/url/getBaseUrl";
 import { SignOutButton } from "../signout/sign-out-button";
 import { AttestationStatusBanner } from "./attestation-status-banner";
 import { DeleteAccountButton } from "./delete-account-button";
+import { ConsentHistory } from "./consent-history";
 import { ProfileForm } from "./profile-form";
 import { QrCardDisplay } from "./qr-card-display";
+import { getMyConsentHistory } from "./actions";
 
 /**
  * Detects "profile edited since last attestation" and opportunistically
@@ -103,6 +105,7 @@ export default async function ProfilePage() {
   const { stale, pendingRequestExists } = profile
     ? await checkAttestationStaleness(supabase, profile)
     : { stale: false, pendingRequestExists: false };
+  const consentHistory = await getMyConsentHistory();
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-6 py-16">
@@ -129,6 +132,14 @@ export default async function ProfilePage() {
       ) : null}
 
       <ProfileForm profile={profile} userId={user.id} />
+
+      {"data" in consentHistory ? (
+        <ConsentHistory logs={consentHistory.data} />
+      ) : (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {consentHistory.error}
+        </p>
+      )}
 
       <hr className="border-zinc-200 dark:border-zinc-800" />
 
