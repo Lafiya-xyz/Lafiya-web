@@ -10,6 +10,7 @@ import { getBaseUrl } from "@/lib/url/getBaseUrl";
 import { SignOutButton } from "../signout/sign-out-button";
 import { AttestationStatusBanner } from "./attestation-status-banner";
 import { DeleteAccountButton } from "./delete-account-button";
+import { MissingSecretBanner } from "./missing-secret-banner";
 import { ProfileForm } from "./profile-form";
 import { QrCardDisplay } from "./qr-card-display";
 
@@ -24,11 +25,15 @@ import { QrCardDisplay } from "./qr-card-display";
 async function checkAttestationStaleness(
   supabase: Awaited<ReturnType<typeof createClient>>,
   profile: ProfileRow,
-): Promise<{ stale: boolean; pendingRequestExists: boolean }> {
+): Promise<{
+  stale: boolean;
+  pendingRequestExists: boolean;
+  secretMissing: boolean;
+}> {
   try {
     const secret = await getSecretByUserId(profile.user_id);
     if (!secret) {
-      return { stale: false, pendingRequestExists: false };
+      return { stale: false, pendingRequestExists: false, secretMissing: true };
     }
 
     const currentHash = computeRecordHash(profile, secret);
@@ -56,11 +61,22 @@ async function checkAttestationStaleness(
           .eq("record_hash", currentHash)
           .eq("status", "pending");
       }
-      return { stale: false, pendingRequestExists: false };
+      return {
+        stale: false,
+        pendingRequestExists: false,
+        secretMissing: false,
+      };
     }
 
-    if (!profile.last_attested_hash || profile.last_attested_hash === currentHash) {
-      return { stale: false, pendingRequestExists: false };
+    if (
+      !profile.last_attested_hash ||
+      profile.last_attested_hash === currentHash
+    ) {
+      return {
+        stale: false,
+        pendingRequestExists: false,
+        secretMissing: false,
+      };
     }
 
     const { data: pending } = await supabase
@@ -71,13 +87,17 @@ async function checkAttestationStaleness(
       .eq("status", "pending")
       .maybeSingle();
 
-    return { stale: true, pendingRequestExists: pending !== null };
+    return {
+      stale: true,
+      pendingRequestExists: pending !== null,
+      secretMissing: false,
+    };
   } catch (err) {
     logError("Failed to check attestation status", err, {
       route: "/profile",
       userId: profile.user_id,
     });
-    return { stale: false, pendingRequestExists: false };
+    return { stale: false, pendingRequestExists: false, secretMissing: false };
   }
 }
 
@@ -100,9 +120,9 @@ export default async function ProfilePage() {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const { stale, pendingRequestExists } = profile
+  const { stale, pendingRequestExists, secretMissing } = profile
     ? await checkAttestationStaleness(supabase, profile)
-    : { stale: false, pendingRequestExists: false };
+    : { stale: false, pendingRequestExists: false, secretMissing: false };
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-6 py-16">
@@ -123,6 +143,8 @@ export default async function ProfilePage() {
           cardUrl={`${await getBaseUrl()}/card/${profile.card_public_id}`}
         />
       ) : null}
+
+      {secretMissing ? <MissingSecretBanner /> : null}
 
       {stale ? (
         <AttestationStatusBanner pendingRequestExists={pendingRequestExists} />

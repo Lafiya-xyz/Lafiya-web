@@ -8,6 +8,7 @@ import { computeRecordHash } from "@/lib/attestation/recordHash";
 import {
   ensureRecordSecret,
   getSecretByUserId,
+  secretExistsByUserId,
 } from "@/lib/attestation/recordSecret";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -372,4 +373,74 @@ export async function requestReattestation(
 
   revalidatePath("/profile");
   return { success: true };
+}
+
+// --- Profile secret repair (Issue #149) ---
+
+export type RepairSecretResult =
+  | { status: "already_ok" }
+  | { status: "repaired" }
+  | { status: "not_found" }
+  | { status: "unauthorized" }
+  | { status: "error"; error: string };
+
+/**
+ * Repairs a profile whose record secret was not provisioned (e.g.
+ * ensureRecordSecret failed transiently after the profile save
+ * succeeded). Idempotent: if the secret already exists the result is
+ * "already_ok". Safe under concurrency: the underlying
+ * ensureRecordSecret uses upsert with ignoreDuplicates so a race
+ * between two concurrent repair requests cannot create duplicate rows
+ * or rotate an existing secret.
+ *
+ * Never returns the raw secret — the result is purely a status
+ * descriptor so it can safely be sent to the client.
+ */
+export async function repairProfileSecret(): Promise<RepairSecretResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: "unauthorized" };
+  }
+
+  // Resolve the authenticated user's profile. RLS (eq(user_id)) ensures
+  // a user can never reference another user's profile.
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (profileError || !profile) {
+    return { status: "not_found" };
+  }
+
+  // Check whether a secret already exists — idempotent fast path.
+  const exists = await secretExistsByUserId(user.id);
+  if (exists) {
+    return { status: "already_ok" };
+  }
+
+  // Secret is missing — provision it via the existing admin-only helper.
+  // ensureRecordSecret uses upsert with ignoreDuplicates so a concurrent
+  // request that created the secret between our check and this write will
+  // be safely absorbed.
+  try {
+    await ensureRecordSecret(user.id);
+  } catch (err) {
+    logError("Failed to repair profile secret", err, {
+      route: "/profile (action: repairProfileSecret)",
+      userId: user.id,
+    });
+    return {
+      status: "error",
+      error: "Could not provision verification secret. Please try again later.",
+    };
+  }
+
+  revalidatePath("/profile");
+  return { status: "repaired" };
 }
