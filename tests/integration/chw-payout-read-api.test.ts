@@ -279,7 +279,12 @@ describe("chw_payouts RLS (backing the CHW payout history API)", () => {
       expect(after.error).toBeNull();
       expect(after.data?.status).toBe("paid");
       expect(after.data?.payout_tx_hash).toBe(txHash);
-      expect(after.data?.paid_at).toBe(paidAt);
+      // Postgres serializes timestamptz in the server timezone ("+00:00"),
+      // while the seed uses Date.toISOString()'s ".000Z" form. They name the
+      // same instant, so compare epochs instead of raw strings.
+      expect(new Date(after.data!.paid_at!).getTime()).toBe(
+        new Date(paidAt).getTime(),
+      );
     } finally {
       await deleteTestUser(ephemeral.id);
     }
