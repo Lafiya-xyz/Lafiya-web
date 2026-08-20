@@ -1,4 +1,11 @@
-import { afterAll, beforeAll, describe, expect, expectTypeOf, it } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  expectTypeOf,
+  it,
+} from "vitest";
 
 import type { EmergencyCardRow, ProfileRow } from "@/lib/supabase/types";
 
@@ -100,9 +107,9 @@ describe("profiles column contract (get_emergency_card leak guard)", () => {
     // Compile-time (enforced by `npm run typecheck`): every ProfileRow key
     // is classified above, and the RPC's row type is exactly the exposed
     // columns plus the derived `age`.
-    expectTypeOf<
-      (typeof ALL_CLASSIFIED_COLUMNS)[number]
-    >().toEqualTypeOf<keyof ProfileRow>();
+    expectTypeOf<(typeof ALL_CLASSIFIED_COLUMNS)[number]>().toEqualTypeOf<
+      keyof ProfileRow
+    >();
     expectTypeOf<
       (typeof EXPOSED_VIA_EMERGENCY_CARD)[number] | "age"
     >().toEqualTypeOf<keyof EmergencyCardRow>();

@@ -6,11 +6,11 @@ Endpoint: `GET /profile/export` (authenticated patients only)
 
 \`\`\`json
 {
-  "exportedAt": "ISO 8601 timestamp",
-  "schemaVersion": 1,
-  "profile": {
-    // full contents of the caller's own public.profiles row
-  }
+"exportedAt": "ISO 8601 timestamp",
+"schemaVersion": 1,
+"profile": {
+// full contents of the caller's own public.profiles row
+}
 }
 \`\`\`
 

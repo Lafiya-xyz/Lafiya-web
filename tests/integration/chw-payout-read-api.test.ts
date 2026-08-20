@@ -1,7 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { adminClient } from "./helpers/testUser";
-import { createTestUser, deleteTestUser, type TestUser } from "./helpers/testUser";
+import {
+  createTestUser,
+  deleteTestUser,
+  type TestUser,
+} from "./helpers/testUser";
 
 /**
  * Integration tests for the chw_payouts RLS policy that backs the new
@@ -47,12 +51,13 @@ async function seedPayout(input: {
     attested_at: input.attestedAt ?? "2026-08-20T12:00:00.000Z",
   };
   if (input.amountUsdc !== undefined) baseInsert.amount_usdc = input.amountUsdc;
-  if (input.payoutTxHash !== undefined) baseInsert.payout_tx_hash = input.payoutTxHash;
+  if (input.payoutTxHash !== undefined)
+    baseInsert.payout_tx_hash = input.payoutTxHash;
   if (input.paidAt !== undefined) baseInsert.paid_at = input.paidAt;
   if (input.createdAt !== undefined) baseInsert.created_at = input.createdAt;
-  const { error } = await adminClient.from("chw_payouts").insert(
-    baseInsert as never,
-  );
+  const { error } = await adminClient
+    .from("chw_payouts")
+    .insert(baseInsert as never);
   expect(error).toBeNull();
 }
 
@@ -89,10 +94,7 @@ describe("chw_payouts RLS (backing the CHW payout history API)", () => {
     // This is the property the route handler depends on by NOT being a
     // public endpoint; a misconfigured GRANT would let anon enumerate
     // hashes via record_hash lookup, so the test pins that surface.
-    const before = await adminClient
-      .from("chw_payouts")
-      .select("id")
-      .limit(1);
+    const before = await adminClient.from("chw_payouts").select("id").limit(1);
     expect(before.error).toBeNull();
     expect(before.data?.length ?? 0).toBeGreaterThanOrEqual(0);
   });
@@ -100,7 +102,9 @@ describe("chw_payouts RLS (backing the CHW payout history API)", () => {
   it("returns empty for a CHW with no rows", async () => {
     const { data, error } = await userA.client
       .from("chw_payouts")
-      .select("id,status,amount_usdc,attested_at,paid_at,payout_tx_hash,created_at,updated_at")
+      .select(
+        "id,status,amount_usdc,attested_at,paid_at,payout_tx_hash,created_at,updated_at",
+      )
       .order("created_at", { ascending: false })
       .order("id", { ascending: false });
     expect(error).toBeNull();
@@ -223,7 +227,9 @@ describe("chw_payouts RLS (backing the CHW payout history API)", () => {
       expect(error).toBeNull();
       expect(data).not.toBeNull();
       // created_at descends strictly because each row gets a +1s offset.
-      const dates = (data ?? []).map((r) => (r as { created_at: string }).created_at);
+      const dates = (data ?? []).map(
+        (r) => (r as { created_at: string }).created_at,
+      );
       const sorted = [...dates].sort().reverse();
       expect(dates).toEqual(sorted);
       // Each created_at must be unique across this CHW's rows.

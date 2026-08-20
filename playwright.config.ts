@@ -28,7 +28,5 @@ export default defineConfig({
       SOROBAN_RPC_URL: "https://soroban-testnet.stellar.org",
     },
   },
-  projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-  ],
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
 });

@@ -167,7 +167,7 @@ export async function upsertProfile(
     return { error: "You must be signed in." };
   }
 
-  const { data: existing, error: selectError } = await supabase
+  const { data: existing } = await supabase
     .from("profiles")
     .select("*")
     .eq("user_id", user.id)

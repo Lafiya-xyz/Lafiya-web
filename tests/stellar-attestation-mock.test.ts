@@ -47,7 +47,10 @@ vi.mock("@stellar/stellar-sdk", () => ({
   scValToNative: (scval: unknown) => scval,
 }));
 
-import { getAttestation, DEMO_VERIFIED_RECORD_HASH } from "@/lib/stellar/attestation";
+import {
+  getAttestation,
+  DEMO_VERIFIED_RECORD_HASH,
+} from "@/lib/stellar/attestation";
 
 describe("getAttestation (local-dev mock fallback)", () => {
   it("returns the demo attestation for the fixture hash when no contract is configured", async () => {

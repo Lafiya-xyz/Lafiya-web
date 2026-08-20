@@ -350,7 +350,9 @@ export async function getAttestation(
  * see issues/issue-03-record-hash-commitment-scheme.md's note on this
  * cross-cutting concern.
  */
-export async function validateAttestation(recordHash: string): Promise<boolean> {
+export async function validateAttestation(
+  recordHash: string,
+): Promise<boolean> {
   const att = await getAttestation(recordHash);
   if (!att) return false;
   const now = Math.floor(Date.now() / 1000);
@@ -371,7 +373,10 @@ export async function validateAttestation(recordHash: string): Promise<boolean> 
  *
  * Exported for testing.
  */
-export function decodeAttestation(value: unknown, recordHash: string): Attestation | null {
+export function decodeAttestation(
+  value: unknown,
+  recordHash: string,
+): Attestation | null {
   if (typeof value !== "object" || value === null) {
     return null;
   }
@@ -406,7 +411,10 @@ function extractAddress(value: unknown): string | null {
   if (typeof value === "string") {
     return value;
   }
-  if (value && typeof (value as { toString?: () => string }).toString === "function") {
+  if (
+    value &&
+    typeof (value as { toString?: () => string }).toString === "function"
+  ) {
     const str = String(value);
     if (str.startsWith("G") || str.startsWith("C")) {
       return str;

@@ -30,9 +30,7 @@ const mockedCreateClient = vi.mocked(createClient);
  * this repo work today (see app/(auth)/profile/actions.test.ts); copying
  * that shape keeps the route's own mocks free of any hidden contract.
  */
-function buildQueryChain(
-  result: { data: unknown[]; error: unknown },
-): {
+function buildQueryChain(result: { data: unknown[]; error: unknown }): {
   select: ReturnType<typeof vi.fn>;
   order: ReturnType<typeof vi.fn>;
   eq: ReturnType<typeof vi.fn>;
@@ -294,8 +292,8 @@ describe("readPayouts", () => {
       updated_at: "2026-08-20T10:01:00.000Z",
     }));
     const chain = buildQueryChain({ data: rows, error: null });
-    const limitCalls = (chain as unknown as { limit: ReturnType<typeof vi.fn> }).limit
-      .mock.calls;
+    const limitCalls = (chain as unknown as { limit: ReturnType<typeof vi.fn> })
+      .limit.mock.calls;
     const result = await readPayouts(
       {
         auth: {
@@ -324,8 +322,8 @@ describe("readPayouts", () => {
 
   it("uses (created_at desc, id desc) ordering", async () => {
     const chain = buildQueryChain({ data: [], error: null });
-    const orderCalls = (chain as unknown as { order: ReturnType<typeof vi.fn> }).order
-      .mock.calls;
+    const orderCalls = (chain as unknown as { order: ReturnType<typeof vi.fn> })
+      .order.mock.calls;
     await readPayouts(
       {
         auth: {
@@ -368,9 +366,7 @@ describe("readPayouts", () => {
     );
     expect(orCalls).toHaveLength(1);
     const [orExpr] = orCalls[0] as [string];
-    expect(orExpr).toMatch(
-      /created_at\.lt\.2026-08-20T10:00:24\.000Z/,
-    );
+    expect(orExpr).toMatch(/created_at\.lt\.2026-08-20T10:00:24\.000Z/);
     expect(orExpr).toMatch(/created_at\.eq\.2026-08-20T10:00:24\.000Z/);
     expect(orExpr).toMatch(/id\.lt\.00000000-0000-0000-0000-000000000024/);
     expect(eqCalls.filter((c) => c[0] === "status")).toHaveLength(0);
@@ -471,9 +467,9 @@ describe("cursor codec", () => {
   });
 
   it("encode fails loudly on non-UUID id so we don't ship bad cursors", () => {
-    expect(() =>
-      encodePayoutCursor("2026-08-20T10:00:24.000Z", "u"),
-    ).toThrow(InvalidCursorError);
+    expect(() => encodePayoutCursor("2026-08-20T10:00:24.000Z", "u")).toThrow(
+      InvalidCursorError,
+    );
   });
 
   it("encode rejects non-ISO timestamps", () => {
@@ -506,9 +502,7 @@ describe("sanitizePayoutForResponse (spec criterion #4)", () => {
     expect(result.failure).toBeNull();
     expect(result.sanitized).not.toBeNull();
     expect(result.sanitized?.amount_usdc).toBe("2.5000000");
-    expect(result.sanitized?.payout_tx_hash).toBe(
-      "0123456789abcdef".repeat(4),
-    );
+    expect(result.sanitized?.payout_tx_hash).toBe("0123456789abcdef".repeat(4));
   });
 
   it("normalizes payout_tx_hash to lower-case", () => {
@@ -517,9 +511,7 @@ describe("sanitizePayoutForResponse (spec criterion #4)", () => {
       payout_tx_hash: "ABCDEF" + "0".repeat(58),
     });
     expect(result.failure).toBeNull();
-    expect(result.sanitized?.payout_tx_hash).toBe(
-      "abcdef" + "0".repeat(58),
-    );
+    expect(result.sanitized?.payout_tx_hash).toBe("abcdef" + "0".repeat(58));
   });
 
   it("accepts a null payout_tx_hash (pending row)", () => {

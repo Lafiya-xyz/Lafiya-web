@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import { notFound } from "next/navigation";
-import Link from "next/link";
 
 import { computeRecordHash } from "@/lib/attestation/recordHash";
 import { getSecretByCardPublicId } from "@/lib/attestation/recordSecret";
@@ -79,7 +77,9 @@ export default async function PublicCardPage({
   } else {
     const recordHash = computeRecordHash(card, secret);
     try {
-      status = (await validateAttestation(recordHash)) ? "verified" : "not_verified";
+      status = (await validateAttestation(recordHash))
+        ? "verified"
+        : "not_verified";
     } catch (err) {
       logError("Failed to retrieve attestation from Stellar", err, {
         route: "/card/[id]",

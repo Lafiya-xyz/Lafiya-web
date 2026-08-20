@@ -140,7 +140,10 @@ export function readEntryMeta(headers) {
  * the last-accessed/size bookkeeping fields, preserving whatever headers
  * (Content-Type etc.) the source response already had.
  */
-export function withEntryMetaHeaders(sourceHeaders, { cachedAt, lastAccessed, size }) {
+export function withEntryMetaHeaders(
+  sourceHeaders,
+  { cachedAt, lastAccessed, size },
+) {
   const headers = new Headers(sourceHeaders);
   headers.set(CACHED_AT_HEADER, cachedAt);
   headers.set(LAST_ACCESSED_HEADER, String(lastAccessed));
@@ -264,7 +267,9 @@ export async function enforceCacheBudget({
     protectedKeys,
   });
 
-  const victims = candidates.filter((entry) => plan.toEvict.includes(entry.keyUrl));
+  const victims = candidates.filter((entry) =>
+    plan.toEvict.includes(entry.keyUrl),
+  );
   const evicted = [];
   for (const victim of victims) {
     await cache.delete(victim.key);

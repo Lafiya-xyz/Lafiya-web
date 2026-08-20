@@ -66,9 +66,9 @@ describe("offline-cache-helpers", () => {
 
     it("prepends the banner when the document has no <body> tag", () => {
       const out = injectOfflineBanner("<p>hi</p>", "2024-01-02T03:04:05.000Z");
-      expect(out.startsWith(buildOfflineBannerHtml("2024-01-02T03:04:05.000Z"))).toBe(
-        true,
-      );
+      expect(
+        out.startsWith(buildOfflineBannerHtml("2024-01-02T03:04:05.000Z")),
+      ).toBe(true);
     });
 
     it("returns just the banner for empty input", () => {

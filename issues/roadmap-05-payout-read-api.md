@@ -59,4 +59,3 @@ High — turns the existing payout ledger into a usable incentive product.
 ## Suggested Labels
 
 `intermediate`, `api`, `stellar`, `payouts`, `authorization`
-

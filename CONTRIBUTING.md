@@ -27,14 +27,18 @@ Before you start writing code, please set up your local development environment:
 To maintain a clean and legible project history, we use the following conventions:
 
 ### Branch Naming
+
 Create feature or bugfix branches from `main` using the following prefixes:
+
 - `feat/description` — for new features (e.g., `feat/add-avatar-upload`)
 - `fix/description` — for bug fixes (e.g., `fix/qr-code-contrast`)
 - `docs/description` — for documentation updates (e.g., `docs/update-api-docs`)
 - `chore/description` — for build tools, dependencies, or config changes (e.g., `chore/bump-zod`)
 
 ### Commit Messages
+
 We follow **Conventional Commits**:
+
 - `feat: add support for multiple emergency contacts`
 - `fix: resolve RLS policy bug on profiles table`
 - `docs: update deployment guidelines`
@@ -44,10 +48,12 @@ We follow **Conventional Commits**:
 
 ## Supabase Database Migrations
 
-Lafiya uses Supabase for database, authentication, and file storage. 
+Lafiya uses Supabase for database, authentication, and file storage.
 
 ### 1. Creating a Migration
+
 If your change requires database alterations (e.g., adding a table, adding a column, modifying an RLS policy, or editing an RPC function):
+
 1. Generate a new migration file:
    ```bash
    npx supabase migration new <migration_name>
@@ -55,26 +61,31 @@ If your change requires database alterations (e.g., adding a table, adding a col
 2. Open the newly created SQL file under `supabase/migrations/` and write your DDL/SQL code.
 
 ### 2. Validating Locally
+
 Apply migrations locally and seed default data to verify changes:
+
 ```bash
 npx supabase db reset
 ```
+
 This command recreates the local database schema, applies all migrations in chronological order, and executes `supabase/seed.sql` to populate the development fixtures.
 
 ### 3. Critical Constraint: Hand-Authored Types
+
 To avoid network dependencies on a hosted project during development/builds, **there is no `supabase gen types` step** in this codebase. Instead, database types are hand-maintained in [lib/supabase/types.ts](lib/supabase/types.ts).
 
 When updating the database schema:
+
 1. Manually update [lib/supabase/types.ts](lib/supabase/types.ts) to match the SQL schema changes.
 2. **Rule: Use `type` aliases, NEVER `interface`**.
-   * **Why**: `supabase-js`'s generic type checking requires the database schema to extend `Record<string, GenericTable>`. TypeScript's structural `extends` check only recognizes plain object `type` aliases as satisfying index signatures.
-   * **The Risk**: If you use an `interface` (even deep inside nested types like emergency contacts or custom row models), the database query result types will **silently collapse to `never`** without any compilation error at the `Database` declaration. The error will only manifest downstream at `.from(...).select(...)` calls, making it hard to debug.
+   - **Why**: `supabase-js`'s generic type checking requires the database schema to extend `Record<string, GenericTable>`. TypeScript's structural `extends` check only recognizes plain object `type` aliases as satisfying index signatures.
+   - **The Risk**: If you use an `interface` (even deep inside nested types like emergency contacts or custom row models), the database query result types will **silently collapse to `never`** without any compilation error at the `Database` declaration. The error will only manifest downstream at `.from(...).select(...)` calls, making it hard to debug.
 
 ---
 
 ## Coordinating Cross-Repo Changes (Shared Contracts)
 
-Lafiya is organized across five separate repositories in the `lafiya-xyz` organization. Some interfaces form **Shared Contracts** and must stay in sync across repositories. 
+Lafiya is organized across five separate repositories in the `lafiya-xyz` organization. Some interfaces form **Shared Contracts** and must stay in sync across repositories.
 
 If your changes affect any of the following, you **must** flag it in your Pull Request:
 
@@ -99,25 +110,33 @@ Always mention in your PR description if you have touched any of these contracts
 Every Pull Request must be verified before merging. Please ensure the following checklist is completed:
 
 ### 1. Build and Quality Checks
+
 Run the following verification pipeline locally:
+
 ```bash
 npm run lint && npm run typecheck && npm test && npm run build
 ```
-* **Linting**: No ESLint/Prettier warnings or errors.
-* **Typechecking**: No TypeScript errors.
-* **Unit/Component Tests**: All unit/component tests in `tests/` pass.
-* **Build**: The Next.js production build completes without warnings.
+
+- **Linting**: No ESLint/Prettier warnings or errors.
+- **Typechecking**: No TypeScript errors.
+- **Unit/Component Tests**: All unit/component tests in `tests/` pass.
+- **Build**: The Next.js production build completes without warnings.
 
 ### 2. Integration & RLS/RPC Tests
+
 Ensure your local Supabase instance is running and verify database-specific behavior:
+
 ```bash
 npx supabase start
 npm run test:integration
 ```
-* Every schema change (e.g., changes to Row-Level Security (RLS) policies or Postgres functions) **must** have a corresponding integration test in `tests/integration/`.
+
+- Every schema change (e.g., changes to Row-Level Security (RLS) policies or Postgres functions) **must** have a corresponding integration test in `tests/integration/`.
 
 ### 3. Checklist Summary
+
 Before hitting submit on your PR:
+
 - [ ] Code builds, lints, and passes type-checking.
 - [ ] Unit and component tests pass.
 - [ ] Integration tests pass against a running local Supabase.

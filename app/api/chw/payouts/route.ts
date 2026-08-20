@@ -9,10 +9,7 @@ import {
   decodePayoutCursor,
   encodePayoutCursor,
 } from "./pagination";
-import {
-  sanitizePayoutForResponse,
-  type SanitizedPayout,
-} from "./validators";
+import { sanitizePayoutForResponse, type SanitizedPayout } from "./validators";
 
 /**
  * Authenticated, cursor-paginated history of a CHW's own payouts.
@@ -217,19 +214,21 @@ export async function readPayouts(
       userId: user.id,
     });
     return { kind: "bad_request", message: "database error" };
-  }  const rows = (data as ReadonlyArray<
-    Pick<
-      ChwPayoutRow,
-      | "id"
-      | "status"
-      | "amount_usdc"
-      | "attested_at"
-      | "paid_at"
-      | "payout_tx_hash"
-      | "created_at"
-      | "updated_at"
-    >
-  >) ?? [];
+  }
+  const rows =
+    (data as ReadonlyArray<
+      Pick<
+        ChwPayoutRow,
+        | "id"
+        | "status"
+        | "amount_usdc"
+        | "attested_at"
+        | "paid_at"
+        | "payout_tx_hash"
+        | "created_at"
+        | "updated_at"
+      >
+    >) ?? [];
 
   const sanitizedRows: SanitizedPayout[] = [];
   for (let i = 0; i < rows.length; i++) {
@@ -270,13 +269,10 @@ export async function readPayouts(
   const weCanContinue = rawHasMore && pageRows.length === args.limit;
 
   const nextCursorAnchor = weCanContinue
-    ? pageRows[pageRows.length - 1] ?? null
+    ? (pageRows[pageRows.length - 1] ?? null)
     : null;
   const nextCursor = nextCursorAnchor
-    ? encodePayoutCursor(
-        nextCursorAnchor.created_at,
-        nextCursorAnchor.id,
-      )
+    ? encodePayoutCursor(nextCursorAnchor.created_at, nextCursorAnchor.id)
     : null;
 
   return { kind: "ok", data: pageRows, nextCursor };

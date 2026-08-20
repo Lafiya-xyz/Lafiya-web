@@ -66,18 +66,16 @@ const UUID_PATTERN =
  * to ops and keeps the API surface truthful; a "sanitized-but-suspect"
  * shape would mask a listener bug behind the API.
  */
-export function sanitizePayoutForResponse(
-  row: {
-    readonly id: string;
-    readonly status: ChwPayoutStatus;
-    readonly amount_usdc: RawAmount;
-    readonly attested_at: string;
-    readonly paid_at: string | null;
-    readonly payout_tx_hash: string | null;
-    readonly created_at: string;
-    readonly updated_at: string;
-  },
-): SanitizationResult {
+export function sanitizePayoutForResponse(row: {
+  readonly id: string;
+  readonly status: ChwPayoutStatus;
+  readonly amount_usdc: RawAmount;
+  readonly attested_at: string;
+  readonly paid_at: string | null;
+  readonly payout_tx_hash: string | null;
+  readonly created_at: string;
+  readonly updated_at: string;
+}): SanitizationResult {
   const reasons: string[] = [];
 
   if (!UUID_PATTERN.test(row.id)) {
@@ -105,15 +103,12 @@ export function sanitizePayoutForResponse(
   let amountValue: number;
   let amountValid: boolean;
   if (typeof row.amount_usdc === "number") {
-    amountValid =
-      Number.isFinite(row.amount_usdc) && row.amount_usdc >= 0;
+    amountValid = Number.isFinite(row.amount_usdc) && row.amount_usdc >= 0;
     amountValue = row.amount_usdc;
   } else if (typeof row.amount_usdc === "string") {
     const parsed = Number(row.amount_usdc);
     amountValid =
-      row.amount_usdc.trim() !== "" &&
-      Number.isFinite(parsed) &&
-      parsed >= 0;
+      row.amount_usdc.trim() !== "" && Number.isFinite(parsed) && parsed >= 0;
     amountValue = parsed;
   } else {
     amountValid = false;

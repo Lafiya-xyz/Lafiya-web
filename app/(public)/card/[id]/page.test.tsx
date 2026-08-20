@@ -82,7 +82,7 @@ describe("PublicCardPage", () => {
     const jsx = await PublicCardPage({
       params: Promise.resolve({ id: VALID_ID }),
     });
-    const { container } = render(jsx);
+    render(jsx);
 
     // Run axe against the document body to catch landmark violations
     const results = await axe(document.body);
@@ -125,7 +125,9 @@ describe("PublicCardPage", () => {
     render(jsx);
 
     expect(screen.getByText("Amina Yusuf")).toBeInTheDocument();
-    expect(screen.getByText("Verification status unavailable")).toBeInTheDocument();
+    expect(
+      screen.getByText("Verification status unavailable"),
+    ).toBeInTheDocument();
   });
 
   it("renders with unavailable status when attestation lookup times out (simulates RPC hang + internal timeout)", async () => {
@@ -172,7 +174,9 @@ describe("PublicCardPage", () => {
     render(jsx);
 
     expect(screen.getByText("Amina Yusuf")).toBeInTheDocument();
-    expect(screen.getByText("Verification status unavailable")).toBeInTheDocument();
+    expect(
+      screen.getByText("Verification status unavailable"),
+    ).toBeInTheDocument();
     expect(validateAttestation).not.toHaveBeenCalled();
   });
 });

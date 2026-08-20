@@ -32,17 +32,32 @@ export function ProfileForm({
         />
       ) : null}
 
-      {state?.error && !state.error.includes("This profile was updated elsewhere since you loaded this page") ? (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">{state.error}</p>
+      {state?.error &&
+      !state.error.includes(
+        "This profile was updated elsewhere since you loaded this page",
+      ) ? (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {state.error}
+        </p>
       ) : null}
       {state?.success ? (
-        <p role="status" className="text-sm text-emerald-600 dark:text-emerald-400">Saved.</p>
+        <p
+          role="status"
+          className="text-sm text-emerald-600 dark:text-emerald-400"
+        >
+          Saved.
+        </p>
       ) : null}
 
-      {state?.error?.includes("This profile was updated elsewhere since you loaded this page") ? (
+      {state?.error?.includes(
+        "This profile was updated elsewhere since you loaded this page",
+      ) ? (
         <div className="rounded-md border border-amber-500/40 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-400/40 dark:bg-amber-950/30 dark:text-amber-100">
           <p className="font-medium">Conflict detected</p>
-          <p className="mt-1">This profile was updated elsewhere since you loaded this page. Reload and reapply your changes before saving.</p>
+          <p className="mt-1">
+            This profile was updated elsewhere since you loaded this page.
+            Reload and reapply your changes before saving.
+          </p>
         </div>
       ) : null}
 
@@ -70,7 +85,10 @@ export function ProfileForm({
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
         />
         {state?.errors?.name ? (
-          <p id="name-error" className="mt-1 text-sm text-red-600 dark:text-red-400">
+          <p
+            id="name-error"
+            className="mt-1 text-sm text-red-600 dark:text-red-400"
+          >
             {state.errors.name}
           </p>
         ) : null}
@@ -89,11 +107,16 @@ export function ProfileForm({
           type="date"
           defaultValue={profile?.date_of_birth ?? ""}
           aria-invalid={state?.errors?.dateOfBirth ? "true" : undefined}
-          aria-describedby={state?.errors?.dateOfBirth ? "dateOfBirth-error" : undefined}
+          aria-describedby={
+            state?.errors?.dateOfBirth ? "dateOfBirth-error" : undefined
+          }
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
         />
         {state?.errors?.dateOfBirth ? (
-          <p id="dateOfBirth-error" className="mt-1 text-sm text-red-600 dark:text-red-400">
+          <p
+            id="dateOfBirth-error"
+            className="mt-1 text-sm text-red-600 dark:text-red-400"
+          >
             {state.errors.dateOfBirth}
           </p>
         ) : null}
@@ -113,11 +136,16 @@ export function ProfileForm({
           placeholder="e.g. Hausa"
           defaultValue={profile?.language ?? ""}
           aria-invalid={state?.errors?.language ? "true" : undefined}
-          aria-describedby={state?.errors?.language ? "language-error" : undefined}
+          aria-describedby={
+            state?.errors?.language ? "language-error" : undefined
+          }
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
         />
         {state?.errors?.language ? (
-          <p id="language-error" className="mt-1 text-sm text-red-600 dark:text-red-400">
+          <p
+            id="language-error"
+            className="mt-1 text-sm text-red-600 dark:text-red-400"
+          >
             {state.errors.language}
           </p>
         ) : null}
@@ -136,7 +164,9 @@ export function ProfileForm({
             name="bloodGroup"
             defaultValue={profile?.blood_group ?? "unknown"}
             aria-invalid={state?.errors?.bloodGroup ? "true" : undefined}
-            aria-describedby={state?.errors?.bloodGroup ? "bloodGroup-error" : undefined}
+            aria-describedby={
+              state?.errors?.bloodGroup ? "bloodGroup-error" : undefined
+            }
             className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
           >
             {BLOOD_GROUPS.map((value) => (
@@ -146,7 +176,10 @@ export function ProfileForm({
             ))}
           </select>
           {state?.errors?.bloodGroup ? (
-            <p id="bloodGroup-error" className="mt-1 text-sm text-red-600 dark:text-red-400">
+            <p
+              id="bloodGroup-error"
+              className="mt-1 text-sm text-red-600 dark:text-red-400"
+            >
               {state.errors.bloodGroup}
             </p>
           ) : null}
@@ -164,7 +197,9 @@ export function ProfileForm({
             name="genotype"
             defaultValue={profile?.genotype ?? "unknown"}
             aria-invalid={state?.errors?.genotype ? "true" : undefined}
-            aria-describedby={state?.errors?.genotype ? "genotype-error" : undefined}
+            aria-describedby={
+              state?.errors?.genotype ? "genotype-error" : undefined
+            }
             className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
           >
             {GENOTYPES.map((value) => (
@@ -174,7 +209,10 @@ export function ProfileForm({
             ))}
           </select>
           {state?.errors?.genotype ? (
-            <p id="genotype-error" className="mt-1 text-sm text-red-600 dark:text-red-400">
+            <p
+              id="genotype-error"
+              className="mt-1 text-sm text-red-600 dark:text-red-400"
+            >
               {state.errors.genotype}
             </p>
           ) : null}

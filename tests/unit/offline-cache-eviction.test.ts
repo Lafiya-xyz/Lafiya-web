@@ -29,11 +29,14 @@ function makeCachedResponse({
   lastAccessed: number;
   size?: number;
 }) {
-  const headers = withEntryMetaHeaders(new Headers({ "Content-Type": "text/html" }), {
-    cachedAt,
-    lastAccessed,
-    size: size ?? body.length,
-  });
+  const headers = withEntryMetaHeaders(
+    new Headers({ "Content-Type": "text/html" }),
+    {
+      cachedAt,
+      lastAccessed,
+      size: size ?? body.length,
+    },
+  );
   return new Response(body, { status: 200, headers });
 }
 
@@ -204,7 +207,10 @@ describe("enforceCacheBudget (against a fake Cache Storage cache)", () => {
 
   it("never evicts the key of the in-flight request currently being served", async () => {
     const cache = createFakeCache();
-    await cache.put(cardUrl("in-flight"), makeCachedResponse({ lastAccessed: 1 }));
+    await cache.put(
+      cardUrl("in-flight"),
+      makeCachedResponse({ lastAccessed: 1 }),
+    );
     await cache.put(cardUrl("other"), makeCachedResponse({ lastAccessed: 2 }));
 
     const { evicted } = await enforceCacheBudget({
@@ -276,7 +282,10 @@ describe("buildOfflineNavigationResponse", () => {
   it("serves the honest fallback for a card that was evicted (indistinguishable from never-visited)", async () => {
     const cache = createFakeCache();
     await cache.put(cardUrl("keep"), makeCachedResponse({ lastAccessed: 200 }));
-    await cache.put(cardUrl("evict-me"), makeCachedResponse({ lastAccessed: 100 }));
+    await cache.put(
+      cardUrl("evict-me"),
+      makeCachedResponse({ lastAccessed: 100 }),
+    );
 
     await enforceCacheBudget({
       cache,
@@ -305,7 +314,11 @@ describe("buildOfflineNavigationResponse", () => {
     const body = "<html><body><h1>Patient Card</h1></body></html>";
     await cache.put(
       cardUrl("keep"),
-      makeCachedResponse({ body, lastAccessed: 200, cachedAt: "2024-01-02T03:04:05.000Z" }),
+      makeCachedResponse({
+        body,
+        lastAccessed: 200,
+        cachedAt: "2024-01-02T03:04:05.000Z",
+      }),
     );
 
     const cached = await cache.match(cardUrl("keep"));
@@ -335,7 +348,10 @@ describe("readEntryMeta / withEntryMetaHeaders", () => {
     expect(readEntryMeta(new Headers())).toEqual({ lastAccessed: 0, size: 0 });
     expect(
       readEntryMeta(
-        new Headers({ [LAST_ACCESSED_HEADER]: "nope", [BODY_SIZE_HEADER]: "nope" }),
+        new Headers({
+          [LAST_ACCESSED_HEADER]: "nope",
+          [BODY_SIZE_HEADER]: "nope",
+        }),
       ),
     ).toEqual({ lastAccessed: 0, size: 0 });
   });

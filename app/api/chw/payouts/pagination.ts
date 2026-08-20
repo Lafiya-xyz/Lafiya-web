@@ -34,10 +34,7 @@ export class InvalidCursorError extends Error {
 }
 
 /** Encode a (created_at, id) tuple as a base64url cursor. */
-export function encodePayoutCursor(
-  createdAt: string,
-  id: string,
-): string {
+export function encodePayoutCursor(createdAt: string, id: string): string {
   if (!ISO_REGEX.test(createdAt)) {
     throw new InvalidCursorError("createdAt must be an ISO-8601 string");
   }
@@ -56,7 +53,11 @@ export function encodePayoutCursor(
  * never why, so probing for a useful cursor format is pointless.
  */
 export function decodePayoutCursor(cursor: string): PayoutCursor {
-  if (typeof cursor !== "string" || cursor.length === 0 || cursor.length > 512) {
+  if (
+    typeof cursor !== "string" ||
+    cursor.length === 0 ||
+    cursor.length > 512
+  ) {
     throw new InvalidCursorError();
   }
   if (!/^[A-Za-z0-9_-]+$/.test(cursor)) {
@@ -74,11 +75,7 @@ export function decodePayoutCursor(cursor: string): PayoutCursor {
   } catch {
     throw new InvalidCursorError();
   }
-  if (
-    !parsed ||
-    typeof parsed !== "object" ||
-    Array.isArray(parsed)
-  ) {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new InvalidCursorError();
   }
   const { c, i } = parsed as { c?: unknown; i?: unknown };
@@ -93,7 +90,10 @@ export function decodePayoutCursor(cursor: string): PayoutCursor {
 
 function base64UrlEncode(input: string): string {
   if (typeof btoa === "function") {
-    return btoa(input).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    return btoa(input)
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
   }
   return Buffer.from(input, "utf8")
     .toString("base64")

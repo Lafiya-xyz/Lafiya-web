@@ -10,7 +10,8 @@ vi.hoisted(() => {
   process.env.STELLAR_NETWORK_PASSPHRASE = "Test SDF Network ; September 2015";
   process.env.SOROBAN_RPC_URL = "https://soroban-testnet.stellar.org";
   // A configured contract id flips getAttestation into the real-RPC path.
-  process.env.ATTESTATION_CONTRACT_ID = "C1111111111111111111111111111111111111111111111111111111111111111";
+  process.env.ATTESTATION_CONTRACT_ID =
+    "C1111111111111111111111111111111111111111111111111111111111111111";
 });
 
 // getAttestation wraps its lookup in next/cache's unstable_cache, which

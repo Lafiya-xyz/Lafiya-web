@@ -111,7 +111,10 @@ export function EmergencyContactsField({
         + Add contact
       </button>
       {error ? (
-        <p id="emergencyContacts-error" className="mt-1 text-sm text-red-600 dark:text-red-400">
+        <p
+          id="emergencyContacts-error"
+          className="mt-1 text-sm text-red-600 dark:text-red-400"
+        >
           {error}
         </p>
       ) : null}

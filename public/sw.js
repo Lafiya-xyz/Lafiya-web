@@ -58,7 +58,10 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   // 1) Card page navigations: network-first, cache fallback, banner injection.
-  if (request.mode === "navigate" && url.pathname.startsWith(CARD_PATH_PREFIX)) {
+  if (
+    request.mode === "navigate" &&
+    url.pathname.startsWith(CARD_PATH_PREFIX)
+  ) {
     event.respondWith(handleCardNavigation(event));
     return;
   }
@@ -120,7 +123,8 @@ async function storeWithBudget(cacheName, request, response, limits) {
 // total, so no eviction pass is needed here.
 async function bumpLastAccessed(cacheName, request, cachedResponse) {
   const bytes = new Uint8Array(await cachedResponse.arrayBuffer());
-  const cachedAt = cachedResponse.headers.get(CACHED_AT_HEADER) ?? new Date().toISOString();
+  const cachedAt =
+    cachedResponse.headers.get(CACHED_AT_HEADER) ?? new Date().toISOString();
   await withCacheLock(cacheName, async () => {
     const cache = await caches.open(cacheName);
     const headers = withEntryMetaHeaders(cachedResponse.headers, {
@@ -148,7 +152,12 @@ async function handleCardNavigation(event) {
     // notFound()) and server errors are never stored, so we never serve a
     // stale "not found" or error page from cache.
     if (networkResponse && networkResponse.ok) {
-      await storeWithBudget(CARD_CACHE, request, networkResponse, CARD_CACHE_LIMITS);
+      await storeWithBudget(
+        CARD_CACHE,
+        request,
+        networkResponse,
+        CARD_CACHE_LIMITS,
+      );
     }
 
     return networkResponse;
@@ -187,7 +196,8 @@ async function cacheFirst(request, cacheName, limits) {
     bumpLastAccessed(cacheName, request, cached.clone()).catch(() => {});
     fetch(request)
       .then((res) => {
-        if (res && res.ok) storeWithBudget(cacheName, request, res, limits).catch(() => {});
+        if (res && res.ok)
+          storeWithBudget(cacheName, request, res, limits).catch(() => {});
       })
       .catch(() => {});
     return cached;
