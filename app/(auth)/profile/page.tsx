@@ -12,6 +12,7 @@ import { AttestationStatusBanner } from "./attestation-status-banner";
 import { DeleteAccountButton } from "./delete-account-button";
 import { ProfileForm } from "./profile-form";
 import { QrCardDisplay } from "./qr-card-display";
+import ConsentHistory from "./consent-history";
 
 /**
  * Detects "profile edited since last attestation" and opportunistically
@@ -59,7 +60,10 @@ async function checkAttestationStaleness(
       return { stale: false, pendingRequestExists: false };
     }
 
-    if (!profile.last_attested_hash || profile.last_attested_hash === currentHash) {
+    if (
+      !profile.last_attested_hash ||
+      profile.last_attested_hash === currentHash
+    ) {
       return { stale: false, pendingRequestExists: false };
     }
 
@@ -129,6 +133,8 @@ export default async function ProfilePage() {
       ) : null}
 
       <ProfileForm profile={profile} userId={user.id} />
+
+      <ConsentHistory />
 
       <hr className="border-zinc-200 dark:border-zinc-800" />
 
