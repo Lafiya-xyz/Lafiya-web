@@ -1,0 +1,40 @@
+{
+  "$schema": "./chw-attestation-protocol-v1.schema.json",
+  "contract": "lafiya.chw-attestation-protocol",
+  "version": 1,
+  "intents": [
+    {
+      "name": "finalized attestation",
+      "eventVersion": 1,
+      "required": [
+        "intent_id",
+        "record_commitment",
+        "attester",
+        "network_passphrase_hash",
+        "contract_id",
+        "schema_version",
+        "idempotency_key"
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "attestation_finalized",
+      "required": [
+        "event_id",
+        "intent_id",
+        "transaction_hash",
+        "ledger_sequence",
+        "ledger_hash",
+        "event_index",
+        "record_commitment",
+        "attester",
+        "network_passphrase_hash",
+        "contract_id",
+        "contract_version",
+        "schema_version",
+        "idempotency_key"
+      ]
+    }
+  ]
+}

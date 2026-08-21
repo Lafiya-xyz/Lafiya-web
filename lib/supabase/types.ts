@@ -109,7 +109,14 @@ export type ProfileSecretRow = {
 };
 
 export type ReattestationRequestStatus =
-  "pending" | "under_review" | "completed" | "dismissed" | "superseded";
+  | "pending"
+  | "leased"
+  | "submitted"
+  | "confirming"
+  | "completed"
+  | "dismissed"
+  | "superseded"
+  | "failed";
 
 /** Row shape of public.reattestation_requests. */
 export type ReattestationRequestRow = {
@@ -119,6 +126,155 @@ export type ReattestationRequestRow = {
   requested_at: string;
   status: ReattestationRequestStatus;
   revision_id: string | null;
+  claimed_chw_id: string | null;
+  claimed_address_binding_id: string | null;
+  lease_token: string | null;
+  lease_expires_at: string | null;
+  reviewed_at: string | null;
+  review_outcome: "approved" | "rejected" | null;
+};
+
+export type ChwIdentityStatus =
+  "pending" | "active" | "suspended" | "rotating" | "recovering" | "offboarded";
+
+export type ChwIdentityRow = {
+  chw_id: string;
+  status: ChwIdentityStatus;
+  credential_expires_at: string | null;
+  approved_at: string | null;
+  suspended_at: string | null;
+  status_reason: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ChwAddressBindingRow = {
+  id: string;
+  chw_id: string;
+  stellar_address: string;
+  ownership_proof_digest: string;
+  allowlist_synced_at: string | null;
+  bound_at: string;
+  revoked_at: string | null;
+  revoked_reason: string | null;
+  approved_by: string | null;
+};
+
+export type ProtocolEpochRow = {
+  id: string;
+  schema_version: number;
+  network_passphrase_hash: string;
+  contract_id: string;
+  contract_version: string;
+  event_version: number;
+  finality_depth: number;
+  payout_amount_usdc: number;
+  asset_identifier: string;
+  sponsor_pool: string;
+  status: "active" | "deprecated" | "retired";
+  activated_at: string;
+  deprecated_at: string | null;
+  created_at: string;
+};
+
+export type VerificationIntentRow = {
+  id: string;
+  request_id: string;
+  revision_id: string;
+  chw_id: string;
+  address_binding_id: string;
+  epoch_id: string;
+  record_commitment: string;
+  schema_version: number;
+  idempotency_key: string;
+  issued_at: string;
+  expires_at: string;
+  submitted_at: string | null;
+  submitted_transaction_hash: string | null;
+  terminal_at: string | null;
+};
+
+export type AttestationEvidenceRow = {
+  id: string;
+  event_id: string;
+  intent_id: string;
+  transaction_hash: string;
+  ledger_sequence: number;
+  ledger_hash: string;
+  event_index: number;
+  observed_at: string;
+  finalized_at: string | null;
+  invalidated_at: string | null;
+  invalidation_reason: string | null;
+  created_at: string;
+};
+
+export type TrustDecisionRow = {
+  revision_id: string;
+  state:
+    | "unverified"
+    | "submitted"
+    | "confirming"
+    | "verified"
+    | "expired"
+    | "revoked"
+    | "superseded"
+    | "conflicted"
+    | "unavailable";
+  evidence_id: string | null;
+  reason_code: string | null;
+  decided_at: string;
+  finalized_at: string | null;
+  updated_at: string;
+};
+
+export type PayoutObligationRow = {
+  id: string;
+  evidence_id: string;
+  intent_id: string;
+  chw_id: string;
+  recipient_address: string;
+  amount_usdc: number;
+  asset_identifier: string;
+  sponsor_pool: string;
+  status: "pending" | "settled" | "quarantined" | "adjusted";
+  eligibility_key: string;
+  created_at: string;
+  adjusted_at: string | null;
+  adjustment_reason: string | null;
+};
+
+export type PayoutSettlementRow = {
+  id: string;
+  obligation_id: string | null;
+  transaction_hash: string;
+  recipient_address: string;
+  amount_usdc: number;
+  asset_identifier: string;
+  sponsor_pool: string;
+  settled_at: string;
+  status: "matched" | "quarantined";
+  reason_code: string | null;
+  created_at: string;
+};
+
+export type ProtocolIndexerCheckpointRow = {
+  stream: "attestations" | "payments";
+  cursor: string;
+  ledger_sequence: number | null;
+  ledger_hash: string | null;
+  updated_at: string;
+};
+
+export type ProtocolQuarantineRow = {
+  id: string;
+  stream: "attestations" | "payments";
+  event_id: string;
+  reason_code: string;
+  attempts: number;
+  first_seen_at: string;
+  last_seen_at: string;
+  resolved_at: string | null;
 };
 
 /** Return row shape of public.get_emergency_card(p_card_id uuid). */
@@ -134,10 +290,10 @@ export type EmergencyCardRow = {
   emergency_contacts: EmergencyContact[] | null;
   language: string | null;
   disclosure_states: Record<string, "disclosed" | "withheld">;
-  revision_id: string;
   schema_version: number;
-  commitment: string;
   offline_cache_allowed: boolean;
+  trust_state: TrustDecisionRow["state"];
+  trust_updated_at: string | null;
 };
 
 /** Row shape of public.consent_logs. */
@@ -319,8 +475,115 @@ export type Database = {
         Update: Partial<ChwPayoutObservationRow>;
         Relationships: [];
       };
+      chw_identities: {
+        Row: ChwIdentityRow;
+        Insert: Pick<ChwIdentityRow, "chw_id"> & Partial<ChwIdentityRow>;
+        Update: Partial<Omit<ChwIdentityRow, "chw_id">>;
+        Relationships: [];
+      };
+      chw_address_bindings: {
+        Row: ChwAddressBindingRow;
+        Insert: Pick<
+          ChwAddressBindingRow,
+          "chw_id" | "stellar_address" | "ownership_proof_digest"
+        > &
+          Partial<ChwAddressBindingRow>;
+        Update: Partial<Omit<ChwAddressBindingRow, "id">>;
+        Relationships: [];
+      };
+      protocol_epochs: {
+        Row: ProtocolEpochRow;
+        Insert: Pick<
+          ProtocolEpochRow,
+          | "schema_version"
+          | "network_passphrase_hash"
+          | "contract_id"
+          | "contract_version"
+          | "event_version"
+          | "finality_depth"
+          | "payout_amount_usdc"
+          | "asset_identifier"
+          | "sponsor_pool"
+        > &
+          Partial<ProtocolEpochRow>;
+        Update: Partial<Omit<ProtocolEpochRow, "id">>;
+        Relationships: [];
+      };
+      verification_intents: {
+        Row: VerificationIntentRow;
+        Insert: Omit<VerificationIntentRow, "id" | "issued_at"> & {
+          id?: string;
+          issued_at?: string;
+        };
+        Update: Partial<Omit<VerificationIntentRow, "id">>;
+        Relationships: [];
+      };
+      attestation_evidence: {
+        Row: AttestationEvidenceRow;
+        Insert: Omit<AttestationEvidenceRow, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<Omit<AttestationEvidenceRow, "id">>;
+        Relationships: [];
+      };
+      trust_decisions: {
+        Row: TrustDecisionRow;
+        Insert: Pick<TrustDecisionRow, "revision_id"> &
+          Partial<TrustDecisionRow>;
+        Update: Partial<Omit<TrustDecisionRow, "revision_id">>;
+        Relationships: [];
+      };
+      payout_obligations: {
+        Row: PayoutObligationRow;
+        Insert: Omit<PayoutObligationRow, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<Omit<PayoutObligationRow, "id">>;
+        Relationships: [];
+      };
+      payout_settlements: {
+        Row: PayoutSettlementRow;
+        Insert: Omit<PayoutSettlementRow, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<Omit<PayoutSettlementRow, "id">>;
+        Relationships: [];
+      };
+      protocol_indexer_checkpoints: {
+        Row: ProtocolIndexerCheckpointRow;
+        Insert: Pick<ProtocolIndexerCheckpointRow, "stream" | "cursor"> &
+          Partial<ProtocolIndexerCheckpointRow>;
+        Update: Partial<Omit<ProtocolIndexerCheckpointRow, "stream">>;
+        Relationships: [];
+      };
+      protocol_quarantine: {
+        Row: ProtocolQuarantineRow;
+        Insert: Pick<
+          ProtocolQuarantineRow,
+          "stream" | "event_id" | "reason_code"
+        > &
+          Partial<ProtocolQuarantineRow>;
+        Update: Partial<Omit<ProtocolQuarantineRow, "id">>;
+        Relationships: [];
+      };
     };
-    Views: Record<string, never>;
+    Views: {
+      payout_obligation_reconciliation: {
+        Row: {
+          reporting_day: string;
+          obligations: number;
+          settled: number;
+          pending: number;
+          quarantined: number;
+          explicitly_adjusted: number;
+          reconciled: boolean;
+        };
+        Relationships: [];
+      };
+    };
     Functions: {
       get_emergency_card: {
         Args: { p_card_id: string };
@@ -386,6 +649,83 @@ export type Database = {
           p_paging_token: string;
         };
         Returns: string;
+      };
+      claim_verification_request: {
+        Args: { p_request_id: string; p_lease_seconds?: number };
+        Returns: {
+          request_id: string;
+          revision_id: string;
+          lease_token: string;
+          lease_expires_at: string;
+          schema_version: number;
+          record_commitment: string;
+          review_data: Record<string, unknown>;
+        }[];
+      };
+      renew_verification_lease: {
+        Args: {
+          p_request_id: string;
+          p_lease_token: string;
+          p_lease_seconds?: number;
+        };
+        Returns: string;
+      };
+      release_verification_lease: {
+        Args: { p_request_id: string; p_lease_token: string };
+        Returns: undefined;
+      };
+      create_verification_intent: {
+        Args: {
+          p_request_id: string;
+          p_lease_token: string;
+          p_epoch_id: string;
+          p_idempotency_key: string;
+          p_ttl_seconds?: number;
+        };
+        Returns: VerificationIntentRow;
+      };
+      mark_verification_intent_submitted: {
+        Args: { p_intent_id: string; p_transaction_hash: string };
+        Returns: VerificationIntentRow;
+      };
+      apply_finalized_attestation_evidence: {
+        Args: {
+          p_event_id: string;
+          p_intent_id: string;
+          p_record_commitment: string;
+          p_attester_address: string;
+          p_transaction_hash: string;
+          p_ledger_sequence: number;
+          p_ledger_hash: string;
+          p_event_index: number;
+          p_observed_at: string;
+          p_finalized_at: string | null;
+          p_network_passphrase_hash: string;
+          p_contract_id: string;
+          p_contract_version: string;
+          p_schema_version: number;
+          p_idempotency_key: string;
+        };
+        Returns: TrustDecisionRow;
+      };
+      reconcile_attestation_reorg: {
+        Args: { p_event_id: string; p_reason_code: string };
+        Returns: undefined;
+      };
+      apply_payout_settlement: {
+        Args: {
+          p_transaction_hash: string;
+          p_recipient_address: string;
+          p_amount_usdc: number;
+          p_asset_identifier: string;
+          p_sponsor_pool: string;
+          p_settled_at: string;
+        };
+        Returns: string;
+      };
+      quarantine_protocol_event: {
+        Args: { p_stream: string; p_event_id: string; p_reason_code: string };
+        Returns: number;
       };
     };
     Enums: {

@@ -116,10 +116,10 @@ describe("profiles column contract (get_emergency_card leak guard)", () => {
       | (typeof EXPOSED_VIA_EMERGENCY_CARD)[number]
       | "age"
       | "disclosure_states"
-      | "revision_id"
       | "schema_version"
-      | "commitment"
       | "offline_cache_allowed"
+      | "trust_state"
+      | "trust_updated_at"
     >();
   });
 });

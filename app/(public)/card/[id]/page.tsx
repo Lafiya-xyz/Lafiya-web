@@ -3,8 +3,6 @@ import { notFound } from "next/navigation";
 
 import { logError } from "@/lib/logging/logger";
 import { createClient } from "@/lib/supabase/server";
-import { validateAttestation } from "@/lib/stellar/attestation";
-
 import { VerifiedBadge, type VerificationStatus } from "./verified-badge";
 
 // Caching strategy: this page is ISR with a short TTL rather than
@@ -60,20 +58,13 @@ export default async function PublicCardPage({
 
   const card = data[0];
 
-  let status: VerificationStatus;
-  if (!card.commitment) {
-    status = "unavailable";
-  } else
-    try {
-      status = (await validateAttestation(card.commitment))
-        ? "verified"
-        : "not_verified";
-    } catch (err) {
-      logError("Failed to retrieve attestation from Stellar", err, {
-        route: "/card/[id]",
-      });
-      status = "unavailable";
-    }
+  // The public route deliberately reads the persisted trust decision rather
+  // than asking a provider whether an attestation happens to exist. Only the
+  // finality-aware indexer can select `verified` for this exact revision.
+  const status: VerificationStatus =
+    card.trust_state === "unverified"
+      ? "not_verified"
+      : (card.trust_state ?? "unavailable");
 
   return (
     <>
