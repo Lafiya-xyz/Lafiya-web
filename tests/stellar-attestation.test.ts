@@ -9,6 +9,7 @@ vi.hoisted(() => {
   process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role";
   process.env.STELLAR_NETWORK_PASSPHRASE = "Test SDF Network ; September 2015";
   process.env.SOROBAN_RPC_URL = "https://soroban-testnet.stellar.org";
+  process.env.ATTESTATION_MODE = "live";
   // A configured contract id flips getAttestation into the real-RPC path.
   process.env.ATTESTATION_CONTRACT_ID =
     "C1111111111111111111111111111111111111111111111111111111111111111";

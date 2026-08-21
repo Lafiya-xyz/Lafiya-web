@@ -6,7 +6,9 @@ import { VerifiedBadge } from "./verified-badge";
 describe("VerifiedBadge", () => {
   it("shows the verified state when an attestation exists", () => {
     const { container } = render(<VerifiedBadge status="verified" />);
-    expect(screen.getByText("Verified by a health worker")).toBeInTheDocument();
+    expect(
+      screen.getByText("Health-worker attestation finalized"),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Not yet verified")).not.toBeInTheDocument();
 
     const icon = screen.getByTestId("verified-icon");
@@ -20,7 +22,7 @@ describe("VerifiedBadge", () => {
     const { container } = render(<VerifiedBadge status="not_verified" />);
     expect(screen.getByText("Not yet verified")).toBeInTheDocument();
     expect(
-      screen.queryByText("Verified by a health worker"),
+      screen.queryByText("Health-worker attestation finalized"),
     ).not.toBeInTheDocument();
 
     const icon = screen.getByTestId("unverified-icon");

@@ -1,0 +1,1341 @@
+{
+  "generatedAt": "2026-08-20T22:53:53.447Z",
+  "iterations": 10,
+  "timeoutMs": 5000,
+  "note": "Latencies are wall-clock ms from the machine that ran the harness (see README for region guidance). Failures/throttling are recorded separately from normal latency samples.",
+  "results": [
+    {
+      "id": "sdf-testnet",
+      "kind": "rpc",
+      "network": "testnet",
+      "url": "https://soroban-testnet.stellar.org",
+      "retention": {
+        "ledgerRetentionWindow": 120960,
+        "oldestLedger": 4127814,
+        "latestLedger": 4248773
+      },
+      "healthFailure": null,
+      "probes": {
+        "getHealth": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 91,
+          "p95": 95,
+          "p99": 95,
+          "min": 89,
+          "max": 95,
+          "mean": 92
+        },
+        "getLatestLedger": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 353,
+          "p95": 364,
+          "p99": 364,
+          "min": 340,
+          "max": 364,
+          "mean": 353
+        },
+        "getNetwork": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 92,
+          "p95": 160,
+          "p99": 160,
+          "min": 89,
+          "max": 160,
+          "mean": 101
+        },
+        "getTransactions": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 714,
+          "p95": 741,
+          "p99": 741,
+          "min": 685,
+          "max": 741,
+          "mean": 715
+        },
+        "getEvents": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 252,
+          "p95": 267,
+          "p99": 267,
+          "min": 249,
+          "max": 267,
+          "mean": 258
+        },
+        "simulateTransaction": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 100,
+          "p95": 141,
+          "p99": 141,
+          "min": 96,
+          "max": 141,
+          "mean": 104,
+          "hostSuccess": 10,
+          "hostError": 0
+        }
+      }
+    },
+    {
+      "id": "sdf-futurenet",
+      "kind": "rpc",
+      "network": "futurenet",
+      "url": "https://rpc-futurenet.stellar.org",
+      "retention": {
+        "ledgerRetentionWindow": 120960,
+        "oldestLedger": 7884,
+        "latestLedger": 128843
+      },
+      "healthFailure": null,
+      "probes": {
+        "getHealth": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 91,
+          "p95": 93,
+          "p99": 93,
+          "min": 90,
+          "max": 93,
+          "mean": 91
+        },
+        "getLatestLedger": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 91,
+          "p95": 92,
+          "p99": 92,
+          "min": 91,
+          "max": 92,
+          "mean": 91
+        },
+        "getNetwork": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 91,
+          "p95": 93,
+          "p99": 93,
+          "min": 90,
+          "max": 93,
+          "mean": 91
+        },
+        "getTransactions": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 133,
+          "p95": 456,
+          "p99": 456,
+          "min": 128,
+          "max": 456,
+          "mean": 178
+        },
+        "getEvents": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 93,
+          "p95": 200,
+          "p99": 200,
+          "min": 93,
+          "max": 200,
+          "mean": 116
+        },
+        "simulateTransaction": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 99,
+          "p95": 103,
+          "p99": 103,
+          "min": 97,
+          "max": 103,
+          "mean": 99,
+          "hostSuccess": 0,
+          "hostError": 10
+        }
+      }
+    },
+    {
+      "id": "sorobanrpc.com-mainnet",
+      "kind": "rpc",
+      "network": "mainnet",
+      "url": "https://mainnet.sorobanrpc.com",
+      "retention": {
+        "ledgerRetentionWindow": 120960,
+        "oldestLedger": 63927109,
+        "latestLedger": 64048068
+      },
+      "healthFailure": null,
+      "probes": {
+        "getHealth": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 53,
+          "p95": 78,
+          "p99": 78,
+          "min": 50,
+          "max": 78,
+          "mean": 56
+        },
+        "getLatestLedger": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 451,
+          "p95": 533,
+          "p99": 533,
+          "min": 405,
+          "max": 533,
+          "mean": 457
+        },
+        "getNetwork": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 70,
+          "p95": 95,
+          "p99": 95,
+          "min": 58,
+          "max": 95,
+          "mean": 76
+        },
+        "getTransactions": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 349,
+          "p95": 384,
+          "p99": 384,
+          "min": 285,
+          "max": 384,
+          "mean": 346
+        },
+        "getEvents": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 131,
+          "p95": 146,
+          "p99": 146,
+          "min": 90,
+          "max": 146,
+          "mean": 127
+        },
+        "simulateTransaction": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 68,
+          "p95": 137,
+          "p99": 137,
+          "min": 64,
+          "max": 137,
+          "mean": 85,
+          "hostSuccess": 0,
+          "hostError": 10
+        }
+      }
+    },
+    {
+      "id": "nodies-testnet",
+      "kind": "rpc",
+      "network": "testnet",
+      "url": "https://stellar-soroban-testnet-public.nodies.app",
+      "retention": null,
+      "healthFailure": "http_403",
+      "probes": {
+        "getHealth": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "http_403": 10
+          },
+          "errors": [
+            "http_403: HTTP 403"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        },
+        "getLatestLedger": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "http_403": 10
+          },
+          "errors": [
+            "http_403: HTTP 403"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        },
+        "getNetwork": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "http_403": 10
+          },
+          "errors": [
+            "http_403: HTTP 403"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        },
+        "getTransactions": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "http_403": 10
+          },
+          "errors": [
+            "http_403: HTTP 403"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        },
+        "getEvents": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "http_403": 10
+          },
+          "errors": [
+            "http_403: HTTP 403"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        },
+        "simulateTransaction": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "network_error": 10
+          },
+          "errors": [
+            "network_error: Request failed with status code 403"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        }
+      }
+    },
+    {
+      "id": "nodies-mainnet",
+      "kind": "rpc",
+      "network": "mainnet",
+      "url": "https://stellar-soroban-public.nodies.app",
+      "retention": null,
+      "healthFailure": "http_500_server",
+      "probes": {
+        "getHealth": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "http_500_server": 10
+          },
+          "errors": [
+            "http_500_server: HTTP 500"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        },
+        "getLatestLedger": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "http_500_server": 10
+          },
+          "errors": [
+            "http_500_server: HTTP 500"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        },
+        "getNetwork": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "http_500_server": 10
+          },
+          "errors": [
+            "http_500_server: HTTP 500"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        },
+        "getTransactions": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "http_500_server": 10
+          },
+          "errors": [
+            "http_500_server: HTTP 500"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        },
+        "getEvents": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "http_500_server": 10
+          },
+          "errors": [
+            "http_500_server: HTTP 500"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        },
+        "simulateTransaction": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "network_error": 10
+          },
+          "errors": [
+            "network_error: Request failed with status code 500",
+            "network_error: Request failed with status code 429"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        }
+      }
+    },
+    {
+      "id": "gateway-testnet",
+      "kind": "rpc",
+      "network": "testnet",
+      "url": "https://soroban-rpc.testnet.stellar.gateway.fm",
+      "retention": {
+        "ledgerRetentionWindow": 120960,
+        "oldestLedger": 4127822,
+        "latestLedger": 4248781
+      },
+      "healthFailure": null,
+      "probes": {
+        "getHealth": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 15,
+          "p95": 71,
+          "p99": 71,
+          "min": 14,
+          "max": 71,
+          "mean": 21
+        },
+        "getLatestLedger": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 33,
+          "p95": 57,
+          "p99": 57,
+          "min": 28,
+          "max": 57,
+          "mean": 36
+        },
+        "getNetwork": {
+          "attempts": 10,
+          "ok": 9,
+          "failures": {
+            "http_429_throttled": 1
+          },
+          "errors": [
+            "http_429_throttled: HTTP 429"
+          ],
+          "p50": 15,
+          "p95": 22,
+          "p99": 22,
+          "min": 14,
+          "max": 22,
+          "mean": 16
+        },
+        "getTransactions": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "http_429_throttled": 10
+          },
+          "errors": [
+            "http_429_throttled: HTTP 429"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        },
+        "getEvents": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "http_429_throttled": 10
+          },
+          "errors": [
+            "http_429_throttled: HTTP 429"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        },
+        "simulateTransaction": {
+          "attempts": 10,
+          "ok": 7,
+          "failures": {
+            "network_error": 3
+          },
+          "errors": [
+            "network_error: Request failed with status code 429"
+          ],
+          "p50": 26,
+          "p95": 45,
+          "p99": 45,
+          "min": 23,
+          "max": 45,
+          "mean": 29,
+          "hostSuccess": 7,
+          "hostError": 0
+        }
+      }
+    },
+    {
+      "id": "gateway-mainnet",
+      "kind": "rpc",
+      "network": "mainnet",
+      "url": "https://soroban-rpc.mainnet.stellar.gateway.fm",
+      "retention": {
+        "ledgerRetentionWindow": 120960,
+        "oldestLedger": 63927112,
+        "latestLedger": 64048071
+      },
+      "healthFailure": null,
+      "probes": {
+        "getHealth": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 9,
+          "p95": 49,
+          "p99": 49,
+          "min": 9,
+          "max": 49,
+          "mean": 13
+        },
+        "getLatestLedger": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 74,
+          "p95": 135,
+          "p99": 135,
+          "min": 62,
+          "max": 135,
+          "mean": 87
+        },
+        "getNetwork": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 16,
+          "p95": 18,
+          "p99": 18,
+          "min": 14,
+          "max": 18,
+          "mean": 16
+        },
+        "getTransactions": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 51,
+          "p95": 57,
+          "p99": 57,
+          "min": 47,
+          "max": 57,
+          "mean": 52
+        },
+        "getEvents": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 12,
+          "p95": 13,
+          "p99": 13,
+          "min": 11,
+          "max": 13,
+          "mean": 12
+        },
+        "simulateTransaction": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 19,
+          "p95": 21,
+          "p99": 21,
+          "min": 19,
+          "max": 21,
+          "mean": 20,
+          "hostSuccess": 0,
+          "hostError": 10
+        }
+      }
+    },
+    {
+      "id": "onfinality-mainnet",
+      "kind": "rpc",
+      "network": "mainnet",
+      "url": "https://stellar.api.onfinality.io/public",
+      "retention": {
+        "ledgerRetentionWindow": 120960,
+        "oldestLedger": 63927113,
+        "latestLedger": 64048072
+      },
+      "healthFailure": null,
+      "probes": {
+        "getHealth": {
+          "attempts": 10,
+          "ok": 1,
+          "failures": {
+            "http_429_throttled": 9
+          },
+          "errors": [
+            "http_429_throttled: HTTP 429"
+          ],
+          "p50": 109,
+          "p95": 109,
+          "p99": 109,
+          "min": 109,
+          "max": 109,
+          "mean": 109
+        },
+        "getLatestLedger": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "http_429_throttled": 10
+          },
+          "errors": [
+            "http_429_throttled: HTTP 429"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        },
+        "getNetwork": {
+          "attempts": 10,
+          "ok": 1,
+          "failures": {
+            "http_429_throttled": 9
+          },
+          "errors": [
+            "http_429_throttled: HTTP 429"
+          ],
+          "p50": 92,
+          "p95": 92,
+          "p99": 92,
+          "min": 92,
+          "max": 92,
+          "mean": 92
+        },
+        "getTransactions": {
+          "attempts": 10,
+          "ok": 2,
+          "failures": {
+            "http_429_throttled": 8
+          },
+          "errors": [
+            "http_429_throttled: HTTP 429"
+          ],
+          "p50": 531,
+          "p95": 742,
+          "p99": 742,
+          "min": 531,
+          "max": 742,
+          "mean": 637
+        },
+        "getEvents": {
+          "attempts": 10,
+          "ok": 1,
+          "failures": {
+            "http_429_throttled": 9
+          },
+          "errors": [
+            "http_429_throttled: HTTP 429"
+          ],
+          "p50": 489,
+          "p95": 489,
+          "p99": 489,
+          "min": 489,
+          "max": 489,
+          "mean": 489
+        },
+        "simulateTransaction": {
+          "attempts": 10,
+          "ok": 1,
+          "failures": {
+            "network_error": 9
+          },
+          "errors": [
+            "network_error: Request failed with status code 429"
+          ],
+          "p50": 102,
+          "p95": 102,
+          "p99": 102,
+          "min": 102,
+          "max": 102,
+          "mean": 102,
+          "hostSuccess": 0,
+          "hostError": 1
+        }
+      }
+    },
+    {
+      "id": "lightsail-mainnet",
+      "kind": "rpc",
+      "network": "mainnet",
+      "url": "https://rpc.lightsail.network/",
+      "retention": {
+        "ledgerRetentionWindow": 120960,
+        "oldestLedger": 63927114,
+        "latestLedger": 64048073
+      },
+      "healthFailure": null,
+      "probes": {
+        "getHealth": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 48,
+          "p95": 66,
+          "p99": 66,
+          "min": 47,
+          "max": 66,
+          "mean": 52
+        },
+        "getLatestLedger": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 130,
+          "p95": 365,
+          "p99": 365,
+          "min": 104,
+          "max": 365,
+          "mean": 156
+        },
+        "getNetwork": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 53,
+          "p95": 102,
+          "p99": 102,
+          "min": 52,
+          "max": 102,
+          "mean": 68
+        },
+        "getTransactions": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 116,
+          "p95": 150,
+          "p99": 150,
+          "min": 83,
+          "max": 150,
+          "mean": 117
+        },
+        "getEvents": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 52,
+          "p95": 60,
+          "p99": 60,
+          "min": 50,
+          "max": 60,
+          "mean": 53
+        },
+        "simulateTransaction": {
+          "attempts": 10,
+          "ok": 9,
+          "failures": {
+            "network_error": 1
+          },
+          "errors": [
+            "network_error: Request failed with status code 429"
+          ],
+          "p50": 70,
+          "p95": 110,
+          "p99": 110,
+          "min": 57,
+          "max": 110,
+          "mean": 75,
+          "hostSuccess": 0,
+          "hostError": 9
+        }
+      }
+    },
+    {
+      "id": "lightsail-archive-mainnet",
+      "kind": "rpc",
+      "network": "mainnet",
+      "url": "https://archive-rpc.lightsail.network/",
+      "retention": {
+        "ledgerRetentionWindow": 64,
+        "oldestLedger": 64048011,
+        "latestLedger": 64048074
+      },
+      "healthFailure": null,
+      "probes": {
+        "getHealth": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 49,
+          "p95": 315,
+          "p99": 315,
+          "min": 48,
+          "max": 315,
+          "mean": 79
+        },
+        "getLatestLedger": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 141,
+          "p95": 354,
+          "p99": 354,
+          "min": 126,
+          "max": 354,
+          "mean": 176
+        },
+        "getNetwork": {
+          "attempts": 10,
+          "ok": 9,
+          "failures": {
+            "http_429_throttled": 1
+          },
+          "errors": [
+            "http_429_throttled: HTTP 429"
+          ],
+          "p50": 61,
+          "p95": 66,
+          "p99": 66,
+          "min": 53,
+          "max": 66,
+          "mean": 60
+        },
+        "getTransactions": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "http_429_throttled": 10
+          },
+          "errors": [
+            "http_429_throttled: HTTP 429"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        },
+        "getEvents": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "http_429_throttled": 10
+          },
+          "errors": [
+            "http_429_throttled: HTTP 429"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        },
+        "simulateTransaction": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "network_error": 10
+          },
+          "errors": [
+            "network_error: Request failed with status code 429"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        }
+      }
+    },
+    {
+      "id": "ankr-mainnet",
+      "kind": "rpc",
+      "network": "mainnet",
+      "url": "https://rpc.ankr.com/stellar_soroban",
+      "retention": {
+        "ledgerRetentionWindow": 120960,
+        "oldestLedger": 63927116,
+        "latestLedger": 64048075
+      },
+      "healthFailure": null,
+      "probes": {
+        "getHealth": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 158,
+          "p95": 287,
+          "p99": 287,
+          "min": 158,
+          "max": 287,
+          "mean": 178
+        },
+        "getLatestLedger": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 1283,
+          "p95": 1443,
+          "p99": 1443,
+          "min": 1042,
+          "max": 1443,
+          "mean": 1266
+        },
+        "getNetwork": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 200,
+          "p95": 287,
+          "p99": 287,
+          "min": 175,
+          "max": 287,
+          "mean": 212
+        },
+        "getTransactions": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 972,
+          "p95": 1193,
+          "p99": 1193,
+          "min": 222,
+          "max": 1193,
+          "mean": 868
+        },
+        "getEvents": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 182,
+          "p95": 647,
+          "p99": 647,
+          "min": 171,
+          "max": 647,
+          "mean": 291
+        },
+        "simulateTransaction": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 224,
+          "p95": 2225,
+          "p99": 2225,
+          "min": 185,
+          "max": 2225,
+          "mean": 429,
+          "hostSuccess": 0,
+          "hostError": 10
+        }
+      }
+    },
+    {
+      "id": "liquify-testnet",
+      "kind": "rpc",
+      "network": "testnet",
+      "url": "https://stellar.liquify.com/api=41EEWAH79Y5OCGI7/testnet",
+      "retention": null,
+      "healthFailure": "rpc_error",
+      "probes": {
+        "getHealth": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "rpc_error": 10
+          },
+          "errors": [
+            "rpc_error: RPC error: -32603 [-32603] latency (3029h53m23s) since last known ledger closed is too high (>30s)"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        },
+        "getLatestLedger": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 12,
+          "p95": 15,
+          "p99": 15,
+          "min": 9,
+          "max": 15,
+          "mean": 12
+        },
+        "getNetwork": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 4,
+          "p95": 10,
+          "p99": 10,
+          "min": 3,
+          "max": 10,
+          "mean": 5
+        },
+        "getTransactions": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "rpc_error": 10
+          },
+          "errors": [
+            "rpc_error: RPC error: -32600 start ledger (0) must be between the oldest ledger: 1949865 and the latest ledger: 2070824 for this rpc instance"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        },
+        "getEvents": {
+          "attempts": 10,
+          "ok": 0,
+          "failures": {
+            "rpc_error": 10
+          },
+          "errors": [
+            "rpc_error: RPC error: -32602 startLedger must be positive"
+          ],
+          "p50": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null,
+          "mean": null
+        },
+        "simulateTransaction": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 6,
+          "p95": 7,
+          "p99": 7,
+          "min": 5,
+          "max": 7,
+          "mean": 6,
+          "hostSuccess": 0,
+          "hostError": 10
+        }
+      }
+    },
+    {
+      "id": "sdf-horizon-testnet",
+      "kind": "horizon",
+      "network": "testnet",
+      "url": "https://horizon-testnet.stellar.org",
+      "retention": null,
+      "healthFailure": null,
+      "probes": {
+        "root": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 79,
+          "p95": 80,
+          "p99": 80,
+          "min": 79,
+          "max": 80,
+          "mean": 79
+        },
+        "recentPayment": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 84,
+          "p95": 88,
+          "p99": 88,
+          "min": 83,
+          "max": 88,
+          "mean": 85
+        },
+        "accountPayments": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 100,
+          "p95": 109,
+          "p99": 109,
+          "min": 94,
+          "max": 109,
+          "mean": 100
+        },
+        "transactionByHash": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 81,
+          "p95": 92,
+          "p99": 92,
+          "min": 80,
+          "max": 92,
+          "mean": 82
+        }
+      }
+    },
+    {
+      "id": "sdf-horizon-mainnet",
+      "kind": "horizon",
+      "network": "mainnet",
+      "url": "https://horizon.stellar.org",
+      "retention": null,
+      "healthFailure": null,
+      "probes": {
+        "root": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 79,
+          "p95": 80,
+          "p99": 80,
+          "min": 78,
+          "max": 80,
+          "mean": 79
+        },
+        "recentPayment": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 85,
+          "p95": 95,
+          "p99": 95,
+          "min": 82,
+          "max": 95,
+          "mean": 86
+        },
+        "accountPayments": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 100,
+          "p95": 1266,
+          "p99": 1266,
+          "min": 98,
+          "max": 1266,
+          "mean": 217
+        },
+        "transactionByHash": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 81,
+          "p95": 86,
+          "p99": 86,
+          "min": 79,
+          "max": 86,
+          "mean": 81
+        }
+      }
+    },
+    {
+      "id": "lobstr-horizon-mainnet",
+      "kind": "horizon",
+      "network": "mainnet",
+      "url": "https://horizon.stellar.lobstr.co",
+      "retention": null,
+      "healthFailure": null,
+      "probes": {
+        "root": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 35,
+          "p95": 46,
+          "p99": 46,
+          "min": 33,
+          "max": 46,
+          "mean": 37
+        },
+        "recentPayment": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 509,
+          "p95": 731,
+          "p99": 731,
+          "min": 351,
+          "max": 731,
+          "mean": 536
+        },
+        "accountPayments": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 816,
+          "p95": 1112,
+          "p99": 1112,
+          "min": 586,
+          "max": 1112,
+          "mean": 843
+        },
+        "transactionByHash": {
+          "attempts": 10,
+          "ok": 10,
+          "failures": {},
+          "errors": [],
+          "p50": 191,
+          "p95": 294,
+          "p99": 294,
+          "min": 145,
+          "max": 294,
+          "mean": 201
+        }
+      }
+    }
+  ]
+}

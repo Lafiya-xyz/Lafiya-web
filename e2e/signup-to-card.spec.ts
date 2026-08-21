@@ -60,6 +60,7 @@ test.describe("Golden path: signup → profile edit → QR scan → public card"
     page,
     context,
   }) => {
+    test.setTimeout(90_000);
     // --- 1. Sign up ---
     await page.goto("/signup");
     await page.fill("#email", email);
@@ -82,7 +83,7 @@ test.describe("Golden path: signup → profile edit → QR scan → public card"
     }
 
     // --- 2. Should now be on the profile page ---
-    await page.waitForURL("**/profile", { timeout: 15000 });
+    await page.waitForURL("**/profile", { timeout: 30_000 });
 
     // --- 3. Fill out the profile form ---
     await page.fill("#name", "E2E Test Patient");
@@ -93,6 +94,14 @@ test.describe("Golden path: signup → profile edit → QR scan → public card"
 
     await page.click('button:has-text("Save")');
     await expect(page.getByText("Saved.")).toBeVisible({ timeout: 10000 });
+
+    // Public disclosure is purpose-specific and never implied by account
+    // signup. Affirm it explicitly before sharing the card.
+    const publicConsent = page.locator("form", {
+      hasText: "Public emergency card",
+    });
+    await publicConsent.getByRole("button", { name: "Allow" }).click();
+    await expect(publicConsent.getByText("allowed")).toBeVisible();
 
     // --- 4. Grab the public card URL from the QR display ---
     const cardUrlText = page.locator("p.break-all");

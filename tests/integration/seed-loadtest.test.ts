@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import { execSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { execFileSync, execSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -46,11 +46,46 @@ describe("seed_loadtest.sql", () => {
     }
 
     // Run the seed script.
-    execSync(`psql "${dbUrl}" -f "${SEED_SQL_PATH}"`, {
-      encoding: "utf-8",
-      timeout: 60_000,
-      cwd: resolve(__dirname, "../.."),
-    });
+    try {
+      execFileSync("psql", [dbUrl, "-f", SEED_SQL_PATH], {
+        encoding: "utf-8",
+        timeout: 60_000,
+        cwd: resolve(__dirname, "../.."),
+      });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      execFileSync(
+        "docker",
+        [
+          "exec",
+          "-i",
+          "supabase_db_lafiya-web",
+          "psql",
+          "-U",
+          "postgres",
+          "-d",
+          "postgres",
+        ],
+        {
+          input: readFileSync(SEED_SQL_PATH, "utf8").replace(
+            /\\copy[^;]+;/,
+            "",
+          ),
+          encoding: "utf-8",
+          timeout: 60_000,
+        },
+      );
+    }
+    const { data: seededCards, error: cardError } = await adminClient
+      .from("profiles")
+      .select("card_public_id")
+      .limit(1000);
+    if (cardError) throw cardError;
+    writeFileSync(
+      CARD_IDS_PATH,
+      `${seededCards.map((row) => row.card_public_id).join("\n")}\n`,
+      { mode: 0o600 },
+    );
   });
 
   afterAll(async () => {

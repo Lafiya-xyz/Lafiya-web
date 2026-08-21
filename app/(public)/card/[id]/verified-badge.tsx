@@ -1,4 +1,13 @@
-export type VerificationStatus = "verified" | "not_verified" | "unavailable";
+export type VerificationStatus =
+  | "verified"
+  | "not_verified"
+  | "submitted"
+  | "confirming"
+  | "expired"
+  | "revoked"
+  | "superseded"
+  | "conflicted"
+  | "unavailable";
 
 export function VerifiedBadge({ status }: { status: VerificationStatus }) {
   if (status === "verified") {
@@ -16,7 +25,7 @@ export function VerifiedBadge({ status }: { status: VerificationStatus }) {
             clipRule="evenodd"
           />
         </svg>
-        Verified by a health worker
+        Health-worker attestation finalized
       </span>
     );
   }
@@ -25,6 +34,23 @@ export function VerifiedBadge({ status }: { status: VerificationStatus }) {
     return (
       <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
         Verification status unavailable
+      </span>
+    );
+  }
+
+  const pendingLabels: Partial<Record<VerificationStatus, string>> = {
+    submitted: "Health-worker verification submitted",
+    confirming: "Verification awaiting ledger finality",
+    expired: "Verification evidence expired",
+    revoked: "Verification evidence revoked",
+    superseded: "Verification applies to an older record version",
+    conflicted: "Verification evidence needs reconciliation",
+  };
+  const label = pendingLabels[status];
+  if (label) {
+    return (
+      <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        {label}
       </span>
     );
   }

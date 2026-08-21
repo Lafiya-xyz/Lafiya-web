@@ -27,8 +27,8 @@ export function ProfileForm({
       {profile ? (
         <input
           type="hidden"
-          name="expectedUpdatedAt"
-          value={profile.updated_at}
+          name="expectedRevisionId"
+          value={profile.current_revision_id ?? ""}
         />
       ) : null}
 

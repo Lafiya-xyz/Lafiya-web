@@ -39,6 +39,13 @@ describe("card_public_id regeneration", () => {
       throw error ?? new Error("Failed to seed test profile");
     }
     oldCardId = data.card_public_id;
+    const { error: consentError } = await user.client.rpc("record_consent", {
+      p_purpose: "emergency_public_disclosure",
+      p_purpose_version: 1,
+      p_action: "acknowledged",
+      p_idempotency_key: crypto.randomUUID(),
+    });
+    if (consentError) throw consentError;
   });
 
   afterAll(async () => {

@@ -45,6 +45,6 @@ exports[`VerifiedBadge > shows the verified state when an attestation exists 1`]
       fill-rule="evenodd"
     />
   </svg>
-  Verified by a health worker
+  Health-worker attestation finalized
 </span>
 `;

@@ -15,6 +15,8 @@ env:
   SUPABASE_SERVICE_ROLE_KEY: dummy-service-role-key-for-build-only
   STELLAR_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
   SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
+  LAFIYA_DEPLOYMENT_ENV: ci
+  ATTESTATION_MODE: mock
 
 jobs:
   test:
@@ -29,6 +31,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm run migration:lint
       - run: npm test
       - run: npm run build
       - name: Verify no client bundle leaks

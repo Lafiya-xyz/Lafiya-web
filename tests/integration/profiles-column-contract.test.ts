@@ -65,6 +65,9 @@ const INTENTIONALLY_PRIVATE = [
   // anonymous card scan.
   "last_attested_hash",
   "last_verified_at",
+  "current_revision_id",
+  "disclosure_policy",
+  "legacy_card_sunset_at",
 ] as const satisfies readonly (keyof ProfileRow)[];
 
 const ALL_CLASSIFIED_COLUMNS = [
@@ -110,8 +113,16 @@ describe("profiles column contract (get_emergency_card leak guard)", () => {
     expectTypeOf<(typeof ALL_CLASSIFIED_COLUMNS)[number]>().toEqualTypeOf<
       keyof ProfileRow
     >();
-    expectTypeOf<
-      (typeof EXPOSED_VIA_EMERGENCY_CARD)[number] | "age"
-    >().toEqualTypeOf<keyof EmergencyCardRow>();
+    expectTypeOf<keyof EmergencyCardRow>().toEqualTypeOf<
+      | (typeof EXPOSED_VIA_EMERGENCY_CARD)[number]
+      | "age"
+      | "disclosure_states"
+      | "schema_version"
+      | "offline_cache_allowed"
+      | "trust_state"
+      | "trust_updated_at"
+      | "record_updated_at"
+      | "authorization_expires_at"
+    >();
   });
 });

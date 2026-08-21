@@ -280,6 +280,141 @@ export async function enforceCacheBudget({
 }
 
 // ---------------------------------------------------------------------------
+// Offline freshness policy (spike deliverable for issue #161).
+//
+// This module deliberately reasons about ONLY ONE of two independent
+// freshness axes a responder cares about:
+//
+//   1. CACHED FRESHNESS — how long ago *this HTML snapshot* was stored by the
+//      service worker (the x-lafiya-cached-at header). It is purely a
+//      client-side "last time we successfully rendered this card" timestamp
+//      and says nothing about whether the underlying patient data is still
+//      current.
+//
+//   2. ON-CHAIN / ATTESTATION FRESHNESS — how recently the patient's
+//      verification/attestation was (re)issued on-chain. That is a separate
+//      field surfaced by the card page from the attestation record; the
+//      service worker never stamps or validates it, and it must be re-checked
+//      online. A card can be cache-fresh (served from a snapshot taken
+//      yesterday) while attestation-stale (verification expired last month),
+//      or vice-versa. The offline cache only ever reasons about axis #1;
+//      axis #2 is out of scope for the offline banner beyond surfacing the
+//      cached attestation date when present (see the spike doc).
+//
+// Thresholds (full rationale + clinical safety analysis in
+// issues/issue-11-offline-freshness-policy.md):
+//   - FRESH_WINDOW_MS = 7d  — routine clinical snapshot still trustworthy for
+//     reading; normal "cached as of" banner.
+//   - HARD_EXPIRY_MS  = 30d — beyond any defensible clinical usefulness for a
+//     possibly-medical emergency card; we REFUSE to serve a snapshot this old
+//     and fall back to an honest "too old to trust" empty state instead.
+//   - The band 7d < age <= 30d is STALE: we still serve (offline usefulness
+//     matters) but escalate the warning colour/copy so a responder knows the
+//     details may have changed.
+// ---------------------------------------------------------------------------
+export const OFFLINE_FRESHNESS_POLICY = Object.freeze({
+  FRESH_WINDOW_MS: 7 * 24 * 60 * 60 * 1000,
+  HARD_EXPIRY_MS: 30 * 24 * 60 * 60 * 1000,
+});
+
+export const FRESHNESS_STATE = Object.freeze({
+  FRESH: "fresh",
+  STALE: "stale",
+  EXPIRED: "expired",
+});
+
+/**
+ * Classify a cached snapshot's age into a freshness state. Pure and
+ * timezone-safe (everything resolves to epoch ms). Never throws — an
+ * unparseable timestamp is treated as the most conservative state (expired),
+ * because it is safer to refuse an unverifiable snapshot than to serve it.
+ *
+ * @param {string} cachedAtIso - value of the x-lafiya-cached-at header.
+ * @param {number} [nowMs] - current epoch ms (injectable for tests).
+ */
+export function classifyCachedFreshness(cachedAtIso, nowMs = Date.now()) {
+  const cachedAt = new Date(cachedAtIso).getTime();
+  if (!Number.isFinite(cachedAt) || cachedAt > nowMs) {
+    // Unparseable, or implausibly-in-the-future (clock skew) -> refuse.
+    return { state: FRESHNESS_STATE.EXPIRED, ageMs: Infinity, cachedAt: NaN };
+  }
+  const ageMs = nowMs - cachedAt;
+  let state;
+  if (ageMs <= OFFLINE_FRESHNESS_POLICY.FRESH_WINDOW_MS) {
+    state = FRESHNESS_STATE.FRESH;
+  } else if (ageMs <= OFFLINE_FRESHNESS_POLICY.HARD_EXPIRY_MS) {
+    state = FRESHNESS_STATE.STALE;
+  } else {
+    state = FRESHNESS_STATE.EXPIRED;
+  }
+  return { state, ageMs, cachedAt };
+}
+
+/**
+ * Build the offline banner for a given freshness state. `fresh` keeps the
+ * existing amber wording/colour; `stale` escalates to a red, explicit
+ * "details may have changed" warning. (Expired snapshots are never served,
+ * so there is no expired banner — see buildOfflineNavigationResponse.)
+ *
+ * @param {string} isoString - ISO timestamp of when the snapshot was cached.
+ * @param {typeof FRESHNESS_STATE[keyof typeof FRESHNESS_STATE]} [state] -
+ *   freshness state; defaults to FRESH. Only FRESH and STALE render a banner.
+ */
+export function buildFreshnessBannerHtml(isoString, state = FRESHNESS_STATE.FRESH) {
+  if (state === FRESHNESS_STATE.STALE) {
+    const when = formatCachedAt(isoString);
+    return (
+      `<div role="alert" aria-live="assertive" class="${OFFLINE_BANNER_CLASS}" ` +
+      `style="position:sticky;top:0;z-index:50;margin:0;padding:0.75rem 1rem;` +
+      `background:#ef4444;color:#1f2937;font:600 0.875rem/1.4 system-ui,-apple-system,` +
+      `Segoe UI,Roboto,sans-serif;text-align:center;border-bottom:1px solid #991b1b;">` +
+      `Cached ${when} — over a week old. Allergy, medication, and condition ` +
+      `details may have changed. Verify with the patient or facility before ` +
+      `trusting this card.` +
+      `</div>`
+    );
+  }
+  return buildOfflineBannerHtml(isoString);
+}
+
+/**
+ * Inject an already-built banner HTML string into a cached document (first
+ * child of <body>, or prepended if there is no <body>). Shared by
+ * injectOfflineBanner and the freshness-aware path so both produce identical
+ * insertion semantics.
+ */
+export function injectBanner(html, bannerHtml) {
+  if (typeof html !== "string" || html.length === 0) {
+    return bannerHtml;
+  }
+  const match = /<body[^>]*>/i.exec(html);
+  if (match) {
+    const insertAt = match.index + match[0].length;
+    return html.slice(0, insertAt) + bannerHtml + html.slice(insertAt);
+  }
+  return bannerHtml + html;
+}
+
+// Honest empty state used when a cached snapshot is older than HARD_EXPIRY_MS
+// and therefore unsafe to display. Deliberately distinct copy from the
+// never-visited fallback so a responder understands WHY nothing is shown.
+export const OFFLINE_EXPIRED_HTML = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lafiya — offline</title>
+</head>
+<body style="margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0b1020;color:#e5e7eb;">
+<div style="max-width:32rem;margin:0 auto;padding:3rem 1.5rem;">
+<h1 style="color:#ef4444;">Cached card too old to trust</h1>
+<p>This emergency card was last opened on this device more than 30 days ago. Medical details such as allergies or medications may have changed, so we won't show a snapshot we can't vouch for.</p>
+<p>Reconnect to the network to load the current, verified card — or ask the patient to confirm their details directly.</p>
+</div>
+</body>
+</html>`;
+
+// ---------------------------------------------------------------------------
 // Offline-navigation response shaping (shared by the "network failed, serve
 // from cache" path in sw.js). Kept here, and exercised directly by tests, so
 // the "evicted card -> honest fallback, not a crash" invariant is verified
@@ -304,15 +439,211 @@ export const OFFLINE_FALLBACK_HTML = `<!doctype html>
 </html>`;
 
 /**
- * Decide what HTML to serve for an offline card navigation: the cached
- * document with the "showing cached data" banner injected, or the honest
- * "no cached card available" fallback if there's nothing cached for this id
- * (never-visited, or evicted — both are indistinguishable, and both must
- * produce this same honest state rather than a guessed/partial card).
+ * Decide what HTML to serve for an offline card navigation, applying the
+ * offline freshness policy (issue #161):
+ *   - no cached HTML  -> honest "never visited" fallback (unchanged).
+ *   - fresh snapshot  -> cached document with the normal "cached as of"
+ *                        banner injected.
+ *   - stale snapshot  -> cached document with the escalated red warning
+ *                        (still served: offline usefulness matters).
+ *   - expired snapshot -> REFUSED; we serve the distinct "cached card too
+ *                        old to trust" empty state rather than a possibly
+ *                        dangerous, silently-stale medical snapshot.
+ *
+ * `now` is injectable so tests exercise every freshness branch
+ * deterministically against the same cache helpers sw.js runs.
  */
-export function buildOfflineNavigationResponse({ cachedHtml, cachedAt }) {
-  if (typeof cachedHtml === "string" && cachedHtml.length > 0) {
-    return { html: injectOfflineBanner(cachedHtml, cachedAt), fromCache: true };
+export function buildOfflineNavigationResponse({ cachedHtml, cachedAt, now = Date.now() }) {
+  if (typeof cachedHtml !== "string" || cachedHtml.length === 0) {
+    return { html: OFFLINE_FALLBACK_HTML, fromCache: false, freshness: null };
   }
-  return { html: OFFLINE_FALLBACK_HTML, fromCache: false };
+  const { state } = classifyCachedFreshness(cachedAt, now);
+  if (state === FRESHNESS_STATE.EXPIRED) {
+    return { html: OFFLINE_EXPIRED_HTML, fromCache: false, freshness: state };
+  }
+  const banner = buildFreshnessBannerHtml(cachedAt, state);
+  return { html: injectBanner(cachedHtml, banner), fromCache: true, freshness: state };
+}
+
+// ---------------------------------------------------------------------------
+// Versioned offline envelope protocol (Epic #174)
+// ---------------------------------------------------------------------------
+
+export const OFFLINE_ENVELOPE_VERSION = 1;
+export const OFFLINE_MAX_AGE_MS = 72 * 60 * 60 * 1000;
+const OFFLINE_SOURCE_ID = "lafiya-offline-envelope-source";
+
+function canonicalEnvelopePayload(value) {
+  return JSON.stringify(value);
+}
+
+async function sha256(value) {
+  if (!globalThis.crypto?.subtle) return null;
+  const bytes = new TextEncoder().encode(value);
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+function extractSourceHtml(html) {
+  if (typeof html !== "string" || html.length > 128 * 1024) return null;
+  const match = new RegExp(
+    `<script[^>]*id=["']${OFFLINE_SOURCE_ID}["'][^>]*>([\\s\\S]*?)<\\/script>`,
+    "i",
+  ).exec(html);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+function validProjection(projection) {
+  const validString = (value, max = 200) =>
+    value === null || (typeof value === "string" && value.length <= max);
+  const validList = (value) =>
+    value === null ||
+    (Array.isArray(value) &&
+      value.length <= 20 &&
+      value.every((item) => typeof item === "string" && item.length <= 200));
+  const validContacts =
+    projection?.emergencyContacts === null ||
+    (Array.isArray(projection?.emergencyContacts) &&
+      projection.emergencyContacts.length <= 3 &&
+      projection.emergencyContacts.every(
+        (contact) =>
+          contact &&
+          typeof contact === "object" &&
+          validString(contact.name) &&
+          validString(contact.phone, 32) &&
+          validString(contact.relationship),
+      ));
+  return (
+    projection &&
+    typeof projection === "object" &&
+    !Array.isArray(projection) &&
+    validString(projection.name) &&
+    validString(projection.bloodGroup, 8) &&
+    validString(projection.genotype, 8) &&
+    validString(projection.language) &&
+    (projection.age === null || Number.isInteger(projection.age)) &&
+    validList(projection.allergies) &&
+    validList(projection.medications) &&
+    validList(projection.chronicConditions) &&
+    validContacts
+  );
+}
+
+/** Extract and integrity-protect the server-rendered source; null denies cache admission. */
+export async function createOfflineEnvelope(html, cachedAt) {
+  const source = extractSourceHtml(html);
+  if (
+    !source ||
+    source.version !== OFFLINE_ENVELOPE_VERSION ||
+    source.offlineAllowed !== true ||
+    !validProjection(source.projection) ||
+    typeof source.authorizationExpiresAt !== "string" ||
+    typeof source.recordUpdatedAt !== "string" ||
+    !source.trust ||
+    typeof source.trust !== "object" ||
+    typeof source.trust.state !== "string" ||
+    (source.trust.updatedAt !== null &&
+      typeof source.trust.updatedAt !== "string")
+  ) {
+    return null;
+  }
+  const payload = {
+    version: OFFLINE_ENVELOPE_VERSION,
+    authorizationKind:
+      source.authorizationKind === "capability" ? "capability" : "legacy",
+    authorizationExpiresAt: source.authorizationExpiresAt,
+    recordUpdatedAt: source.recordUpdatedAt,
+    trust: {
+      state: source.trust.state,
+      updatedAt: source.trust.updatedAt ?? null,
+    },
+    projection: source.projection,
+    cachedAt,
+  };
+  const integrity = await sha256(canonicalEnvelopePayload(payload));
+  if (!integrity) return null;
+  return { ...payload, integrity };
+}
+
+export async function validateOfflineEnvelope(envelope, nowIso) {
+  if (
+    !envelope ||
+    typeof envelope !== "object" ||
+    envelope.version !== OFFLINE_ENVELOPE_VERSION ||
+    typeof envelope.integrity !== "string" ||
+    !validProjection(envelope.projection)
+  ) {
+    return { valid: false, reason: "corrupted" };
+  }
+  const { integrity, ...payload } = envelope;
+  const expected = await sha256(canonicalEnvelopePayload(payload));
+  if (!expected || expected !== integrity)
+    return { valid: false, reason: "corrupted" };
+  const now = new Date(nowIso).getTime();
+  const cachedAt = new Date(envelope.cachedAt).getTime();
+  const authorizationExpiry = new Date(
+    envelope.authorizationExpiresAt,
+  ).getTime();
+  if (
+    !Number.isFinite(now) ||
+    !Number.isFinite(cachedAt) ||
+    !Number.isFinite(authorizationExpiry)
+  ) {
+    return { valid: false, reason: "corrupted" };
+  }
+  if (now - cachedAt > OFFLINE_MAX_AGE_MS || now >= authorizationExpiry) {
+    return { valid: false, reason: "expired" };
+  }
+  return { valid: true, reason: null };
+}
+
+export function offlineEnvelopeResponse(envelope) {
+  return new Response(JSON.stringify(envelope), {
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+  });
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function displayList(value) {
+  if (value === null) return "Withheld by patient";
+  return value.length ? value.map(escapeHtml).join(", ") : "None recorded";
+}
+
+function displayTime(value) {
+  const time = new Date(value);
+  return Number.isNaN(time.getTime()) ? "Unavailable" : time.toLocaleString();
+}
+
+/** Deliberately simple, self-contained, unhydrated offline presentation. */
+export function renderOfflineEnvelope(envelope, reason = null) {
+  if (!envelope) {
+    const expired = reason === "expired";
+    return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lafiya — offline</title><body style="font:16px/1.5 system-ui;margin:0;background:#0b1020;color:#f8fafc"><main style="max-width:42rem;margin:auto;padding:2rem 1.25rem"><h1>${expired ? "Cached card needs reconnection" : "No safe cached card available"}</h1><p>${expired ? "This cached emergency card is older than Lafiya’s safety window or its authorization has expired. Reconnect to check current access and record information." : "This card has not been safely cached on this device, or its saved data was corrupted. Reconnect to retrieve it."}</p></main></body></html>`;
+  }
+  const p = envelope.projection;
+  const contacts =
+    p.emergencyContacts === null
+      ? "Withheld by patient"
+      : p.emergencyContacts
+          .map(
+            (contact) =>
+              `<li><strong>${escapeHtml(contact.name ?? "Emergency contact")}</strong> — ${escapeHtml(contact.relationship ?? "")}: ${escapeHtml(contact.phone ?? "Unavailable")}</li>`,
+          )
+          .join("") || "None recorded";
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lafiya — cached emergency card</title><body style="font:16px/1.5 system-ui;margin:0;background:#fff;color:#18181b"><aside role="alert" style="padding:1rem;background:#fef3c7;color:#78350f;border-bottom:1px solid #d97706"><strong>Cached emergency information.</strong> Cached on ${escapeHtml(displayTime(envelope.cachedAt))}. Current authorization and revocation cannot be checked offline. Record updated: ${escapeHtml(displayTime(envelope.recordUpdatedAt))}. Verification evidence last observed: ${escapeHtml(displayTime(envelope.trust.updatedAt))}.</aside><main style="max-width:42rem;margin:auto;padding:1.5rem"><h1>${escapeHtml(p.name ?? "Name withheld")}</h1>${p.age === null ? "" : `<p>${escapeHtml(p.age)} years old</p>`}<h2>Critical emergency information</h2><dl><dt>Blood group</dt><dd>${escapeHtml(p.bloodGroup ?? "Withheld")}</dd><dt>Genotype</dt><dd>${escapeHtml(p.genotype ?? "Withheld")}</dd></dl><h2>Allergies</h2><p>${displayList(p.allergies)}</p><h2>Current medications</h2><p>${displayList(p.medications)}</p><h2>Chronic conditions / implants</h2><p>${displayList(p.chronicConditions)}</p><h2>Emergency contacts</h2><ul>${contacts}</ul>${p.language ? `<h2>Language spoken</h2><p>${escapeHtml(p.language)}</p>` : ""}<p style="font-size:.875rem;color:#52525b">Not a medical device. Not a substitute for professional medical judgment.</p></main></body></html>`;
 }

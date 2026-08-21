@@ -1,5 +1,12 @@
 # [Spike] Evaluate Soroban attestation contract upgrade and allowlist governance
 
+**Spike complete.** See
+[`docs/attestation-contract-governance.md`](../docs/attestation-contract-governance.md)
+for the threat model, option comparison, recommended lifecycle/state
+model, upgrade/migration runbook, and proposed contract/web interface
+changes. Implementation is tracked as follow-up issues per that doc's
+§11.
+
 ## Category
 
 Spike
@@ -34,11 +41,11 @@ Governance threat model, option comparison, recommended lifecycle/state model, u
 
 ## Acceptance Criteria
 
-- [ ] The design covers compromised admin and compromised attester scenarios.
-- [ ] Historical attestations have explicit validity semantics across upgrades.
-- [ ] Allowlist changes are auditable and replay-safe.
-- [ ] Web/verifier deployment migration and rollback are documented.
-- [ ] The recommendation identifies required contract tests and external audit scope.
+- [x] The design covers compromised admin and compromised attester scenarios.
+- [x] Historical attestations have explicit validity semantics across upgrades.
+- [x] Allowlist changes are auditable and replay-safe.
+- [x] Web/verifier deployment migration and rollback are documented.
+- [x] The recommendation identifies required contract tests and external audit scope.
 
 ## Follow-Up Opportunities
 

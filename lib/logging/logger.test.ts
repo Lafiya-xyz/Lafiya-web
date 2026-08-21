@@ -34,6 +34,24 @@ describe("Structured Logging & Redaction", () => {
       expect(redactString(input)).toBe(expected);
     });
 
+    it("redacts identifiers and commitments embedded in strings", () => {
+      expect(
+        redactString(
+          "user 123e4567-e89b-42d3-a456-426614174000 commitment " +
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        ),
+      ).toBe("user [REDACTED_ID] commitment [REDACTED_HASH]");
+    });
+
+    it("redacts emergency capabilities, including when embedded in a URL", () => {
+      const capability = `lafiya_e1_${"A".repeat(43)}`;
+      const result = redactString(
+        `https://lafiya.example/card/c/${capability}`,
+      );
+      expect(result).not.toContain(capability);
+      expect(result).toContain("[REDACTED_CAPABILITY]");
+    });
+
     it("should leave other strings intact", () => {
       const input = "Database connection failed.";
       expect(redactString(input)).toBe(input);
@@ -103,6 +121,23 @@ describe("Structured Logging & Redaction", () => {
       expect(redactSensitiveData(input)).toEqual(expected);
     });
 
+    it("redacts identifier, commitment, and credential fields", () => {
+      expect(
+        redactSensitiveData({
+          user_id: "123e4567-e89b-42d3-a456-426614174000",
+          recordHash:
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          authorization: "Bearer private-capability",
+          safeKey: "safeValue",
+        }),
+      ).toEqual({
+        user_id: "[REDACTED]",
+        recordHash: "[REDACTED]",
+        authorization: "[REDACTED]",
+        safeKey: "safeValue",
+      });
+    });
+
     it("should redact Error objects properly", () => {
       const err = new Error("Failed to load user@example.com");
       (err as Error & { someField?: string }).someField = "metadata";
@@ -162,7 +197,11 @@ describe("Structured Logging & Redaction", () => {
       expect(parsed.context.action).toBe("signIn");
       expect(parsed.timestamp).toBeDefined();
 
-      expect(Sentry.captureException).toHaveBeenCalledWith(error);
+      expect(Sentry.captureException).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: "Something went wrong for [REDACTED_EMAIL]",
+        }),
+      );
     });
 
     it("logInfo should output structured JSON to console.log", () => {

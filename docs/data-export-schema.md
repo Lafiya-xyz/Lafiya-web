@@ -7,10 +7,15 @@ Endpoint: `GET /profile/export` (authenticated patients only)
 \`\`\`json
 {
 "exportedAt": "ISO 8601 timestamp",
-"schemaVersion": 1,
-"profile": {
-// full contents of the caller's own public.profiles row
-}
+"schemaVersion": 2,
+"profile": {},
+"recordRevisions": [],
+"disclosureSettings": {},
+"consentEvents": [],
+"verificationRequests": [],
+"accessAuditSummaries": [],
+"storageObjects": [],
+"checksum": { "algorithm": "sha256", "value": "64 lowercase hex characters" }
 }
 \`\`\`
 
@@ -22,3 +27,8 @@ Endpoint: `GET /profile/export` (authenticated patients only)
   returns rows where `user_id` matches `auth.uid()`.
 - No user-supplied ID is accepted anywhere in the export path — the target
   user is always derived from the session.
+- Every relational query uses the caller's session and RLS. Storage metadata
+  is limited to the caller's `avatars/{user_id}` folder; object bytes and
+  signed URLs are not exported.
+- The checksum covers the canonical key-sorted JSON payload other than
+  `exportedAt` and `checksum`, so repeated exports of unchanged data match.

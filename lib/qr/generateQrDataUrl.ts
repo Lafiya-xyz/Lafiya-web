@@ -7,8 +7,10 @@ import QRCode from "qrcode";
  */
 export async function generateQrDataUrl(text: string): Promise<string> {
   return QRCode.toDataURL(text, {
-    errorCorrectionLevel: "M",
-    margin: 2,
-    width: 320,
+    // Emergency print guidance: Q tolerates roughly 25% codeword damage;
+    // four modules of quiet zone and 400px output support a >=32mm print.
+    errorCorrectionLevel: "Q",
+    margin: 4,
+    width: 400,
   });
 }

@@ -11,6 +11,7 @@ import * as Sentry from "@sentry/nextjs";
  * - allergies, medications, chronicConditions/chronic_conditions
  * - emergencyContacts/emergency_contacts, phone, relationship
  * - email, password
+ * - internal user/record/card identifiers and record commitments
  */
 export const SENSITIVE_KEYS = new Set([
   "name",
@@ -34,13 +35,35 @@ export const SENSITIVE_KEYS = new Set([
   "relationship",
   "email",
   "password",
+  "user_id",
+  "userid",
+  "record_id",
+  "recordid",
+  "record_hash",
+  "recordhash",
+  "card_id",
+  "cardid",
+  "card_public_id",
+  "cardpublicid",
+  "commitment",
+  "authorization",
+  "token",
+  "capability",
 ]);
 
 const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+const UUID_REGEX =
+  /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi;
+const HASH_REGEX = /\b[0-9a-f]{64}\b/gi;
+const CAPABILITY_REGEX = /\blafiya_e1_[A-Za-z0-9_-]{43}\b/g;
 
 /** Redacts any raw email addresses found in strings. */
 export function redactString(val: string): string {
-  return val.replace(EMAIL_REGEX, "[REDACTED_EMAIL]");
+  return val
+    .replace(EMAIL_REGEX, "[REDACTED_EMAIL]")
+    .replace(UUID_REGEX, "[REDACTED_ID]")
+    .replace(HASH_REGEX, "[REDACTED_HASH]")
+    .replace(CAPABILITY_REGEX, "[REDACTED_CAPABILITY]");
 }
 
 /** Recursively redacts sensitive keys and emails from any object/structure. */
@@ -146,7 +169,9 @@ export function logError(
       if (redactedContext) {
         scope.setExtras(redactedContext);
       }
-      Sentry.captureException(error);
+      // Never send the original error to telemetry. Database/provider error
+      // messages may interpolate identifiers which are not safe to retain.
+      Sentry.captureException(new Error(redactString(error.message)));
     });
   } else if (error) {
     Sentry.captureMessage(redactString(message), {

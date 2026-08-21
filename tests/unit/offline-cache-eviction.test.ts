@@ -317,7 +317,7 @@ describe("buildOfflineNavigationResponse", () => {
       makeCachedResponse({
         body,
         lastAccessed: 200,
-        cachedAt: "2024-01-02T03:04:05.000Z",
+        cachedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
       }),
     );
 
