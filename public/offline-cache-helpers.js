@@ -275,6 +275,141 @@ export async function enforceCacheBudget({
 }
 
 // ---------------------------------------------------------------------------
+// Offline freshness policy (spike deliverable for issue #161).
+//
+// This module deliberately reasons about ONLY ONE of two independent
+// freshness axes a responder cares about:
+//
+//   1. CACHED FRESHNESS — how long ago *this HTML snapshot* was stored by the
+//      service worker (the x-lafiya-cached-at header). It is purely a
+//      client-side "last time we successfully rendered this card" timestamp
+//      and says nothing about whether the underlying patient data is still
+//      current.
+//
+//   2. ON-CHAIN / ATTESTATION FRESHNESS — how recently the patient's
+//      verification/attestation was (re)issued on-chain. That is a separate
+//      field surfaced by the card page from the attestation record; the
+//      service worker never stamps or validates it, and it must be re-checked
+//      online. A card can be cache-fresh (served from a snapshot taken
+//      yesterday) while attestation-stale (verification expired last month),
+//      or vice-versa. The offline cache only ever reasons about axis #1;
+//      axis #2 is out of scope for the offline banner beyond surfacing the
+//      cached attestation date when present (see the spike doc).
+//
+// Thresholds (full rationale + clinical safety analysis in
+// issues/issue-11-offline-freshness-policy.md):
+//   - FRESH_WINDOW_MS = 7d  — routine clinical snapshot still trustworthy for
+//     reading; normal "cached as of" banner.
+//   - HARD_EXPIRY_MS  = 30d — beyond any defensible clinical usefulness for a
+//     possibly-medical emergency card; we REFUSE to serve a snapshot this old
+//     and fall back to an honest "too old to trust" empty state instead.
+//   - The band 7d < age <= 30d is STALE: we still serve (offline usefulness
+//     matters) but escalate the warning colour/copy so a responder knows the
+//     details may have changed.
+// ---------------------------------------------------------------------------
+export const OFFLINE_FRESHNESS_POLICY = Object.freeze({
+  FRESH_WINDOW_MS: 7 * 24 * 60 * 60 * 1000,
+  HARD_EXPIRY_MS: 30 * 24 * 60 * 60 * 1000,
+});
+
+export const FRESHNESS_STATE = Object.freeze({
+  FRESH: "fresh",
+  STALE: "stale",
+  EXPIRED: "expired",
+});
+
+/**
+ * Classify a cached snapshot's age into a freshness state. Pure and
+ * timezone-safe (everything resolves to epoch ms). Never throws — an
+ * unparseable timestamp is treated as the most conservative state (expired),
+ * because it is safer to refuse an unverifiable snapshot than to serve it.
+ *
+ * @param {string} cachedAtIso - value of the x-lafiya-cached-at header.
+ * @param {number} [nowMs] - current epoch ms (injectable for tests).
+ */
+export function classifyCachedFreshness(cachedAtIso, nowMs = Date.now()) {
+  const cachedAt = new Date(cachedAtIso).getTime();
+  if (!Number.isFinite(cachedAt) || cachedAt > nowMs) {
+    // Unparseable, or implausibly-in-the-future (clock skew) -> refuse.
+    return { state: FRESHNESS_STATE.EXPIRED, ageMs: Infinity, cachedAt: NaN };
+  }
+  const ageMs = nowMs - cachedAt;
+  let state;
+  if (ageMs <= OFFLINE_FRESHNESS_POLICY.FRESH_WINDOW_MS) {
+    state = FRESHNESS_STATE.FRESH;
+  } else if (ageMs <= OFFLINE_FRESHNESS_POLICY.HARD_EXPIRY_MS) {
+    state = FRESHNESS_STATE.STALE;
+  } else {
+    state = FRESHNESS_STATE.EXPIRED;
+  }
+  return { state, ageMs, cachedAt };
+}
+
+/**
+ * Build the offline banner for a given freshness state. `fresh` keeps the
+ * existing amber wording/colour; `stale` escalates to a red, explicit
+ * "details may have changed" warning. (Expired snapshots are never served,
+ * so there is no expired banner — see buildOfflineNavigationResponse.)
+ *
+ * @param {string} isoString - ISO timestamp of when the snapshot was cached.
+ * @param {typeof FRESHNESS_STATE[keyof typeof FRESHNESS_STATE]} [state] -
+ *   freshness state; defaults to FRESH. Only FRESH and STALE render a banner.
+ */
+export function buildFreshnessBannerHtml(isoString, state = FRESHNESS_STATE.FRESH) {
+  if (state === FRESHNESS_STATE.STALE) {
+    const when = formatCachedAt(isoString);
+    return (
+      `<div role="alert" aria-live="assertive" class="${OFFLINE_BANNER_CLASS}" ` +
+      `style="position:sticky;top:0;z-index:50;margin:0;padding:0.75rem 1rem;` +
+      `background:#ef4444;color:#1f2937;font:600 0.875rem/1.4 system-ui,-apple-system,` +
+      `Segoe UI,Roboto,sans-serif;text-align:center;border-bottom:1px solid #991b1b;">` +
+      `Cached ${when} — over a week old. Allergy, medication, and condition ` +
+      `details may have changed. Verify with the patient or facility before ` +
+      `trusting this card.` +
+      `</div>`
+    );
+  }
+  return buildOfflineBannerHtml(isoString);
+}
+
+/**
+ * Inject an already-built banner HTML string into a cached document (first
+ * child of <body>, or prepended if there is no <body>). Shared by
+ * injectOfflineBanner and the freshness-aware path so both produce identical
+ * insertion semantics.
+ */
+export function injectBanner(html, bannerHtml) {
+  if (typeof html !== "string" || html.length === 0) {
+    return bannerHtml;
+  }
+  const match = /<body[^>]*>/i.exec(html);
+  if (match) {
+    const insertAt = match.index + match[0].length;
+    return html.slice(0, insertAt) + bannerHtml + html.slice(insertAt);
+  }
+  return bannerHtml + html;
+}
+
+// Honest empty state used when a cached snapshot is older than HARD_EXPIRY_MS
+// and therefore unsafe to display. Deliberately distinct copy from the
+// never-visited fallback so a responder understands WHY nothing is shown.
+export const OFFLINE_EXPIRED_HTML = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lafiya — offline</title>
+</head>
+<body style="margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0b1020;color:#e5e7eb;">
+<div style="max-width:32rem;margin:0 auto;padding:3rem 1.5rem;">
+<h1 style="color:#ef4444;">Cached card too old to trust</h1>
+<p>This emergency card was last opened on this device more than 30 days ago. Medical details such as allergies or medications may have changed, so we won't show a snapshot we can't vouch for.</p>
+<p>Reconnect to the network to load the current, verified card — or ask the patient to confirm their details directly.</p>
+</div>
+</body>
+</html>`;
+
+// ---------------------------------------------------------------------------
 // Offline-navigation response shaping (shared by the "network failed, serve
 // from cache" path in sw.js). Kept here, and exercised directly by tests, so
 // the "evicted card -> honest fallback, not a crash" invariant is verified
@@ -299,15 +434,28 @@ export const OFFLINE_FALLBACK_HTML = `<!doctype html>
 </html>`;
 
 /**
- * Decide what HTML to serve for an offline card navigation: the cached
- * document with the "showing cached data" banner injected, or the honest
- * "no cached card available" fallback if there's nothing cached for this id
- * (never-visited, or evicted — both are indistinguishable, and both must
- * produce this same honest state rather than a guessed/partial card).
+ * Decide what HTML to serve for an offline card navigation, applying the
+ * offline freshness policy (issue #161):
+ *   - no cached HTML  -> honest "never visited" fallback (unchanged).
+ *   - fresh snapshot  -> cached document with the normal "cached as of"
+ *                        banner injected.
+ *   - stale snapshot  -> cached document with the escalated red warning
+ *                        (still served: offline usefulness matters).
+ *   - expired snapshot -> REFUSED; we serve the distinct "cached card too
+ *                        old to trust" empty state rather than a possibly
+ *                        dangerous, silently-stale medical snapshot.
+ *
+ * `now` is injectable so tests exercise every freshness branch
+ * deterministically against the same cache helpers sw.js runs.
  */
-export function buildOfflineNavigationResponse({ cachedHtml, cachedAt }) {
-  if (typeof cachedHtml === "string" && cachedHtml.length > 0) {
-    return { html: injectOfflineBanner(cachedHtml, cachedAt), fromCache: true };
+export function buildOfflineNavigationResponse({ cachedHtml, cachedAt, now = Date.now() }) {
+  if (typeof cachedHtml !== "string" || cachedHtml.length === 0) {
+    return { html: OFFLINE_FALLBACK_HTML, fromCache: false, freshness: null };
   }
-  return { html: OFFLINE_FALLBACK_HTML, fromCache: false };
+  const { state } = classifyCachedFreshness(cachedAt, now);
+  if (state === FRESHNESS_STATE.EXPIRED) {
+    return { html: OFFLINE_EXPIRED_HTML, fromCache: false, freshness: state };
+  }
+  const banner = buildFreshnessBannerHtml(cachedAt, state);
+  return { html: injectBanner(cachedHtml, banner), fromCache: true, freshness: state };
 }
