@@ -2,17 +2,20 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { createHash } from "node:crypto";
 
 import { deleteAccountAndData } from "@/lib/account/deleteAccount";
-import { computeRecordHash } from "@/lib/attestation/recordHash";
-import {
-  ensureRecordSecret,
-  getSecretByUserId,
-} from "@/lib/attestation/recordSecret";
+import { ensureRecordSecret } from "@/lib/attestation/recordSecret";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { ProfileRow } from "@/lib/supabase/types";
+import type { ConsentPurpose, DisclosurePolicy } from "@/lib/supabase/types";
 import { profileFormSchema } from "@/lib/validation/profile";
+import {
+  computeRevisionCommitment,
+  DEFAULT_DISCLOSURE_POLICY,
+  normalizeEmergencyRecord,
+} from "@/lib/records/canonicalization";
 
 import { logError } from "@/lib/logging/logger";
 
@@ -20,15 +23,39 @@ export interface ProfileFormState {
   error?: string;
   errors?: Record<string, string>;
   success?: boolean;
+  code?: "STALE_REVISION" | "AUTH_REQUIRED" | "VALIDATION" | "DATABASE";
+  currentRevisionId?: string;
 }
 
 // --- Data export (Issue #12) ---
 
 export type ProfileExport = {
   exportedAt: string;
-  schemaVersion: 1;
+  schemaVersion: 2;
   profile: Record<string, unknown>;
+  recordRevisions: Record<string, unknown>[];
+  disclosureSettings: Record<string, unknown>;
+  consentEvents: Record<string, unknown>[];
+  verificationRequests: Record<string, unknown>[];
+  accessAuditSummaries: Record<string, unknown>[];
+  storageObjects: {
+    bucket: string;
+    name: string;
+    size: number | null;
+    createdAt: string | null;
+  }[];
+  checksum: { algorithm: "sha256"; value: string };
 };
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object")
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
+      .join(",")}}`;
+  return JSON.stringify(value);
+}
 
 /**
  * Returns the authenticated caller's own `profiles` row as a
@@ -59,11 +86,49 @@ export async function exportMyProfileData(): Promise<
     return { error: "Could not load profile data" };
   }
 
+  const [revisions, consents, requests, avatars] = await Promise.all([
+    supabase
+      .from("record_revisions")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("revision_number"),
+    supabase
+      .from("consent_events")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("occurred_at"),
+    supabase
+      .from("reattestation_requests")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("requested_at"),
+    supabase.storage.from("avatars").list(user.id, { limit: 100 }),
+  ]);
+  if (revisions.error || consents.error || requests.error || avatars.error)
+    return { error: "Could not assemble complete profile export" };
+  const payload = {
+    profile,
+    recordRevisions: revisions.data,
+    disclosureSettings: profile.disclosure_policy,
+    consentEvents: consents.data,
+    verificationRequests: requests.data,
+    accessAuditSummaries: [],
+    storageObjects: (avatars.data ?? []).map((object) => ({
+      bucket: "avatars",
+      name: object.name,
+      size: object.metadata?.size ?? null,
+      createdAt: object.created_at ?? null,
+    })),
+  };
   return {
     data: {
       exportedAt: new Date().toISOString(),
-      schemaVersion: 1,
-      profile,
+      schemaVersion: 2,
+      ...payload,
+      checksum: {
+        algorithm: "sha256",
+        value: createHash("sha256").update(stableJson(payload)).digest("hex"),
+      },
     },
   };
 }
@@ -133,6 +198,72 @@ export async function regenerateCardId(
   return {};
 }
 
+export async function recordConsentChoice(formData: FormData): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("AUTH_REQUIRED");
+  const purpose = formData.get("purpose")?.toString() as ConsentPurpose;
+  const action =
+    formData.get("action") === "acknowledged" ? "acknowledged" : "withdrawn";
+  const allowed: ConsentPurpose[] = [
+    "emergency_public_disclosure",
+    "offline_caching",
+    "clinical_verification",
+    "optional_analytics",
+  ];
+  if (!allowed.includes(purpose)) throw new Error("INVALID_CONSENT_PURPOSE");
+  const { error } = await supabase.rpc("record_consent", {
+    p_purpose: purpose,
+    p_purpose_version: 1,
+    p_action: action,
+    p_idempotency_key: crypto.randomUUID(),
+  });
+  if (error) throw new Error("CONSENT_UPDATE_FAILED");
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("card_public_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  revalidatePath("/profile");
+  if (profile) revalidatePath(`/card/${profile.card_public_id}`);
+}
+
+export async function updateDisclosureChoices(
+  formData: FormData,
+): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("AUTH_REQUIRED");
+  const expected = formData.get("expectedRevisionId")?.toString();
+  if (!expected) throw new Error("STALE_REVISION");
+  const fields = { ...DEFAULT_DISCLOSURE_POLICY.fields };
+  for (const field of Object.keys(fields)) {
+    fields[field as keyof typeof fields] =
+      formData.get(`field:${field}`) === "on";
+  }
+  fields.date_of_birth = false; // only derived age may ever be public
+  const policy: DisclosurePolicy = { version: 1, fields };
+  const { error } = await supabase.rpc("update_disclosure_policy", {
+    p_expected_revision_id: expected,
+    p_disclosure_policy: policy,
+  });
+  if (error)
+    throw new Error(
+      error.code === "40001" ? "STALE_REVISION" : "DISCLOSURE_UPDATE_FAILED",
+    );
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("card_public_id")
+    .eq("user_id", user.id)
+    .single();
+  revalidatePath("/profile");
+  if (profile) revalidatePath(`/card/${profile.card_public_id}`);
+}
+
 /**
  * Fills in defaults for fields the UI doesn't expose yet (grown field group
  * by field group across several commits) from the existing row, so a save
@@ -166,7 +297,7 @@ export async function upsertProfile(
     return { error: "You must be signed in." };
   }
 
-  const { data: existing, error: selectError } = await supabase
+  const { data: existing } = await supabase
     .from("profiles")
     .select("*")
     .eq("user_id", user.id)
@@ -179,16 +310,18 @@ export async function upsertProfile(
   // so requiring the token unconditionally here made every first-ever save
   // fail with "Missing concurrency token."
   if (existing) {
-    const expectedUpdatedAt = formData.get("expectedUpdatedAt")?.toString();
+    const expectedRevisionId = formData.get("expectedRevisionId")?.toString();
     if (
-      typeof expectedUpdatedAt !== "string" ||
-      expectedUpdatedAt.length === 0
+      typeof expectedRevisionId !== "string" ||
+      expectedRevisionId.length === 0
     ) {
       return { error: "Missing concurrency token. Please reload the page." };
     }
 
-    if (existing.updated_at !== expectedUpdatedAt) {
+    if (existing.current_revision_id !== expectedRevisionId) {
       return {
+        code: "STALE_REVISION",
+        currentRevisionId: existing.current_revision_id ?? undefined,
         error:
           "This profile was updated elsewhere since you loaded this page. Reload and reapply your changes before saving.",
       };
@@ -225,8 +358,7 @@ export async function upsertProfile(
     };
   }
 
-  const { error } = await supabase.from("profiles").upsert({
-    user_id: user.id,
+  const emergencyData = normalizeEmergencyRecord({
     name: parsed.data.name,
     date_of_birth: parsed.data.dateOfBirth || null,
     language: parsed.data.language || null,
@@ -239,28 +371,45 @@ export async function upsertProfile(
     emergency_contacts: parsed.data.emergencyContacts,
   });
 
-  if (error) {
-    logError("Failed to upsert profile in database", error, {
-      route: "/profile (action: upsertProfile)",
-      userId: user.id,
-    });
-    return { error: error.message };
-  }
-
-  // Ensures this profile has a record_secret (the HMAC pepper backing
-  // computeRecordHash — see lib/attestation/recordSecret.ts) without ever
-  // regenerating an existing one, which would silently invalidate any past
-  // attestation for this patient. A failure here is logged, not fatal to
-  // the save itself — the profile save has already succeeded, and a
-  // missing secret degrades to "verification unavailable" rather than
-  // losing data.
+  let secret: string;
   try {
-    await ensureRecordSecret(user.id);
+    secret = await ensureRecordSecret(user.id);
   } catch (secretError) {
     logError("Failed to ensure record secret", secretError, {
       route: "/profile (action: upsertProfile)",
-      userId: user.id,
     });
+    return {
+      code: "DATABASE",
+      error: "Your record could not be saved safely. Please try again.",
+    };
+  }
+
+  const commitment = computeRevisionCommitment(emergencyData, secret);
+  const disclosurePolicy =
+    existing?.disclosure_policy ?? DEFAULT_DISCLOSURE_POLICY;
+  const { error } = await supabase.rpc("save_record_revision", {
+    p_expected_revision_id: existing?.current_revision_id ?? null,
+    p_emergency_data: emergencyData,
+    p_provenance: {},
+    p_disclosure_policy: disclosurePolicy,
+    p_commitment: commitment,
+  });
+
+  if (error) {
+    if (error.message.includes("STALE_REVISION") || error.code === "40001") {
+      return {
+        code: "STALE_REVISION",
+        error:
+          "This record has a newer revision. Reload before merging your changes.",
+      };
+    }
+    logError("Failed to upsert profile in database", error, {
+      route: "/profile (action: upsertProfile)",
+    });
+    return {
+      code: "DATABASE",
+      error: "Your record could not be saved. Please try again.",
+    };
   }
 
   const { data: updatedProfile } = await supabase
@@ -301,7 +450,6 @@ export async function deleteAccount(
   } catch (error) {
     logError("Failed to delete account data", error, {
       route: "/profile (action: deleteAccount)",
-      userId: user.id,
     });
     return {
       error:
@@ -349,25 +497,26 @@ export async function requestReattestation(
     return { error: "No profile found." };
   }
 
-  const secret = await getSecretByUserId(user.id);
-  if (!secret) {
-    return { error: "Could not compute your record hash. Please try again." };
-  }
+  if (!profile.current_revision_id)
+    return { error: "No current revision found." };
+  const { error } = await supabase.rpc("request_revision_verification", {
+    p_expected_revision_id: profile.current_revision_id,
+  });
 
-  const recordHash = computeRecordHash(profile, secret);
-
-  const { error } = await supabase
-    .from("reattestation_requests")
-    .insert({ user_id: user.id, record_hash: recordHash });
-
-  // 23505 = unique_violation: a pending request for this exact hash already
-  // exists — that's the desired end state, not a failure.
-  if (error && error.code !== "23505") {
+  if (error) {
     logError("Failed to create reattestation request", error, {
       route: "/profile (action: requestReattestation)",
-      userId: user.id,
     });
-    return { error: error.message };
+    if (error.code === "40001")
+      return {
+        code: "STALE_REVISION",
+        error: "This record changed. Reload before requesting verification.",
+      };
+    if (error.message.includes("CONSENT_REQUIRED"))
+      return {
+        error: "Allow clinical verification in Privacy and consent first.",
+      };
+    return { error: "Could not request verification. Please try again." };
   }
 
   revalidatePath("/profile");

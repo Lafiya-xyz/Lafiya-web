@@ -1,10 +1,6 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import { notFound } from "next/navigation";
-import Link from "next/link";
 
-import { computeRecordHash } from "@/lib/attestation/recordHash";
-import { getSecretByCardPublicId } from "@/lib/attestation/recordSecret";
 import { logError } from "@/lib/logging/logger";
 import { createClient } from "@/lib/supabase/server";
 import { validateAttestation } from "@/lib/stellar/attestation";
@@ -28,7 +24,8 @@ export const metadata: Metadata = {
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function formatList(values: string[]): string {
+function formatList(values: string[] | null): string {
+  if (values === null) return "Withheld by patient";
   return values.length > 0 ? values.join(", ") : "None recorded";
 }
 
@@ -49,9 +46,10 @@ export default async function PublicCardPage({
   });
 
   if (error) {
-    console.error("[PublicCardPage] failed to load emergency card", {
-      cardPublicId: id,
-      error,
+    // Public card IDs are bearer-like capabilities: keep them out of logs,
+    // traces, and error-reporting payloads.
+    logError("Failed to load emergency card", new Error("CARD_LOOKUP_FAILED"), {
+      route: "/card/[id]",
     });
     throw new Error("UNAVAILABLE");
   }
@@ -62,32 +60,20 @@ export default async function PublicCardPage({
 
   const card = data[0];
 
-  // The record_hash is HMAC-keyed by a per-patient secret that lives in a
-  // zero-grant table (public.profile_secrets) — an anonymous visitor has no
-  // legitimate route to it, so this is the one deliberate, narrow use of
-  // the service-role admin client on this otherwise fully anonymous page.
-  // See lib/attestation/recordSecret.ts.
-  const secret = await getSecretByCardPublicId(id);
-
   let status: VerificationStatus;
-  if (secret === null) {
-    logError("No record secret found for card", new Error("missing secret"), {
-      route: "/card/[id]",
-      cardPublicId: id,
-    });
+  if (!card.commitment) {
     status = "unavailable";
-  } else {
-    const recordHash = computeRecordHash(card, secret);
+  } else
     try {
-      status = (await validateAttestation(recordHash)) ? "verified" : "not_verified";
+      status = (await validateAttestation(card.commitment))
+        ? "verified"
+        : "not_verified";
     } catch (err) {
       logError("Failed to retrieve attestation from Stellar", err, {
         route: "/card/[id]",
-        recordHash,
       });
       status = "unavailable";
     }
-  }
 
   return (
     <>
@@ -99,6 +85,7 @@ export default async function PublicCardPage({
       </a>
       <main
         id="main-content"
+        data-offline-cache={card.offline_cache_allowed ? "allowed" : "denied"}
         className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 px-6 py-16"
       >
         <VerifiedBadge status={status} />
@@ -116,7 +103,7 @@ export default async function PublicCardPage({
           ) : null}
           <div>
             <h1 className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50">
-              {card.name}
+              {card.name ?? "Name withheld"}
             </h1>
             {card.age !== null ? (
               <p className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -132,7 +119,7 @@ export default async function PublicCardPage({
               Blood group
             </dt>
             <dd className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
-              {card.blood_group}
+              {card.blood_group ?? "Withheld"}
             </dd>
           </div>
           <div>
@@ -140,7 +127,7 @@ export default async function PublicCardPage({
               Genotype
             </dt>
             <dd className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
-              {card.genotype}
+              {card.genotype ?? "Withheld"}
             </dd>
           </div>
         </dl>
@@ -172,7 +159,14 @@ export default async function PublicCardPage({
           </p>
         </div>
 
-        {card.emergency_contacts.length > 0 ? (
+        {card.emergency_contacts === null ? (
+          <div>
+            <h2 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Emergency contacts
+            </h2>
+            <p>Withheld by patient</p>
+          </div>
+        ) : card.emergency_contacts.length > 0 ? (
           <div>
             <h2 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Emergency contacts

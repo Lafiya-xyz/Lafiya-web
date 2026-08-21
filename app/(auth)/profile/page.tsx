@@ -11,6 +11,7 @@ import { SignOutButton } from "../signout/sign-out-button";
 import { AttestationStatusBanner } from "./attestation-status-banner";
 import { DeleteAccountButton } from "./delete-account-button";
 import { ProfileForm } from "./profile-form";
+import { PrivacyControls } from "./privacy-controls";
 import { QrCardDisplay } from "./qr-card-display";
 
 /**
@@ -59,7 +60,10 @@ async function checkAttestationStaleness(
       return { stale: false, pendingRequestExists: false };
     }
 
-    if (!profile.last_attested_hash || profile.last_attested_hash === currentHash) {
+    if (
+      !profile.last_attested_hash ||
+      profile.last_attested_hash === currentHash
+    ) {
       return { stale: false, pendingRequestExists: false };
     }
 
@@ -75,7 +79,6 @@ async function checkAttestationStaleness(
   } catch (err) {
     logError("Failed to check attestation status", err, {
       route: "/profile",
-      userId: profile.user_id,
     });
     return { stale: false, pendingRequestExists: false };
   }
@@ -103,6 +106,11 @@ export default async function ProfilePage() {
   const { stale, pendingRequestExists } = profile
     ? await checkAttestationStaleness(supabase, profile)
     : { stale: false, pendingRequestExists: false };
+  const { data: consentEvents } = await supabase
+    .from("consent_events")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("occurred_at", { ascending: false });
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-6 py-16">
@@ -129,6 +137,14 @@ export default async function ProfilePage() {
       ) : null}
 
       <ProfileForm profile={profile} userId={user.id} />
+
+      {profile?.current_revision_id ? (
+        <PrivacyControls
+          revisionId={profile.current_revision_id}
+          policy={profile.disclosure_policy}
+          events={consentEvents ?? []}
+        />
+      ) : null}
 
       <hr className="border-zinc-200 dark:border-zinc-800" />
 

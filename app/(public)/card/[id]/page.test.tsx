@@ -39,6 +39,8 @@ const fixtureCard = {
     { name: "Halima Yusuf", phone: "+2348012345678", relationship: "Mother" },
   ],
   language: "Hausa",
+  commitment: "d".repeat(64),
+  offline_cache_allowed: true,
 };
 
 function mockRpc(result: { data: unknown; error: unknown }) {
@@ -82,7 +84,7 @@ describe("PublicCardPage", () => {
     const jsx = await PublicCardPage({
       params: Promise.resolve({ id: VALID_ID }),
     });
-    const { container } = render(jsx);
+    render(jsx);
 
     // Run axe against the document body to catch landmark violations
     const results = await axe(document.body);
@@ -125,7 +127,9 @@ describe("PublicCardPage", () => {
     render(jsx);
 
     expect(screen.getByText("Amina Yusuf")).toBeInTheDocument();
-    expect(screen.getByText("Verification status unavailable")).toBeInTheDocument();
+    expect(
+      screen.getByText("Verification status unavailable"),
+    ).toBeInTheDocument();
   });
 
   it("renders with unavailable status when attestation lookup times out (simulates RPC hang + internal timeout)", async () => {
@@ -163,7 +167,7 @@ describe("PublicCardPage", () => {
     // A card whose profile_secrets row is missing (should never happen in
     // practice post-backfill/post-upsertProfile, but must degrade safely,
     // not crash, if it ever does).
-    mockRpc({ data: [fixtureCard], error: null });
+    mockRpc({ data: [{ ...fixtureCard, commitment: undefined }], error: null });
     vi.mocked(getSecretByCardPublicId).mockResolvedValue(null);
 
     const jsx = await PublicCardPage({
@@ -172,7 +176,9 @@ describe("PublicCardPage", () => {
     render(jsx);
 
     expect(screen.getByText("Amina Yusuf")).toBeInTheDocument();
-    expect(screen.getByText("Verification status unavailable")).toBeInTheDocument();
+    expect(
+      screen.getByText("Verification status unavailable"),
+    ).toBeInTheDocument();
     expect(validateAttestation).not.toHaveBeenCalled();
   });
 });

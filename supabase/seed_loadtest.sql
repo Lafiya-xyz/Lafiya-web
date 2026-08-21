@@ -105,5 +105,11 @@ FROM auth.users u
 WHERE u.email LIKE 'loadtest-%@lafiya.test'
 ON CONFLICT (user_id) DO NOTHING;
 
+-- Explicit legacy-equivalent consent keeps seeded cards queryable while
+-- exercising the same consent gate as production cards.
+INSERT INTO public.consent_events(user_id,purpose,purpose_version,action,idempotency_key)
+SELECT u.id, 'emergency_public_disclosure', 1, 'acknowledged', gen_random_uuid()
+FROM auth.users u WHERE u.email LIKE 'loadtest-%@lafiya.test';
+
 -- Step 4: Export card IDs for the k6 script.
 \copy (SELECT card_public_id FROM public.profiles WHERE user_id IN (SELECT id FROM auth.users WHERE email LIKE 'loadtest-%@lafiya.test')) TO 'loadtest/card_ids.txt';

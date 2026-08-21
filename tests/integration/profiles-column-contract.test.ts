@@ -1,4 +1,11 @@
-import { afterAll, beforeAll, describe, expect, expectTypeOf, it } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  expectTypeOf,
+  it,
+} from "vitest";
 
 import type { EmergencyCardRow, ProfileRow } from "@/lib/supabase/types";
 
@@ -58,6 +65,8 @@ const INTENTIONALLY_PRIVATE = [
   // anonymous card scan.
   "last_attested_hash",
   "last_verified_at",
+  "current_revision_id",
+  "disclosure_policy",
 ] as const satisfies readonly (keyof ProfileRow)[];
 
 const ALL_CLASSIFIED_COLUMNS = [
@@ -100,11 +109,17 @@ describe("profiles column contract (get_emergency_card leak guard)", () => {
     // Compile-time (enforced by `npm run typecheck`): every ProfileRow key
     // is classified above, and the RPC's row type is exactly the exposed
     // columns plus the derived `age`.
-    expectTypeOf<
-      (typeof ALL_CLASSIFIED_COLUMNS)[number]
-    >().toEqualTypeOf<keyof ProfileRow>();
-    expectTypeOf<
-      (typeof EXPOSED_VIA_EMERGENCY_CARD)[number] | "age"
-    >().toEqualTypeOf<keyof EmergencyCardRow>();
+    expectTypeOf<(typeof ALL_CLASSIFIED_COLUMNS)[number]>().toEqualTypeOf<
+      keyof ProfileRow
+    >();
+    expectTypeOf<keyof EmergencyCardRow>().toEqualTypeOf<
+      | (typeof EXPOSED_VIA_EMERGENCY_CARD)[number]
+      | "age"
+      | "disclosure_states"
+      | "revision_id"
+      | "schema_version"
+      | "commitment"
+      | "offline_cache_allowed"
+    >();
   });
 });

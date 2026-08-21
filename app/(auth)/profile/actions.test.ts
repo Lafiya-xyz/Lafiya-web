@@ -1,175 +1,98 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
 import { upsertProfile } from "./actions";
 
-// revalidatePath requires a real Next.js request/render context (it throws
-// "static generation store missing" outside one); stub it for this
-// server-action unit test, matching the actions.ts happy path calling it.
-vi.mock("next/cache", () => ({
-  revalidatePath: vi.fn(),
-}));
-
-vi.mock("@/lib/supabase/server", () => ({
-  createClient: vi.fn().mockResolvedValue({}),
-}));
-
-// ensureRecordSecret talks to the (service-role, real-network) admin client;
-// isolate this unit test from it, matching the existing mocking philosophy.
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/attestation/recordSecret", () => ({
-  ensureRecordSecret: vi.fn().mockResolvedValue(undefined),
+  ensureRecordSecret: vi.fn().mockResolvedValue("c".repeat(64)),
   getSecretByUserId: vi.fn(),
 }));
 
-const mockCreateClient = await import("@/lib/supabase/server");
+const { createClient } = await import("@/lib/supabase/server");
+const authUser = { id: crypto.randomUUID() };
 
-describe("upsertProfile optimistic concurrency", () => {
-  const authUser = { id: crypto.randomUUID() };
+function form(expected?: string) {
+  const data = new FormData();
+  if (expected) data.set("expectedRevisionId", expected);
+  data.set("name", "Patient");
+  data.set("bloodGroup", "unknown");
+  data.set("genotype", "unknown");
+  return data;
+}
 
-  beforeEach(() => {
-    const mockUpsert = vi.fn().mockResolvedValue({ error: null });
-    const mockMaybeSingle = vi
-      .fn()
-      .mockResolvedValue({
-        data: { user_id: authUser.id, updated_at: "now" },
-      });
-    const mockSelect = vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({ maybeSingle: mockMaybeSingle }),
-    });
-    const mockFrom = vi.fn().mockReturnValue({
-      select: mockSelect,
-      upsert: mockUpsert,
-    });
-
-    (mockCreateClient.createClient as ReturnType<typeof vi.fn>).mockResolvedValue({
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: authUser },
-        }),
-      },
-      from: mockFrom,
-    });
-  });
-
-  const staleFormData = (expected: string, name = "New Name") => {
-    const data = new FormData();
-    data.set("expectedUpdatedAt", expected);
-    data.set("name", name);
-    // A real form submission always includes these <select> fields with a
-    // defaultValue; set them explicitly so an object-spread `undefined`
-    // doesn't override the existing row's default before Zod validation.
-    data.set("bloodGroup", "unknown");
-    data.set("genotype", "unknown");
-    return data;
+function clientFor(
+  existing: Record<string, unknown> | null,
+  rpc = vi.fn().mockResolvedValue({ error: null }),
+) {
+  const maybeSingle = vi.fn().mockResolvedValue({ data: existing });
+  const single = vi
+    .fn()
+    .mockResolvedValue({ data: { card_public_id: "card-id" } });
+  return {
+    rpc,
+    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: authUser } }) },
+    from: vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({ maybeSingle, single }),
+      }),
+    }),
   };
+}
 
-  it("returns a conflict error when updated_at changed since form was loaded", async () => {
-    (mockCreateClient.createClient as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: authUser },
-        }),
-      },
-      from() {
-        return {
-          select() {
-            return {
-              eq() {
-                return {
-                  maybeSingle() {
-                    return Promise.resolve({ data: { user_id: authUser.id, updated_at: "newer" } });
-                  },
-                };
-              },
-            };
-          },
-        };
-      },
+describe("upsertProfile revision concurrency", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns a typed conflict before mutation for an already-stale form", async () => {
+    const client = clientFor({
+      user_id: authUser.id,
+      current_revision_id: "newer",
     });
-
-    const result = await upsertProfile(undefined, staleFormData("stale"));
-
-    expect(result).toEqual({
-      error:
-        "This profile was updated elsewhere since you loaded this page. Reload and reapply your changes before saving.",
-    });
+    vi.mocked(createClient).mockResolvedValue(client as never);
+    await expect(
+      upsertProfile(undefined, form("stale")),
+    ).resolves.toMatchObject({ code: "STALE_REVISION" });
+    expect(client.rpc).not.toHaveBeenCalled();
   });
 
-  it("allows a save when the submitted updated_at matches the current row", async () => {
-    let upsertCalls = 0;
-    (mockCreateClient.createClient as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: authUser },
-        }),
-      },
-      from() {
-        return {
-          select() {
-            return {
-              eq() {
-                return {
-                  maybeSingle() {
-                    return Promise.resolve({ data: { user_id: authUser.id, updated_at: "now" } });
-                  },
-                };
-              },
-            };
-          },
-          upsert() {
-            upsertCalls += 1;
-            return Promise.resolve({ error: null });
-          },
-        };
-      },
+  it("passes the revision token to the atomic save RPC", async () => {
+    const client = clientFor({
+      user_id: authUser.id,
+      current_revision_id: "current",
+      disclosure_policy: { version: 1, fields: {} },
     });
-
-    const result = await upsertProfile(undefined, staleFormData("now"));
-
-    expect(result).toEqual({ success: true });
-    expect(upsertCalls).toBe(1);
+    vi.mocked(createClient).mockResolvedValue(client as never);
+    await expect(upsertProfile(undefined, form("current"))).resolves.toEqual({
+      success: true,
+    });
+    expect(client.rpc).toHaveBeenCalledWith(
+      "save_record_revision",
+      expect.objectContaining({ p_expected_revision_id: "current" }),
+    );
   });
 
-  it("allows a brand-new user's first-ever save with no expectedUpdatedAt token (no prior row to conflict with)", async () => {
-    // Mirrors ProfileForm: the hidden expectedUpdatedAt input only renders
-    // when a `profile` prop was passed in, so a first-time save submits no
-    // such field at all — the concurrency check must not require one when
-    // there's no existing row to have conflicted with in the first place.
-    let upsertCalls = 0;
-    (mockCreateClient.createClient as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      auth: {
-        getUser: vi.fn().mockResolvedValue({
-          data: { user: authUser },
-        }),
-      },
-      from() {
-        return {
-          select() {
-            return {
-              eq() {
-                return {
-                  maybeSingle() {
-                    return Promise.resolve({ data: null });
-                  },
-                };
-              },
-            };
-          },
-          upsert() {
-            upsertCalls += 1;
-            return Promise.resolve({ error: null });
-          },
-        };
-      },
+  it("allows an atomic first save with a null predecessor", async () => {
+    const client = clientFor(null);
+    vi.mocked(createClient).mockResolvedValue(client as never);
+    await expect(upsertProfile(undefined, form())).resolves.toEqual({
+      success: true,
     });
+    expect(client.rpc).toHaveBeenCalledWith(
+      "save_record_revision",
+      expect.objectContaining({ p_expected_revision_id: null }),
+    );
+  });
 
-    const data = new FormData();
-    data.set("name", "First Save");
-    data.set("bloodGroup", "unknown");
-    data.set("genotype", "unknown");
-
-    const result = await upsertProfile(undefined, data);
-
-    expect(result).toEqual({ success: true });
-    expect(upsertCalls).toBe(1);
+  it("maps a database serialization failure to a typed conflict", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      error: { code: "40001", message: "STALE_REVISION" },
+    });
+    const client = clientFor(
+      { user_id: authUser.id, current_revision_id: "current" },
+      rpc,
+    );
+    vi.mocked(createClient).mockResolvedValue(client as never);
+    await expect(
+      upsertProfile(undefined, form("current")),
+    ).resolves.toMatchObject({ code: "STALE_REVISION" });
   });
 });
