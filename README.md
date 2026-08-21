@@ -85,7 +85,7 @@ graph TB
 - **app/(public)/card/[id]**: public, read-only emergency page — the page a QR code points to
 - **app/(auth)/profile**: authenticated profile editor where a patient manages their private record
 - **lib/supabase/**: Supabase client/server helpers and hand-authored types for the off-chain encrypted store
-- **lib/stellar/**: Soroban attestation lookup — `getAttestation(recordHash)` calls the deployed `lafiya-contracts` registry over RPC when `ATTESTATION_CONTRACT_ID` is set, and falls back to an in-memory mock otherwise
+- **lib/stellar/**: Soroban attestation lookup — `getAttestation(recordHash)` calls the deployed `lafiya-contracts` registry over RPC in live mode. Mock attestations require an explicitly non-production deployment identity and cannot boot in production.
 - **lib/qr/**: QR code generation for the emergency page
 
 ### Offline support
@@ -141,7 +141,7 @@ pub struct Attestation {
 
 This composability lets a responder's scanner, or any other Stellar-aware verifier, confirm a record was attested by a real, allowlisted health worker — without an external oracle and without ever seeing the health data.
 
-**M1 handoff point.** This repo already has the pieces that plug into the contract above: `lib/attestation/recordHash.ts` computes the deterministic hash a `lafiya-contracts` call would use, and `lib/stellar/attestation.ts` exposes a `getAttestation(recordHash)` function with the signature the real Soroban call has. The body now performs a read-only `simulateTransaction` against `get_attestation` on the deployed `lafiya-contracts` registry (via the Stellar SDK) whenever `ATTESTATION_CONTRACT_ID` is configured, and falls back to the original in-memory mock when it isn't set — so the public card page and the attestation Route Handler need no changes. A missing/unattested record hash reverts in-contract and is returned as `null` (not verified).
+**M1 handoff point.** This repo already has the pieces that plug into the contract above: `lib/attestation/recordHash.ts` computes the deterministic hash a `lafiya-contracts` call would use, and `lib/stellar/attestation.ts` exposes a `getAttestation(recordHash)` function with the signature the real Soroban call has. Live mode performs a read-only `simulateTransaction` against `get_attestation` on the deployed registry. Mock mode is limited to explicitly non-production environments; production requires a live contract plus a protocol epoch and managed intent-signing key. A missing/unattested record hash reverts in-contract and is returned as `null` (not verified).
 
 ## Data Model (Emergency Subset)
 
@@ -281,7 +281,7 @@ Service-worker behaviour can't be exercised under jsdom, so verify it in a real 
 ### M1 — Attestation
 
 - [ ] Soroban attestation registry deployed (`lafiya-contracts`) — owned by that repo; set `ATTESTATION_CONTRACT_ID` here once shipped
-- [x] `lafiya-web` calls the real `get_attestation` Soroban function over RPC when `ATTESTATION_CONTRACT_ID` is set, falling back to the in-memory mock otherwise (`lib/stellar/attestation.ts`)
+- [x] `lafiya-web` calls the real `get_attestation` Soroban function over RPC in live mode; mock mode is explicit and prohibited in production (`lib/stellar/attestation.ts`)
 - [ ] Allowlisted attester can verify a record (contract-side; `lafiya-contracts`)
 - [x] Card displays a verified indicator driven by the real attestation lookup (public card page + `/api/attestation/[recordHash]`)
 
@@ -406,7 +406,8 @@ If you change a field name, type, or hashing scheme here, update the Rust struct
 - `SUPABASE_SERVICE_ROLE_KEY` — server-only, bypasses RLS; never exposed to the browser
 - `STELLAR_NETWORK_PASSPHRASE` — must match the network the contracts are deployed on
 - `SOROBAN_RPC_URL` — Soroban RPC endpoint (testnet first)
-- `ATTESTATION_CONTRACT_ID` — the deployed `lafiya-contracts` attestation registry contract id. **Optional:** when unset (local dev, CI, pre-deploy), `getAttestation` serves the in-memory mock so the verified indicator still renders
+- `ATTESTATION_CONTRACT_ID` — the deployed `lafiya-contracts` attestation registry contract ID. Required with `ATTESTATION_MODE=live`; mock mode is permitted only for explicit non-production deployment identities.
+- `LAFIYA_DEPLOYMENT_ENV`, `ATTESTATION_MODE`, `CHW_PROTOCOL_EPOCH_ID`, `CHW_PROTOCOL_INTENT_SIGNING_KEY` — the CHW protocol deployment guard. Production requires `production`, `live`, an epoch ID, and a managed signing key; CI uses the explicit `ci`/`mock` combination.
 - `STELLAR_HORIZON_URL` / `STELLAR_USDC_ISSUER` — Horizon endpoint and the
   exact issuer of accepted USDC payments
 - `CHW_INCENTIVE_POOL_ADDRESS` — source account whose outgoing USDC payments

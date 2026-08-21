@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["contract", "version", "intents", "events"],
+  "properties": {
+    "contract": { "const": "lafiya.chw-attestation-protocol" },
+    "version": { "const": 1 },
+    "intents": { "type": "array" },
+    "events": { "type": "array" }
+  }
+}

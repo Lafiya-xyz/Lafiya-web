@@ -11,6 +11,7 @@ import {
 import { unstable_cache } from "next/cache";
 
 import type { Attestation } from "@/lib/attestation/types";
+import { getProtocolRuntimeConfig } from "@/lib/chw-protocol/config";
 import { serverEnv } from "@/lib/env-server";
 
 /**
@@ -43,6 +44,10 @@ import { serverEnv } from "@/lib/env-server";
 
 /** Fixture hash for local dev/demo only — not a real record's hash. */
 export const DEMO_VERIFIED_RECORD_HASH = "a".repeat(64);
+
+// Evaluate at module initialization so an incorrectly-labelled production
+// process fails while Next loads the route graph, before it serves traffic.
+const protocolRuntimeConfig = getProtocolRuntimeConfig();
 
 /**
  * Maximum milliseconds to wait for a Soroban RPC response before treating
@@ -231,9 +236,13 @@ async function fetchAttestationUncached(
   recordHash: string,
 ): Promise<Attestation | null> {
   return attestationBreaker.execute(async () => {
-    // Local-dev / pre-deploy fallback: no contract configured yet.
-    if (!serverEnv.ATTESTATION_CONTRACT_ID) {
+    // Mock attestations are intentionally limited to explicitly non-production
+    // environments. A production process cannot reach this branch.
+    if (protocolRuntimeConfig.attestationMode === "mock") {
       return MOCK_ATTESTATIONS.get(recordHash) ?? null;
+    }
+    if (!serverEnv.ATTESTATION_CONTRACT_ID) {
+      throw new Error("LIVE_ATTESTATION_CONTRACT_REQUIRED");
     }
 
     return withTimeout(async () => {
@@ -350,7 +359,9 @@ export async function getAttestation(
  * see issues/issue-03-record-hash-commitment-scheme.md's note on this
  * cross-cutting concern.
  */
-export async function validateAttestation(recordHash: string): Promise<boolean> {
+export async function validateAttestation(
+  recordHash: string,
+): Promise<boolean> {
   const att = await getAttestation(recordHash);
   if (!att) return false;
   const now = Math.floor(Date.now() / 1000);
@@ -371,7 +382,10 @@ export async function validateAttestation(recordHash: string): Promise<boolean> 
  *
  * Exported for testing.
  */
-export function decodeAttestation(value: unknown, recordHash: string): Attestation | null {
+export function decodeAttestation(
+  value: unknown,
+  recordHash: string,
+): Attestation | null {
   if (typeof value !== "object" || value === null) {
     return null;
   }
@@ -406,7 +420,10 @@ function extractAddress(value: unknown): string | null {
   if (typeof value === "string") {
     return value;
   }
-  if (value && typeof (value as { toString?: () => string }).toString === "function") {
+  if (
+    value &&
+    typeof (value as { toString?: () => string }).toString === "function"
+  ) {
     const str = String(value);
     if (str.startsWith("G") || str.startsWith("C")) {
       return str;
