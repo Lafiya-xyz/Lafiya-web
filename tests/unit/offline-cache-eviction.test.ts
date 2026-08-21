@@ -305,7 +305,11 @@ describe("buildOfflineNavigationResponse", () => {
     const body = "<html><body><h1>Patient Card</h1></body></html>";
     await cache.put(
       cardUrl("keep"),
-      makeCachedResponse({ body, lastAccessed: 200, cachedAt: "2024-01-02T03:04:05.000Z" }),
+      makeCachedResponse({
+        body,
+        lastAccessed: 200,
+        cachedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      }),
     );
 
     const cached = await cache.match(cardUrl("keep"));

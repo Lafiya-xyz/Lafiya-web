@@ -350,6 +350,10 @@ export function classifyCachedFreshness(cachedAtIso, nowMs = Date.now()) {
  * existing amber wording/colour; `stale` escalates to a red, explicit
  * "details may have changed" warning. (Expired snapshots are never served,
  * so there is no expired banner — see buildOfflineNavigationResponse.)
+ *
+ * @param {string} isoString - ISO timestamp of when the snapshot was cached.
+ * @param {typeof FRESHNESS_STATE[keyof typeof FRESHNESS_STATE]} [state] -
+ *   freshness state; defaults to FRESH. Only FRESH and STALE render a banner.
  */
 export function buildFreshnessBannerHtml(isoString, state = FRESHNESS_STATE.FRESH) {
   if (state === FRESHNESS_STATE.STALE) {
