@@ -24,10 +24,10 @@ const EXPECTED_KEYS = [
   "emergency_contacts",
   "language",
   "disclosure_states",
-  "revision_id",
   "schema_version",
-  "commitment",
   "offline_cache_allowed",
+  "trust_state",
+  "trust_updated_at",
 ].sort();
 
 describe("get_emergency_card RPC", () => {

@@ -269,11 +269,12 @@ begin
     raise exception using errcode = '23514', message = 'REQUEST_NOT_CURRENT';
   end if;
 
-  update public.reattestation_requests set
+  update public.reattestation_requests as request set
     status = 'leased', claimed_chw_id = auth.uid(), claimed_address_binding_id = v_binding.id,
     lease_token = gen_random_uuid(), lease_expires_at = now() + make_interval(secs => p_lease_seconds)
-  where id = p_request_id
-  returning id, revision_id, lease_token, lease_expires_at into request_id, revision_id, lease_token, lease_expires_at;
+  where request.id = p_request_id
+  returning request.id, request.revision_id, request.lease_token, request.lease_expires_at
+    into request_id, revision_id, lease_token, lease_expires_at;
   schema_version := v_revision.schema_version;
   record_commitment := v_revision.commitment;
   select coalesce(jsonb_object_agg(field, value), '{}'::jsonb) into review_data

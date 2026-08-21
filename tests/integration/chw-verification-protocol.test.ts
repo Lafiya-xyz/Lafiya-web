@@ -8,6 +8,7 @@ import {
 } from "./helpers/testUser";
 
 const ADDRESS = `G${"A".repeat(55)}`;
+const ADDRESS_TWO = `G${"D".repeat(55)}`;
 const SPONSOR = `G${"B".repeat(55)}`;
 const CONTRACT = `C${"C".repeat(55)}`;
 
@@ -19,6 +20,9 @@ describe("CHW verification protocol", () => {
   let epochId: string;
   let leaseToken: string;
   let intentId: string;
+  let leaseOwner: TestUser;
+  let leaseNonOwner: TestUser;
+  let leaseOwnerAddress: string;
 
   beforeAll(async () => {
     patient = await createTestUser();
@@ -61,7 +65,7 @@ describe("CHW verification protocol", () => {
       if (identity.error) throw identity.error;
       const binding = await adminClient.from("chw_address_bindings").insert({
         chw_id: chw.id,
-        stellar_address: chw.id === chwOne.id ? ADDRESS : `G${"D".repeat(55)}`,
+        stellar_address: chw.id === chwOne.id ? ADDRESS : ADDRESS_TWO,
         ownership_proof_digest: crypto
           .randomUUID()
           .replaceAll("-", "")
@@ -151,26 +155,33 @@ describe("CHW verification protocol", () => {
     const accepted = claims.filter((claim) => !claim.error);
     expect(accepted).toHaveLength(1);
     expect(claims.filter((claim) => claim.error)).toHaveLength(1);
-    const claim = accepted[0].data?.[0];
+    const acceptedIndex = claims.findIndex((claim) => !claim.error);
+    leaseOwner = [chwOne, chwTwo][acceptedIndex];
+    leaseNonOwner = [chwOne, chwTwo][1 - acceptedIndex];
+    leaseOwnerAddress = acceptedIndex === 0 ? ADDRESS : ADDRESS_TWO;
+    const claim = claims[acceptedIndex].data?.[0];
     expect(claim).toBeDefined();
     leaseToken = claim!.lease_token;
     expect(claim!.review_data).not.toHaveProperty("date_of_birth");
-    const hidden = await chwTwo.client
+    const hidden = await leaseNonOwner.client
       .from("verification_intents")
       .select("id");
     expect(hidden.error).not.toBeNull();
   });
 
   it("rejects a non-owner and binds one intent to its lease and epoch", async () => {
-    const nonOwner = await chwTwo.client.rpc("create_verification_intent", {
-      p_request_id: requestId,
-      p_lease_token: leaseToken,
-      p_epoch_id: epochId,
-      p_idempotency_key: crypto.randomUUID(),
-    });
+    const nonOwner = await leaseNonOwner.client.rpc(
+      "create_verification_intent",
+      {
+        p_request_id: requestId,
+        p_lease_token: leaseToken,
+        p_epoch_id: epochId,
+        p_idempotency_key: crypto.randomUUID(),
+      },
+    );
     expect(nonOwner.error?.message).toContain("LEASE_NOT_OWNER");
 
-    const intent = await chwOne.client.rpc("create_verification_intent", {
+    const intent = await leaseOwner.client.rpc("create_verification_intent", {
       p_request_id: requestId,
       p_lease_token: leaseToken,
       p_epoch_id: epochId,
@@ -178,7 +189,7 @@ describe("CHW verification protocol", () => {
     });
     expect(intent.error).toBeNull();
     intentId = intent.data!.id;
-    const submitted = await chwOne.client.rpc(
+    const submitted = await leaseOwner.client.rpc(
       "mark_verification_intent_submitted",
       {
         p_intent_id: intentId,
@@ -199,7 +210,7 @@ describe("CHW verification protocol", () => {
           .eq("id", intentId)
           .single()
       ).data!.record_commitment,
-      p_attester_address: ADDRESS,
+      p_attester_address: leaseOwnerAddress,
       p_transaction_hash: "submission-tx-1",
       p_ledger_sequence: 42,
       p_ledger_hash: "ledger-hash-42",
@@ -263,7 +274,7 @@ describe("CHW verification protocol", () => {
       .select("recipient_address,status")
       .eq("intent_id", intentId);
     expect(obligations.data).toEqual([
-      { recipient_address: ADDRESS, status: "pending" },
+      { recipient_address: leaseOwnerAddress, status: "pending" },
     ]);
     await adminClient.rpc("reconcile_attestation_reorg", {
       p_event_id: "attestation-event-1",
@@ -314,9 +325,9 @@ describe("CHW verification protocol", () => {
     const suspension = await adminClient
       .from("chw_identities")
       .update({ status: "suspended", suspended_at: new Date().toISOString() })
-      .eq("chw_id", chwTwo.id);
+      .eq("chw_id", leaseNonOwner.id);
     if (suspension.error) throw suspension.error;
-    const claim = await chwTwo.client.rpc("claim_verification_request", {
+    const claim = await leaseNonOwner.client.rpc("claim_verification_request", {
       p_request_id: request.data.id,
     });
     expect(claim.error?.message).toContain("CHW_SUSPENDED");
