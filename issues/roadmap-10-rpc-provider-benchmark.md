@@ -1,5 +1,11 @@
 # [Spike] Benchmark Soroban and Horizon provider resilience for Nigerian mobile traffic
 
+## Outcome
+
+Completed 2026-08-20. See [`docs/rpc-provider-benchmark.md`](../docs/rpc-provider-benchmark.md)
+for the comparison matrix, benchmark results, recommended primary/fallback
+policy, and rollout risks. Harness: `bench/rpc-provider-benchmark/`.
+
 ## Category
 
 Spike
@@ -33,10 +39,10 @@ Provider comparison matrix, reproducible benchmark harness/results, recommended 
 
 ## Acceptance Criteria
 
-- [ ] Measurements use representative attestation and event queries.
-- [ ] Failure and throttling behavior is recorded separately from normal latency.
-- [ ] The recommendation defines when to fail over and how to avoid inconsistent decisions.
-- [ ] No patient data is used in the benchmark.
+- [x] Measurements use representative attestation and event queries.
+- [x] Failure and throttling behavior is recorded separately from normal latency.
+- [x] The recommendation defines when to fail over and how to avoid inconsistent decisions.
+- [x] No patient data is used in the benchmark.
 
 ## Follow-Up Opportunities
 
