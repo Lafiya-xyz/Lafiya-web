@@ -49,6 +49,56 @@ export type ProfileRow = {
   last_verified_at: string | null;
   created_at: string;
   updated_at: string;
+  current_revision_id: string | null;
+  disclosure_policy: DisclosurePolicy;
+};
+
+export type DisclosurePolicy = {
+  version: 1;
+  fields: Record<string, boolean>;
+};
+
+export type RecordLifecycleState =
+  | "draft"
+  | "shareable"
+  | "verification_requested"
+  | "under_review"
+  | "verified"
+  | "stale_after_edit"
+  | "suspended"
+  | "revoked"
+  | "deleted";
+
+export type RecordRevisionRow = {
+  id: string;
+  user_id: string;
+  predecessor_id: string | null;
+  schema_version: 1;
+  revision_number: number;
+  lifecycle_state: RecordLifecycleState;
+  emergency_data: Record<string, unknown>;
+  provenance: Record<string, unknown>;
+  disclosure_policy: DisclosurePolicy;
+  commitment: string;
+  created_by: string;
+  created_at: string;
+};
+
+export type ConsentPurpose =
+  | "account_processing"
+  | "emergency_public_disclosure"
+  | "offline_caching"
+  | "clinical_verification"
+  | "optional_analytics";
+
+export type ConsentEventRow = {
+  id: string;
+  user_id: string;
+  purpose: ConsentPurpose;
+  purpose_version: number;
+  action: "acknowledged" | "withdrawn";
+  occurred_at: string;
+  idempotency_key: string;
 };
 
 /** Row shape of public.profile_secrets. Never read/written outside lib/attestation/recordSecret.ts. */
@@ -58,7 +108,8 @@ export type ProfileSecretRow = {
   created_at: string;
 };
 
-export type ReattestationRequestStatus = "pending" | "completed" | "dismissed";
+export type ReattestationRequestStatus =
+  "pending" | "under_review" | "completed" | "dismissed" | "superseded";
 
 /** Row shape of public.reattestation_requests. */
 export type ReattestationRequestRow = {
@@ -67,20 +118,26 @@ export type ReattestationRequestRow = {
   record_hash: string;
   requested_at: string;
   status: ReattestationRequestStatus;
+  revision_id: string | null;
 };
 
 /** Return row shape of public.get_emergency_card(p_card_id uuid). */
 export type EmergencyCardRow = {
-  name: string;
+  name: string | null;
   age: number | null;
   photo_url: string | null;
-  blood_group: BloodGroup;
-  genotype: Genotype;
-  allergies: string[];
-  medications: string[];
-  chronic_conditions: string[];
-  emergency_contacts: EmergencyContact[];
+  blood_group: BloodGroup | null;
+  genotype: Genotype | null;
+  allergies: string[] | null;
+  medications: string[] | null;
+  chronic_conditions: string[] | null;
+  emergency_contacts: EmergencyContact[] | null;
   language: string | null;
+  disclosure_states: Record<string, "disclosed" | "withheld">;
+  revision_id: string;
+  schema_version: number;
+  commitment: string;
+  offline_cache_allowed: boolean;
 };
 
 /** Row shape of public.consent_logs. */
@@ -202,6 +259,29 @@ export type Database = {
         Update: Partial<Omit<ReattestationRequestRow, "id">>;
         Relationships: [];
       };
+      record_revisions: {
+        Row: RecordRevisionRow;
+        Insert: Pick<
+          RecordRevisionRow,
+          | "user_id"
+          | "emergency_data"
+          | "disclosure_policy"
+          | "commitment"
+          | "created_by"
+        > &
+          Partial<RecordRevisionRow>;
+        Update: never;
+        Relationships: [];
+      };
+      consent_events: {
+        Row: ConsentEventRow;
+        Insert: Omit<ConsentEventRow, "id" | "occurred_at"> & {
+          id?: string;
+          occurred_at?: string;
+        };
+        Update: never;
+        Relationships: [];
+      };
       frequency_limits: {
         Row: FrequencyLimitRow;
         Insert: Pick<FrequencyLimitRow, "key"> & Partial<FrequencyLimitRow>;
@@ -246,6 +326,36 @@ export type Database = {
         Args: { p_card_id: string };
         Returns: EmergencyCardRow[];
       };
+      save_record_revision: {
+        Args: {
+          p_expected_revision_id: string | null;
+          p_emergency_data: Record<string, unknown>;
+          p_provenance: Record<string, unknown>;
+          p_disclosure_policy: DisclosurePolicy;
+          p_commitment: string;
+        };
+        Returns: RecordRevisionRow;
+      };
+      record_consent: {
+        Args: {
+          p_purpose: string;
+          p_purpose_version: number;
+          p_action: string;
+          p_idempotency_key: string;
+        };
+        Returns: ConsentEventRow;
+      };
+      update_disclosure_policy: {
+        Args: {
+          p_expected_revision_id: string;
+          p_disclosure_policy: DisclosurePolicy;
+        };
+        Returns: RecordRevisionRow;
+      };
+      request_revision_verification: {
+        Args: { p_expected_revision_id: string };
+        Returns: ReattestationRequestRow;
+      };
       rate_limit_record_failure: {
         Args: { p_key: string };
         Returns: RateLimitRecordFailureRow[];
@@ -281,6 +391,7 @@ export type Database = {
     Enums: {
       blood_group_enum: BloodGroup;
       genotype_enum: Genotype;
+      record_lifecycle_state: RecordLifecycleState;
     };
   };
 };

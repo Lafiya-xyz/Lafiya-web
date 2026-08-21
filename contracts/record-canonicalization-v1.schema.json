@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["contract", "version", "vectors"],
+  "properties": {
+    "contract": { "const": "lafiya.record-commitment" },
+    "version": { "const": 1 },
+    "vectors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "secretHex", "input", "canonical", "commitment"]
+      }
+    }
+  }
+}

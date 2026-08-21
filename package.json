@@ -17,7 +17,8 @@
     "test:watch": "vitest",
     "test:integration": "vitest run -c vitest.integration.config.ts",
     "test:e2e": "playwright test",
-    "bundle:check": "node scripts/check-bundle-size.mjs"
+    "bundle:check": "node scripts/check-bundle-size.mjs",
+    "migration:lint": "node scripts/lint-migrations.mjs"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.70.0",

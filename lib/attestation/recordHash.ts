@@ -1,7 +1,9 @@
-import { createHmac } from "node:crypto";
-
-import type { EmergencyCardRow } from "@/lib/supabase/types";
+import type { ProfileRow } from "@/lib/supabase/types";
 import { getAttestation } from "@/lib/stellar/attestation";
+import {
+  computeRevisionCommitment,
+  type EmergencyRecordData,
+} from "@/lib/records/canonicalization";
 
 /**
  * The subset of card fields that feed the commitment. `age` is deliberately
@@ -17,7 +19,7 @@ import { getAttestation } from "@/lib/stellar/attestation";
  * computeRecordHash directly with no mapping glue.
  */
 export type RecordHashFields = Pick<
-  EmergencyCardRow,
+  ProfileRow,
   | "name"
   | "blood_group"
   | "genotype"
@@ -30,27 +32,6 @@ export type RecordHashFields = Pick<
 
 /** Matches the 64-hex-char hex-encoded secret stored in profile_secrets. */
 const HEX_SECRET_PATTERN = /^[0-9a-f]{64}$/i;
-
-function canonicalize(fields: RecordHashFields): string {
-  return JSON.stringify({
-    name: fields.name,
-    bloodGroup: fields.blood_group,
-    genotype: fields.genotype,
-    allergies: [...fields.allergies].sort(),
-    medications: [...fields.medications].sort(),
-    chronicConditions: [...fields.chronic_conditions].sort(),
-    emergencyContacts: [...fields.emergency_contacts]
-      .map((contact) => ({
-        name: contact.name,
-        phone: contact.phone,
-        relationship: contact.relationship,
-      }))
-      .sort((a, b) =>
-        `${a.name}${a.phone}`.localeCompare(`${b.name}${b.phone}`),
-      ),
-    language: fields.language,
-  });
-}
 
 /**
  * Deterministic HMAC-SHA256 over the emergency-relevant facts of a card,
@@ -78,10 +59,21 @@ export function computeRecordHash(
     );
   }
 
-  const canonical = canonicalize(fields);
-  return createHmac("sha256", Buffer.from(secretHex, "hex"))
-    .update(canonical)
-    .digest("hex");
+  return computeRevisionCommitment(
+    {
+      name: fields.name,
+      language: fields.language,
+      blood_group: fields.blood_group,
+      genotype: fields.genotype,
+      allergies: fields.allergies,
+      medications: fields.medications,
+      chronic_conditions: fields.chronic_conditions,
+      emergency_contacts: fields.emergency_contacts,
+      date_of_birth: null,
+      photo_url: null,
+    } satisfies EmergencyRecordData,
+    secretHex,
+  );
 }
 
 /** Returns whether the current on-chain attestation exists and remains valid. */
