@@ -101,8 +101,6 @@ export type AttestSigningParams = {
   recordHashHex: string;
   /** The allowlisted Stellar address the attestation is attributed to. */
   attesterAddress: string;
-  /** Unix seconds. */
-  timestamp: number;
   /** Source account sequence. "0" is fine for a PoC that never submits. */
   sequence?: string;
 };
@@ -120,8 +118,8 @@ export type SignedAttestTransaction = {
  * it is safe to run offline and is what the verifier queues for later
  * submission when connectivity returns.
  *
- * The exact SCVal encodings mirror lib/stellar/attestation.ts and are
- * illustrative; the authoritative arg types live in lafiya-contracts.
+ * The exact ABI is `attest(attester: Address, record_hash: BytesN<32>)`.
+ * The ledger supplies the timestamp; no caller-controlled timestamp is sent.
  */
 export function buildAndSignAttestTransaction(
   params: AttestSigningParams,
@@ -132,9 +130,8 @@ export function buildAndSignAttestTransaction(
 
   const invocation = contract.call(
     "attest",
-    nativeToScVal(Buffer.from(params.recordHashHex, "hex"), { type: "bytes" }),
     nativeToScVal(params.attesterAddress, { type: "address" }),
-    nativeToScVal(BigInt(params.timestamp), { type: "u64" }),
+    nativeToScVal(Buffer.from(params.recordHashHex, "hex"), { type: "bytes" }),
   );
 
   const tx = new TransactionBuilder(source, {

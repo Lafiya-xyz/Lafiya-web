@@ -27,6 +27,7 @@ const EXPECTED_KEYS = [
   "revision_id",
   "schema_version",
   "commitment",
+  "trust_status",
   "offline_cache_allowed",
 ].sort();
 
@@ -93,6 +94,7 @@ describe("get_emergency_card RPC", () => {
       medications: ["Insulin"],
       chronic_conditions: ["Asthma"],
       language: "English",
+      trust_status: "unverified",
     });
   });
 

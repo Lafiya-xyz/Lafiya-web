@@ -17,7 +17,7 @@ describe("VerifiedBadge", () => {
   });
 
   it("shows the unverified state when no attestation exists", () => {
-    const { container } = render(<VerifiedBadge status="not_verified" />);
+    const { container } = render(<VerifiedBadge status="unverified" />);
     expect(screen.getByText("Not yet verified")).toBeInTheDocument();
     expect(
       screen.queryByText("Verified by a health worker"),

@@ -119,6 +119,7 @@ describe("profiles column contract (get_emergency_card leak guard)", () => {
       | "revision_id"
       | "schema_version"
       | "commitment"
+      | "trust_status"
       | "offline_cache_allowed"
     >();
   });

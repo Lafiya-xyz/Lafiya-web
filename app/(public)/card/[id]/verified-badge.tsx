@@ -1,4 +1,13 @@
-export type VerificationStatus = "verified" | "not_verified" | "unavailable";
+export type VerificationStatus =
+  | "unverified"
+  | "submitted"
+  | "confirming"
+  | "verified"
+  | "expired"
+  | "revoked"
+  | "superseded"
+  | "conflicted"
+  | "unavailable";
 
 export function VerifiedBadge({ status }: { status: VerificationStatus }) {
   if (status === "verified") {
@@ -21,7 +30,17 @@ export function VerifiedBadge({ status }: { status: VerificationStatus }) {
     );
   }
 
-  if (status === "unavailable") {
+  if (["submitted", "confirming"].includes(status)) {
+    return (
+      <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+        {status === "submitted"
+          ? "Verification submitted"
+          : "Verification confirming"}
+      </span>
+    );
+  }
+
+  if (["conflicted", "unavailable"].includes(status)) {
     return (
       <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
         Verification status unavailable
@@ -44,7 +63,13 @@ export function VerifiedBadge({ status }: { status: VerificationStatus }) {
         <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
         <path d="M12 17h.01" />
       </svg>
-      Not yet verified
+      {status === "expired"
+        ? "Verification expired"
+        : status === "revoked"
+          ? "Verification revoked"
+          : status === "superseded"
+            ? "Verification superseded"
+            : "Not yet verified"}
     </span>
   );
 }

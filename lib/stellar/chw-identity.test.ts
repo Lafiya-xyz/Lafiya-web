@@ -3,7 +3,12 @@
 // check rejects Node Buffers under the jsdom realm; this test needs no DOM)
 import { describe, expect, it } from "vitest";
 
-import { Keypair, StrKey } from "@stellar/stellar-sdk";
+import {
+  Keypair,
+  StrKey,
+  TransactionBuilder,
+  scValToNative,
+} from "@stellar/stellar-sdk";
 
 import {
   buildAndSignAttestTransaction,
@@ -74,12 +79,28 @@ describe("buildAndSignAttestTransaction (custodial Phase 0 path)", () => {
       networkPassphrase: "Test SDF Network ; September 2015",
       recordHashHex: "a".repeat(64),
       attesterAddress: signer.publicKey(),
-      timestamp: 1735689600,
     });
 
     expect(signerPublicKey).toBe(signer.publicKey());
     // Non-empty, base64-encoded XDR envelope.
     expect(xdr.length).toBeGreaterThan(0);
     expect(() => Buffer.from(xdr, "base64").toString("base64")).not.toThrow();
+
+    const transaction = TransactionBuilder.fromXDR(
+      xdr,
+      "Test SDF Network ; September 2015",
+    );
+    const operation = transaction.operations[0];
+    expect(operation.type).toBe("invokeHostFunction");
+    if (operation.type !== "invokeHostFunction") return;
+    const invocation = operation.func.invokeContract();
+    expect(invocation.functionName().toString()).toBe("attest");
+    expect(invocation.args()).toHaveLength(2);
+    expect(scValToNative(invocation.args()[0])).toBe(signer.publicKey());
+    expect(
+      Buffer.from(scValToNative(invocation.args()[1]) as Buffer).toString(
+        "hex",
+      ),
+    ).toBe("a".repeat(64));
   });
 });

@@ -109,7 +109,13 @@ export type ProfileSecretRow = {
 };
 
 export type ReattestationRequestStatus =
-  "pending" | "under_review" | "completed" | "dismissed" | "superseded";
+  | "pending"
+  | "under_review"
+  | "submitted"
+  | "confirming"
+  | "completed"
+  | "dismissed"
+  | "superseded";
 
 /** Row shape of public.reattestation_requests. */
 export type ReattestationRequestRow = {
@@ -119,6 +125,10 @@ export type ReattestationRequestRow = {
   requested_at: string;
   status: ReattestationRequestStatus;
   revision_id: string | null;
+  claimed_by: string | null;
+  lease_token: string | null;
+  lease_expires_at: string | null;
+  released_at: string | null;
 };
 
 /** Return row shape of public.get_emergency_card(p_card_id uuid). */
@@ -137,6 +147,16 @@ export type EmergencyCardRow = {
   revision_id: string;
   schema_version: number;
   commitment: string;
+  trust_status:
+    | "unverified"
+    | "submitted"
+    | "confirming"
+    | "verified"
+    | "expired"
+    | "revoked"
+    | "superseded"
+    | "conflicted"
+    | "unavailable";
   offline_cache_allowed: boolean;
 };
 
@@ -198,6 +218,96 @@ export type ChwPayoutObservationRow = {
   payout_tx_hash: string;
   paid_at: string;
   paging_token: string;
+  created_at: string;
+};
+
+export type ChwIdentityStatus =
+  "pending" | "active" | "suspended" | "rotating" | "recovering" | "offboarded";
+
+export type ChwIdentityRow = {
+  chw_id: string;
+  stellar_address: string;
+  status: ChwIdentityStatus;
+  credential_expires_at: string | null;
+  proof_challenge: string;
+  proof_signature: string;
+  bound_at: string | null;
+  status_updated_at: string;
+  status_updated_by: string | null;
+  recovery_nonce: string;
+  created_at: string;
+};
+
+export type AttestationContractEpochRow = {
+  id: string;
+  network_passphrase_hash: string;
+  contract_id: string;
+  contract_version: string;
+  schema_version: number;
+  minimum_finality_depth: number;
+  active: boolean;
+  starts_at: string;
+  ends_at: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type VerificationSubmissionRow = {
+  id: string;
+  request_id: string;
+  revision_id: string;
+  chw_id: string;
+  stellar_address: string;
+  contract_epoch_id: string;
+  idempotency_key: string;
+  intent_hash: string;
+  intent_payload: Record<string, unknown>;
+  intent_signature: string;
+  intent_expires_at: string;
+  submitted_at: string;
+  status: "submitted" | "confirming" | "accepted" | "rejected" | "superseded";
+  rejection_code: string | null;
+};
+
+export type PayoutObligationRow = {
+  id: string;
+  submission_id: string;
+  recipient_chw_id: string;
+  recipient_stellar_address: string;
+  amount: number;
+  amount_version: string;
+  asset_code: string;
+  asset_issuer: string;
+  sponsor_pool_address: string;
+  status: "pending" | "settled" | "quarantined" | "adjusted" | "reversed";
+  manual_review_reason: string | null;
+  created_at: string;
+  settled_at: string | null;
+  settlement_tx_hash: string | null;
+};
+
+export type VerificationTrustEventRow = {
+  id: string;
+  submission_id: string;
+  revision_id: string;
+  decision:
+    | "unverified"
+    | "submitted"
+    | "confirming"
+    | "verified"
+    | "expired"
+    | "revoked"
+    | "superseded"
+    | "conflicted"
+    | "unavailable";
+  transaction_hash: string | null;
+  ledger_sequence: number | null;
+  ledger_hash: string | null;
+  event_position: number | null;
+  observed_at: string;
+  finalized_at: string | null;
+  finality_depth: number | null;
+  evidence: Record<string, unknown>;
   created_at: string;
 };
 
@@ -319,6 +429,65 @@ export type Database = {
         Update: Partial<ChwPayoutObservationRow>;
         Relationships: [];
       };
+      chw_identities: {
+        Row: ChwIdentityRow;
+        Insert: Pick<
+          ChwIdentityRow,
+          | "chw_id"
+          | "stellar_address"
+          | "proof_challenge"
+          | "proof_signature"
+          | "recovery_nonce"
+        > &
+          Partial<ChwIdentityRow>;
+        Update: Partial<Omit<ChwIdentityRow, "chw_id">>;
+        Relationships: [];
+      };
+      attestation_contract_epochs: {
+        Row: AttestationContractEpochRow;
+        Insert: Pick<
+          AttestationContractEpochRow,
+          | "network_passphrase_hash"
+          | "contract_id"
+          | "contract_version"
+          | "schema_version"
+          | "minimum_finality_depth"
+        > &
+          Partial<AttestationContractEpochRow>;
+        Update: Partial<Omit<AttestationContractEpochRow, "id">>;
+        Relationships: [];
+      };
+      verification_submissions: {
+        Row: VerificationSubmissionRow;
+        Insert: Omit<VerificationSubmissionRow, "id" | "submitted_at"> & {
+          id?: string;
+          submitted_at?: string;
+        };
+        Update: Partial<Omit<VerificationSubmissionRow, "id">>;
+        Relationships: [];
+      };
+      payout_obligations: {
+        Row: PayoutObligationRow;
+        Insert: Omit<PayoutObligationRow, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<Omit<PayoutObligationRow, "id">>;
+        Relationships: [];
+      };
+      verification_trust_events: {
+        Row: VerificationTrustEventRow;
+        Insert: Omit<
+          VerificationTrustEventRow,
+          "id" | "observed_at" | "created_at"
+        > & {
+          id?: string;
+          observed_at?: string;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -386,6 +555,62 @@ export type Database = {
           p_paging_token: string;
         };
         Returns: string;
+      };
+      claim_verification_request: {
+        Args: { p_chw_id: string; p_lease_seconds?: number };
+        Returns: {
+          request_id: string;
+          revision_id: string;
+          record_hash: string;
+          lease_token: string;
+          lease_expires_at: string;
+        }[];
+      };
+      renew_verification_lease: {
+        Args: {
+          p_request_id: string;
+          p_chw_id: string;
+          p_lease_token: string;
+          p_lease_seconds?: number;
+        };
+        Returns: string;
+      };
+      release_verification_lease: {
+        Args: { p_request_id: string; p_chw_id: string; p_lease_token: string };
+        Returns: undefined;
+      };
+      record_verification_submission: {
+        Args: {
+          p_request_id: string;
+          p_chw_id: string;
+          p_lease_token: string;
+          p_contract_epoch_id: string;
+          p_idempotency_key: string;
+          p_intent_hash: string;
+          p_intent_payload: Record<string, unknown>;
+          p_intent_signature: string;
+          p_intent_expires_at: string;
+        };
+        Returns: VerificationSubmissionRow;
+      };
+      finalize_verification_trust: {
+        Args: {
+          p_submission_id: string;
+          p_decision: string;
+          p_transaction_hash: string | null;
+          p_ledger_sequence: number | null;
+          p_ledger_hash: string | null;
+          p_event_position: number | null;
+          p_finality_depth: number | null;
+          p_finalized_at: string | null;
+          p_evidence: Record<string, unknown>;
+          p_amount: number;
+          p_amount_version: string;
+          p_asset_code: string;
+          p_asset_issuer: string;
+          p_sponsor_pool_address: string;
+        };
+        Returns: VerificationTrustEventRow;
       };
     };
     Enums: {

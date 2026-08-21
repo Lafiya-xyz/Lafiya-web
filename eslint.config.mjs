@@ -17,6 +17,9 @@ const eslintConfig = defineConfig([
     // and ES-module syntax that the Next TypeScript lint rules shouldn't
     // analyse. They are exercised by their own unit tests instead.
     "public/**",
+    // Supabase CLI runtime bundles are generated under this directory when a
+    // local stack is started; they are not project source.
+    "supabase/.temp/**",
   ]),
 ]);
 

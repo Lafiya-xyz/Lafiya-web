@@ -3,8 +3,6 @@ import { notFound } from "next/navigation";
 
 import { logError } from "@/lib/logging/logger";
 import { createClient } from "@/lib/supabase/server";
-import { validateAttestation } from "@/lib/stellar/attestation";
-
 import { VerifiedBadge, type VerificationStatus } from "./verified-badge";
 
 // Caching strategy: this page is ISR with a short TTL rather than
@@ -60,20 +58,9 @@ export default async function PublicCardPage({
 
   const card = data[0];
 
-  let status: VerificationStatus;
-  if (!card.commitment) {
-    status = "unavailable";
-  } else
-    try {
-      status = (await validateAttestation(card.commitment))
-        ? "verified"
-        : "not_verified";
-    } catch (err) {
-      logError("Failed to retrieve attestation from Stellar", err, {
-        route: "/card/[id]",
-      });
-      status = "unavailable";
-    }
+  // `get_emergency_card` returns the latest finality-aware decision for this
+  // exact revision. A legacy row with no evidence degrades to unavailable.
+  const status: VerificationStatus = card.trust_status ?? "unavailable";
 
   return (
     <>

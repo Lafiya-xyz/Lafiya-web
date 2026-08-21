@@ -23,11 +23,9 @@ import { serverEnv } from "@/lib/env-server";
  * signing, but still executes the contract and returns the on-chain
  * `Attestation` for the given record hash.
  *
- * When `ATTESTATION_CONTRACT_ID` is unset (local dev, CI, or pre-deploy), the
- * function falls back to the in-memory mock below so the verified indicator,
- * the public card page, and the attestation Route Handler all keep working
- * without a contract. This fallback is intentional and documented; flip it off
- * by setting `ATTESTATION_CONTRACT_ID` in the environment.
+ * The in-memory fixture can run only when `ATTESTATION_MOCK_MODE=true` (tests
+ * default this explicitly). A missing contract is an unavailable verification
+ * service, never a convincing production verification.
  *
  * --- Caching (Issue #17) ---
  * Attestations change rarely relative to how often a card is viewed, and each
@@ -231,9 +229,12 @@ async function fetchAttestationUncached(
   recordHash: string,
 ): Promise<Attestation | null> {
   return attestationBreaker.execute(async () => {
-    // Local-dev / pre-deploy fallback: no contract configured yet.
+    // Fixture mode is explicit and production configuration rejects it.
     if (!serverEnv.ATTESTATION_CONTRACT_ID) {
-      return MOCK_ATTESTATIONS.get(recordHash) ?? null;
+      if (serverEnv.ATTESTATION_MOCK_MODE === "true") {
+        return MOCK_ATTESTATIONS.get(recordHash) ?? null;
+      }
+      throw new Error("ATTESTATION_CONTRACT_NOT_CONFIGURED");
     }
 
     return withTimeout(async () => {
@@ -350,7 +351,9 @@ export async function getAttestation(
  * see issues/issue-03-record-hash-commitment-scheme.md's note on this
  * cross-cutting concern.
  */
-export async function validateAttestation(recordHash: string): Promise<boolean> {
+export async function validateAttestation(
+  recordHash: string,
+): Promise<boolean> {
   const att = await getAttestation(recordHash);
   if (!att) return false;
   const now = Math.floor(Date.now() / 1000);
@@ -371,7 +374,10 @@ export async function validateAttestation(recordHash: string): Promise<boolean> 
  *
  * Exported for testing.
  */
-export function decodeAttestation(value: unknown, recordHash: string): Attestation | null {
+export function decodeAttestation(
+  value: unknown,
+  recordHash: string,
+): Attestation | null {
   if (typeof value !== "object" || value === null) {
     return null;
   }
@@ -406,7 +412,10 @@ function extractAddress(value: unknown): string | null {
   if (typeof value === "string") {
     return value;
   }
-  if (value && typeof (value as { toString?: () => string }).toString === "function") {
+  if (
+    value &&
+    typeof (value as { toString?: () => string }).toString === "function"
+  ) {
     const str = String(value);
     if (str.startsWith("G") || str.startsWith("C")) {
       return str;
