@@ -7,8 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { logError } from "@/lib/logging/logger";
-
-const CURRENT_POLICY_VERSION = "ndpa-2023-v1";
+import { CURRENT_POLICY_VERSION } from "@/lib/consent";
 
 const signUpSchema = z.object({
   email: z.email("Enter a valid email address"),
@@ -82,4 +81,3 @@ export async function signUp(
 
   redirect("/profile");
 }
-
