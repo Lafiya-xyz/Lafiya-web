@@ -1,0 +1,31 @@
+{
+  "$schema": "./record-canonicalization-v1.schema.json",
+  "contract": "lafiya.record-commitment",
+  "version": 1,
+  "vectors": [
+    {
+      "name": "normalizes ordering, whitespace, unicode, and Nigerian phone",
+      "secretHex": "1111111111111111111111111111111111111111111111111111111111111111",
+      "input": {
+        "name": "  Amina   Yusuf ",
+        "date_of_birth": "1998-04-03",
+        "photo_url": "https://example.invalid/avatar.jpg",
+        "language": " Hausa ",
+        "blood_group": "O+",
+        "genotype": "AS",
+        "allergies": ["Penicillin", " Latex ", "Penicillin"],
+        "medications": ["Insulin"],
+        "chronic_conditions": ["Asthma"],
+        "emergency_contacts": [
+          {
+            "name": " Halima Yusuf ",
+            "phone": "0801 234 5678",
+            "relationship": " Mother "
+          }
+        ]
+      },
+      "canonical": "{\"schemaVersion\":1,\"name\":\"Amina Yusuf\",\"bloodGroup\":\"O+\",\"genotype\":\"AS\",\"allergies\":[\"Latex\",\"Penicillin\"],\"medications\":[\"Insulin\"],\"chronicConditions\":[\"Asthma\"],\"emergencyContacts\":[{\"name\":\"Halima Yusuf\",\"phone\":\"+2348012345678\",\"relationship\":\"Mother\"}],\"language\":\"Hausa\"}",
+      "commitment": "f7b383d4567cbfb5a8dbfa3d498764ed969651cec12276fbedde4dcaff4313b9"
+    }
+  ]
+}

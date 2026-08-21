@@ -23,6 +23,11 @@ const EXPECTED_KEYS = [
   "chronic_conditions",
   "emergency_contacts",
   "language",
+  "disclosure_states",
+  "revision_id",
+  "schema_version",
+  "commitment",
+  "offline_cache_allowed",
 ].sort();
 
 describe("get_emergency_card RPC", () => {
@@ -59,6 +64,13 @@ describe("get_emergency_card RPC", () => {
       throw error ?? new Error("Failed to seed test profile");
     }
     cardPublicId = data.card_public_id;
+    const { error: consentError } = await user.client.rpc("record_consent", {
+      p_purpose: "emergency_public_disclosure",
+      p_purpose_version: 1,
+      p_action: "acknowledged",
+      p_idempotency_key: crypto.randomUUID(),
+    });
+    if (consentError) throw consentError;
   });
 
   afterAll(async () => {

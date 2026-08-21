@@ -40,7 +40,9 @@ export async function getSecretByCardPublicId(
 }
 
 /** Looks up a patient's secret directly by user id — used by the authenticated profile page, which already has the caller's own user id. */
-export async function getSecretByUserId(userId: string): Promise<string | null> {
+export async function getSecretByUserId(
+  userId: string,
+): Promise<string | null> {
   const admin = createAdminClient();
 
   const { data, error } = await admin
@@ -65,7 +67,7 @@ export async function getSecretByUserId(userId: string): Promise<string | null> 
  * otherwise handles explicitly and deliberately, not incidentally via
  * secret rotation).
  */
-export async function ensureRecordSecret(userId: string): Promise<void> {
+export async function ensureRecordSecret(userId: string): Promise<string> {
   const admin = createAdminClient();
 
   const secret = randomBytes(32).toString("hex");
@@ -80,4 +82,10 @@ export async function ensureRecordSecret(userId: string): Promise<void> {
   if (error) {
     throw error;
   }
+
+  const persisted = await getSecretByUserId(userId);
+  if (!persisted) {
+    throw new Error("RECORD_SECRET_UNAVAILABLE");
+  }
+  return persisted;
 }

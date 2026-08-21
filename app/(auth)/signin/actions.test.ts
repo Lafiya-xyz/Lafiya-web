@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { signIn } from "./actions";
 import { clearAllRateLimits } from "@/lib/rate-limit";
-import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 
 // Mock functions hoisted before module imports are processed
@@ -63,9 +62,7 @@ vi.mock("@/lib/supabase/admin", () => {
               maybeSingle: async () => {
                 const record = store.get(key);
                 return {
-                  data: record
-                    ? { blocked_until: record.blocked_until }
-                    : null,
+                  data: record ? { blocked_until: record.blocked_until } : null,
                   error: null,
                 };
               },
@@ -120,7 +117,10 @@ describe("signIn server action rate limiting", () => {
   });
 
   it("handles successful sign-in, resets attempts, and redirects", async () => {
-    mockSignInWithPassword.mockResolvedValue({ data: { user: {} }, error: null });
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: {} },
+      error: null,
+    });
 
     const formData = new FormData();
     formData.append("email", "patient@lafiya.com");
@@ -134,7 +134,10 @@ describe("signIn server action rate limiting", () => {
   });
 
   it("handles failed sign-in by returning incorrect email/password error", async () => {
-    mockSignInWithPassword.mockResolvedValue({ data: null, error: new Error("Invalid credentials") });
+    mockSignInWithPassword.mockResolvedValue({
+      data: null,
+      error: new Error("Invalid credentials"),
+    });
 
     const formData = new FormData();
     formData.append("email", "patient@lafiya.com");
@@ -148,7 +151,10 @@ describe("signIn server action rate limiting", () => {
   });
 
   it("locks out sign-ins after 5 consecutive failed attempts on same email + IP", async () => {
-    mockSignInWithPassword.mockResolvedValue({ data: null, error: new Error("Invalid credentials") });
+    mockSignInWithPassword.mockResolvedValue({
+      data: null,
+      error: new Error("Invalid credentials"),
+    });
 
     const formData = new FormData();
     formData.append("email", "patient@lafiya.com");
@@ -169,12 +175,17 @@ describe("signIn server action rate limiting", () => {
     // 6th attempt: blocked immediately before reaching Supabase
     vi.clearAllMocks();
     const res6 = await signIn(undefined, formData);
-    expect(res6.error).toContain("Too many failed sign-in attempts. Please try again in 30 seconds.");
+    expect(res6.error).toContain(
+      "Too many failed sign-in attempts. Please try again in 30 seconds.",
+    );
     expect(mockSignInWithPassword).not.toHaveBeenCalled();
   });
 
   it("keys rate limit by email and IP address combination", async () => {
-    mockSignInWithPassword.mockResolvedValue({ data: null, error: new Error("Invalid credentials") });
+    mockSignInWithPassword.mockResolvedValue({
+      data: null,
+      error: new Error("Invalid credentials"),
+    });
 
     // Lockout patient@lafiya.com from IP 192.168.1.1
     mockHeaders.mockResolvedValue({
@@ -183,7 +194,7 @@ describe("signIn server action rate limiting", () => {
         return null;
       },
     });
-    
+
     const formData1 = new FormData();
     formData1.append("email", "patient@lafiya.com");
     formData1.append("password", "wrong-password");
@@ -203,7 +214,7 @@ describe("signIn server action rate limiting", () => {
         return null;
       },
     });
-    
+
     const allowedRes = await signIn(undefined, formData1);
     expect(allowedRes).toEqual({ error: "Incorrect email or password." });
 
@@ -214,17 +225,20 @@ describe("signIn server action rate limiting", () => {
         return null;
       },
     });
-    
+
     const formData2 = new FormData();
     formData2.append("email", "other@lafiya.com");
     formData2.append("password", "wrong-password");
-    
+
     const allowedEmailRes = await signIn(undefined, formData2);
     expect(allowedEmailRes).toEqual({ error: "Incorrect email or password." });
   });
 
   it("trims and lowercases email to prevent casing and trailing whitespace bypasses", async () => {
-    mockSignInWithPassword.mockResolvedValue({ data: null, error: new Error("Invalid credentials") });
+    mockSignInWithPassword.mockResolvedValue({
+      data: null,
+      error: new Error("Invalid credentials"),
+    });
 
     // Failed attempts with different casings and whitespace
     const emails = [
@@ -246,7 +260,7 @@ describe("signIn server action rate limiting", () => {
     const formData6 = new FormData();
     formData6.append("email", "patient@lafiya.com");
     formData6.append("password", "wrong-password");
-    
+
     vi.clearAllMocks();
     const res = await signIn(undefined, formData6);
     expect(res.error).toContain("Too many failed sign-in attempts.");

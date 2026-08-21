@@ -11,8 +11,6 @@ import {
   getClientIp,
 } from "@/lib/rate-limit";
 
-import { logError } from "@/lib/logging/logger";
-
 const signInSchema = z.object({
   email: z.email("Enter a valid email address"),
   password: z.string().min(1, "Password is required"),
@@ -80,4 +78,3 @@ export async function signIn(
   await recordSuccess(rateLimitKey);
   redirect("/profile");
 }
-

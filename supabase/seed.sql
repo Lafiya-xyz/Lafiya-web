@@ -61,3 +61,7 @@ values (
   '[{"name": "Halima Yusuf", "phone": "+2348012345678", "relationship": "Mother"}]'::jsonb,
   'Hausa'
 );
+
+insert into public.consent_events(user_id,purpose,purpose_version,action,idempotency_key)
+select '00000000-0000-0000-0000-000000000001', purpose, 1, 'acknowledged', gen_random_uuid()
+from (values ('emergency_public_disclosure'), ('offline_caching')) purposes(purpose);
