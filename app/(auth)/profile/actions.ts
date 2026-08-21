@@ -6,6 +6,11 @@ import { createHash } from "node:crypto";
 
 import { deleteAccountAndData } from "@/lib/account/deleteAccount";
 import { ensureRecordSecret } from "@/lib/attestation/recordSecret";
+import {
+  createRawCapability,
+  digestCapability,
+  EMERGENCY_FIELD_ALLOWLIST,
+} from "@/lib/emergency/capability";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { ProfileRow } from "@/lib/supabase/types";
@@ -18,6 +23,7 @@ import {
 } from "@/lib/records/canonicalization";
 
 import { logError } from "@/lib/logging/logger";
+import { getBaseUrl } from "@/lib/url/getBaseUrl";
 
 export interface ProfileFormState {
   error?: string;
@@ -25,6 +31,57 @@ export interface ProfileFormState {
   success?: boolean;
   code?: "STALE_REVISION" | "AUTH_REQUIRED" | "VALIDATION" | "DATABASE";
   currentRevisionId?: string;
+}
+
+export type CapabilityShareState = {
+  error?: string;
+  capabilityUrl?: string;
+  expiresAt?: string;
+};
+
+/**
+ * Issues an emergency capability once and returns the raw value only to the
+ * authenticated patient. The database receives its SHA-256 digest, never a
+ * usable QR/link value. A 180-day emergency lifetime is the migration policy;
+ * patients can issue a replacement before it expires.
+ */
+export async function createEmergencyCapability(
+  _previous: CapabilityShareState | undefined,
+  _formData: FormData,
+): Promise<CapabilityShareState> {
+  void _previous;
+  void _formData;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You must be signed in." };
+
+  const rawCapability = createRawCapability();
+  // Stay below the database's 180-day hard ceiling to tolerate small
+  // application/database clock differences without weakening the policy.
+  const expiresAt = new Date(
+    Date.now() + 179 * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const { error } = await supabase.rpc("create_emergency_capability", {
+    p_token_digest: digestCapability(rawCapability),
+    p_purpose: "emergency",
+    p_field_allowlist: EMERGENCY_FIELD_ALLOWLIST,
+    p_expires_at: expiresAt,
+    p_max_views: null,
+  });
+  if (error) {
+    logError("Failed to issue emergency capability", error, {
+      route: "/profile (action: createEmergencyCapability)",
+    });
+    return { error: "Could not create a new emergency QR. Please try again." };
+  }
+
+  revalidatePath("/profile");
+  return {
+    capabilityUrl: `${await getBaseUrl()}/card/c/${rawCapability}`,
+    expiresAt,
+  };
 }
 
 // --- Data export (Issue #12) ---
@@ -183,6 +240,11 @@ export async function regenerateCardId(
     return { error: "You must be signed in." };
   }
 
+  const { data: current } = await supabase
+    .from("profiles")
+    .select("card_public_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
   const newId = crypto.randomUUID();
 
   const { error } = await supabase
@@ -195,6 +257,9 @@ export async function regenerateCardId(
   }
 
   revalidatePath("/profile");
+  if (current?.card_public_id)
+    revalidatePath(`/card/${current.card_public_id}`);
+  revalidatePath(`/card/${newId}`);
   return {};
 }
 

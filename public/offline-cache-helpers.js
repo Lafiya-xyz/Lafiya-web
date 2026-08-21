@@ -140,7 +140,10 @@ export function readEntryMeta(headers) {
  * the last-accessed/size bookkeeping fields, preserving whatever headers
  * (Content-Type etc.) the source response already had.
  */
-export function withEntryMetaHeaders(sourceHeaders, { cachedAt, lastAccessed, size }) {
+export function withEntryMetaHeaders(
+  sourceHeaders,
+  { cachedAt, lastAccessed, size },
+) {
   const headers = new Headers(sourceHeaders);
   headers.set(CACHED_AT_HEADER, cachedAt);
   headers.set(LAST_ACCESSED_HEADER, String(lastAccessed));
@@ -264,7 +267,9 @@ export async function enforceCacheBudget({
     protectedKeys,
   });
 
-  const victims = candidates.filter((entry) => plan.toEvict.includes(entry.keyUrl));
+  const victims = candidates.filter((entry) =>
+    plan.toEvict.includes(entry.keyUrl),
+  );
   const evicted = [];
   for (const victim of victims) {
     await cache.delete(victim.key);
@@ -458,4 +463,187 @@ export function buildOfflineNavigationResponse({ cachedHtml, cachedAt, now = Dat
   }
   const banner = buildFreshnessBannerHtml(cachedAt, state);
   return { html: injectBanner(cachedHtml, banner), fromCache: true, freshness: state };
+}
+
+// ---------------------------------------------------------------------------
+// Versioned offline envelope protocol (Epic #174)
+// ---------------------------------------------------------------------------
+
+export const OFFLINE_ENVELOPE_VERSION = 1;
+export const OFFLINE_MAX_AGE_MS = 72 * 60 * 60 * 1000;
+const OFFLINE_SOURCE_ID = "lafiya-offline-envelope-source";
+
+function canonicalEnvelopePayload(value) {
+  return JSON.stringify(value);
+}
+
+async function sha256(value) {
+  if (!globalThis.crypto?.subtle) return null;
+  const bytes = new TextEncoder().encode(value);
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+function extractSourceHtml(html) {
+  if (typeof html !== "string" || html.length > 128 * 1024) return null;
+  const match = new RegExp(
+    `<script[^>]*id=["']${OFFLINE_SOURCE_ID}["'][^>]*>([\\s\\S]*?)<\\/script>`,
+    "i",
+  ).exec(html);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+function validProjection(projection) {
+  const validString = (value, max = 200) =>
+    value === null || (typeof value === "string" && value.length <= max);
+  const validList = (value) =>
+    value === null ||
+    (Array.isArray(value) &&
+      value.length <= 20 &&
+      value.every((item) => typeof item === "string" && item.length <= 200));
+  const validContacts =
+    projection?.emergencyContacts === null ||
+    (Array.isArray(projection?.emergencyContacts) &&
+      projection.emergencyContacts.length <= 3 &&
+      projection.emergencyContacts.every(
+        (contact) =>
+          contact &&
+          typeof contact === "object" &&
+          validString(contact.name) &&
+          validString(contact.phone, 32) &&
+          validString(contact.relationship),
+      ));
+  return (
+    projection &&
+    typeof projection === "object" &&
+    !Array.isArray(projection) &&
+    validString(projection.name) &&
+    validString(projection.bloodGroup, 8) &&
+    validString(projection.genotype, 8) &&
+    validString(projection.language) &&
+    (projection.age === null || Number.isInteger(projection.age)) &&
+    validList(projection.allergies) &&
+    validList(projection.medications) &&
+    validList(projection.chronicConditions) &&
+    validContacts
+  );
+}
+
+/** Extract and integrity-protect the server-rendered source; null denies cache admission. */
+export async function createOfflineEnvelope(html, cachedAt) {
+  const source = extractSourceHtml(html);
+  if (
+    !source ||
+    source.version !== OFFLINE_ENVELOPE_VERSION ||
+    source.offlineAllowed !== true ||
+    !validProjection(source.projection) ||
+    typeof source.authorizationExpiresAt !== "string" ||
+    typeof source.recordUpdatedAt !== "string" ||
+    !source.trust ||
+    typeof source.trust !== "object" ||
+    typeof source.trust.state !== "string" ||
+    (source.trust.updatedAt !== null &&
+      typeof source.trust.updatedAt !== "string")
+  ) {
+    return null;
+  }
+  const payload = {
+    version: OFFLINE_ENVELOPE_VERSION,
+    authorizationKind:
+      source.authorizationKind === "capability" ? "capability" : "legacy",
+    authorizationExpiresAt: source.authorizationExpiresAt,
+    recordUpdatedAt: source.recordUpdatedAt,
+    trust: {
+      state: source.trust.state,
+      updatedAt: source.trust.updatedAt ?? null,
+    },
+    projection: source.projection,
+    cachedAt,
+  };
+  const integrity = await sha256(canonicalEnvelopePayload(payload));
+  if (!integrity) return null;
+  return { ...payload, integrity };
+}
+
+export async function validateOfflineEnvelope(envelope, nowIso) {
+  if (
+    !envelope ||
+    typeof envelope !== "object" ||
+    envelope.version !== OFFLINE_ENVELOPE_VERSION ||
+    typeof envelope.integrity !== "string" ||
+    !validProjection(envelope.projection)
+  ) {
+    return { valid: false, reason: "corrupted" };
+  }
+  const { integrity, ...payload } = envelope;
+  const expected = await sha256(canonicalEnvelopePayload(payload));
+  if (!expected || expected !== integrity)
+    return { valid: false, reason: "corrupted" };
+  const now = new Date(nowIso).getTime();
+  const cachedAt = new Date(envelope.cachedAt).getTime();
+  const authorizationExpiry = new Date(
+    envelope.authorizationExpiresAt,
+  ).getTime();
+  if (
+    !Number.isFinite(now) ||
+    !Number.isFinite(cachedAt) ||
+    !Number.isFinite(authorizationExpiry)
+  ) {
+    return { valid: false, reason: "corrupted" };
+  }
+  if (now - cachedAt > OFFLINE_MAX_AGE_MS || now >= authorizationExpiry) {
+    return { valid: false, reason: "expired" };
+  }
+  return { valid: true, reason: null };
+}
+
+export function offlineEnvelopeResponse(envelope) {
+  return new Response(JSON.stringify(envelope), {
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+  });
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function displayList(value) {
+  if (value === null) return "Withheld by patient";
+  return value.length ? value.map(escapeHtml).join(", ") : "None recorded";
+}
+
+function displayTime(value) {
+  const time = new Date(value);
+  return Number.isNaN(time.getTime()) ? "Unavailable" : time.toLocaleString();
+}
+
+/** Deliberately simple, self-contained, unhydrated offline presentation. */
+export function renderOfflineEnvelope(envelope, reason = null) {
+  if (!envelope) {
+    const expired = reason === "expired";
+    return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lafiya — offline</title><body style="font:16px/1.5 system-ui;margin:0;background:#0b1020;color:#f8fafc"><main style="max-width:42rem;margin:auto;padding:2rem 1.25rem"><h1>${expired ? "Cached card needs reconnection" : "No safe cached card available"}</h1><p>${expired ? "This cached emergency card is older than Lafiya’s safety window or its authorization has expired. Reconnect to check current access and record information." : "This card has not been safely cached on this device, or its saved data was corrupted. Reconnect to retrieve it."}</p></main></body></html>`;
+  }
+  const p = envelope.projection;
+  const contacts =
+    p.emergencyContacts === null
+      ? "Withheld by patient"
+      : p.emergencyContacts
+          .map(
+            (contact) =>
+              `<li><strong>${escapeHtml(contact.name ?? "Emergency contact")}</strong> — ${escapeHtml(contact.relationship ?? "")}: ${escapeHtml(contact.phone ?? "Unavailable")}</li>`,
+          )
+          .join("") || "None recorded";
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lafiya — cached emergency card</title><body style="font:16px/1.5 system-ui;margin:0;background:#fff;color:#18181b"><aside role="alert" style="padding:1rem;background:#fef3c7;color:#78350f;border-bottom:1px solid #d97706"><strong>Cached emergency information.</strong> Cached on ${escapeHtml(displayTime(envelope.cachedAt))}. Current authorization and revocation cannot be checked offline. Record updated: ${escapeHtml(displayTime(envelope.recordUpdatedAt))}. Verification evidence last observed: ${escapeHtml(displayTime(envelope.trust.updatedAt))}.</aside><main style="max-width:42rem;margin:auto;padding:1.5rem"><h1>${escapeHtml(p.name ?? "Name withheld")}</h1>${p.age === null ? "" : `<p>${escapeHtml(p.age)} years old</p>`}<h2>Critical emergency information</h2><dl><dt>Blood group</dt><dd>${escapeHtml(p.bloodGroup ?? "Withheld")}</dd><dt>Genotype</dt><dd>${escapeHtml(p.genotype ?? "Withheld")}</dd></dl><h2>Allergies</h2><p>${displayList(p.allergies)}</p><h2>Current medications</h2><p>${displayList(p.medications)}</p><h2>Chronic conditions / implants</h2><p>${displayList(p.chronicConditions)}</p><h2>Emergency contacts</h2><ul>${contacts}</ul>${p.language ? `<h2>Language spoken</h2><p>${escapeHtml(p.language)}</p>` : ""}<p style="font-size:.875rem;color:#52525b">Not a medical device. Not a substitute for professional medical judgment.</p></main></body></html>`;
 }

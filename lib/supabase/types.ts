@@ -51,6 +51,35 @@ export type ProfileRow = {
   updated_at: string;
   current_revision_id: string | null;
   disclosure_policy: DisclosurePolicy;
+  legacy_card_sunset_at: string;
+};
+
+export type EmergencyCapabilityPurpose = "emergency" | "temporary";
+
+export type EmergencyCapabilityRow = {
+  id: string;
+  user_id: string;
+  token_digest: string;
+  purpose: EmergencyCapabilityPurpose;
+  field_allowlist: Record<string, boolean>;
+  issued_at: string;
+  expires_at: string;
+  max_views: number | null;
+  used_views: number;
+  revoked_at: string | null;
+  rotated_from_id: string | null;
+  replaced_by_id: string | null;
+  last_resolved_at: string | null;
+  created_at: string;
+};
+
+export type CardAccessEventRow = {
+  id: string;
+  user_id: string;
+  capability_id: string | null;
+  access_kind: "legacy" | "capability";
+  outcome: "served" | "inactive";
+  observed_at: string;
 };
 
 export type DisclosurePolicy = {
@@ -294,6 +323,13 @@ export type EmergencyCardRow = {
   offline_cache_allowed: boolean;
   trust_state: TrustDecisionRow["state"];
   trust_updated_at: string | null;
+  record_updated_at: string;
+  authorization_expires_at: string;
+};
+
+export type CapabilityEmergencyCardRow = EmergencyCardRow & {
+  access_state: "active" | "inactive";
+  capability_id: string | null;
 };
 
 /** Row shape of public.consent_logs. */
@@ -435,6 +471,30 @@ export type Database = {
           id?: string;
           occurred_at?: string;
         };
+        Update: never;
+        Relationships: [];
+      };
+      emergency_capabilities: {
+        Row: EmergencyCapabilityRow;
+        Insert: Pick<
+          EmergencyCapabilityRow,
+          | "user_id"
+          | "token_digest"
+          | "purpose"
+          | "field_allowlist"
+          | "expires_at"
+        > &
+          Partial<EmergencyCapabilityRow>;
+        Update: never;
+        Relationships: [];
+      };
+      card_access_events: {
+        Row: CardAccessEventRow;
+        Insert: Pick<
+          CardAccessEventRow,
+          "user_id" | "access_kind" | "outcome"
+        > &
+          Partial<CardAccessEventRow>;
         Update: never;
         Relationships: [];
       };
@@ -588,6 +648,43 @@ export type Database = {
       get_emergency_card: {
         Args: { p_card_id: string };
         Returns: EmergencyCardRow[];
+      };
+      consume_emergency_capability: {
+        Args: { p_token_digest: string };
+        Returns: CapabilityEmergencyCardRow[];
+      };
+      create_emergency_capability: {
+        Args: {
+          p_token_digest: string;
+          p_purpose: EmergencyCapabilityPurpose;
+          p_field_allowlist: Record<string, boolean>;
+          p_expires_at: string;
+          p_max_views?: number | null;
+        };
+        Returns: EmergencyCapabilityRow;
+      };
+      revoke_emergency_capability: {
+        Args: { p_capability_id: string };
+        Returns: undefined;
+      };
+      record_card_access_event: {
+        Args: {
+          p_capability_id: string;
+          p_access_kind: "legacy" | "capability";
+          p_outcome: "served" | "inactive";
+        };
+        Returns: undefined;
+      };
+      record_legacy_card_access_event: {
+        Args: { p_card_id: string };
+        Returns: undefined;
+      };
+      get_my_card_access_summary: {
+        Args: Record<string, never>;
+        Returns: {
+          views_last_30_days: number;
+          last_viewed_at: string | null;
+        }[];
       };
       save_record_revision: {
         Args: {

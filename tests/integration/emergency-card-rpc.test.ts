@@ -28,6 +28,8 @@ const EXPECTED_KEYS = [
   "offline_cache_allowed",
   "trust_state",
   "trust_updated_at",
+  "record_updated_at",
+  "authorization_expires_at",
 ].sort();
 
 describe("get_emergency_card RPC", () => {
