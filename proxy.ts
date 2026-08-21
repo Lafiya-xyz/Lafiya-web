@@ -38,6 +38,20 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
+  const isPublicCard = pathname === "/card" || pathname.startsWith("/card/");
+
+  if (isPublicCard) {
+    // The URL is a bearer capability (legacy UUID or current capability). It
+    // must never be sent as a referrer, placed in a shared CDN cache, indexed,
+    // or allowed to trigger third-party network requests from the card page.
+    response.headers.set("Referrer-Policy", "no-referrer");
+    response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+    response.headers.set("Cache-Control", "private, no-store, max-age=0");
+    response.headers.set(
+      "Content-Security-Policy",
+      "default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; connect-src 'self'; img-src 'self' data: blob: https://*.supabase.co http://127.0.0.1:54321; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'",
+    );
+  }
   const isProtected = PROTECTED_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );

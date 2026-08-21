@@ -67,6 +67,7 @@ const INTENTIONALLY_PRIVATE = [
   "last_verified_at",
   "current_revision_id",
   "disclosure_policy",
+  "legacy_card_sunset_at",
 ] as const satisfies readonly (keyof ProfileRow)[];
 
 const ALL_CLASSIFIED_COLUMNS = [
@@ -120,6 +121,8 @@ describe("profiles column contract (get_emergency_card leak guard)", () => {
       | "offline_cache_allowed"
       | "trust_state"
       | "trust_updated_at"
+      | "record_updated_at"
+      | "authorization_expires_at"
     >();
   });
 });

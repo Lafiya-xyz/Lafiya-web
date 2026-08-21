@@ -9,6 +9,8 @@ import { getBaseUrl } from "@/lib/url/getBaseUrl";
 
 import { SignOutButton } from "../signout/sign-out-button";
 import { AttestationStatusBanner } from "./attestation-status-banner";
+import { AccessSummary } from "./access-summary";
+import { CapabilitySharePanel } from "./capability-share-panel";
 import { DeleteAccountButton } from "./delete-account-button";
 import { ProfileForm } from "./profile-form";
 import { PrivacyControls } from "./privacy-controls";
@@ -111,6 +113,9 @@ export default async function ProfilePage() {
     .select("*")
     .eq("user_id", user.id)
     .order("occurred_at", { ascending: false });
+  const { data: accessSummary } = await supabase.rpc(
+    "get_my_card_access_summary",
+  );
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-6 py-16">
@@ -129,8 +134,16 @@ export default async function ProfilePage() {
       {profile ? (
         <QrCardDisplay
           cardUrl={`${await getBaseUrl()}/card/${profile.card_public_id}`}
+          legacySunsetAt={profile.legacy_card_sunset_at}
         />
       ) : null}
+
+      {profile ? <CapabilitySharePanel /> : null}
+
+      <AccessSummary
+        viewsLast30Days={accessSummary?.[0]?.views_last_30_days ?? 0}
+        lastViewedAt={accessSummary?.[0]?.last_viewed_at ?? null}
+      />
 
       {stale ? (
         <AttestationStatusBanner pendingRequestExists={pendingRequestExists} />

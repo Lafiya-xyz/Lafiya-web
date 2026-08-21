@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 type UnavailableStateProps = {
   reset: () => void;
@@ -35,13 +35,6 @@ export default function CardError({
   error: Error & { digest?: string };
   reset: () => void;
 }): ReactNode {
-  useEffect(() => {
-    console.error("[PublicCardPage] route error boundary caught", {
-      message: error.message,
-      digest: error.digest,
-    });
-  }, [error]);
-
   if (error.message === "UNAVAILABLE") {
     return <UnavailableState reset={reset} />;
   }

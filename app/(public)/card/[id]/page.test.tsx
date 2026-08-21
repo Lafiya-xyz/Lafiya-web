@@ -10,8 +10,10 @@ vi.mock("next/navigation", () => ({
     throw new Error("NEXT_NOT_FOUND");
   },
 }));
+vi.mock("next/server", () => ({ after: vi.fn() }));
 
 import { createClient } from "@/lib/supabase/server";
+import { after } from "next/server";
 import PublicCardPage from "./page";
 
 const VALID_ID = "11111111-1111-1111-1111-111111111111";
@@ -32,6 +34,8 @@ const fixtureCard = {
   offline_cache_allowed: true,
   trust_state: "unverified",
   trust_updated_at: null,
+  record_updated_at: "2026-08-21T12:00:00.000Z",
+  authorization_expires_at: "2026-12-31T12:00:00.000Z",
 };
 
 function mockRpc(result: { data: unknown; error: unknown }) {
@@ -63,6 +67,18 @@ describe("PublicCardPage", () => {
     // Never leaks internal identifiers, only the emergency subset.
     expect(screen.queryByText(/user_id/i)).not.toBeInTheDocument();
     expect(screen.queryByText(VALID_ID)).not.toBeInTheDocument();
+  });
+
+  it("schedules access accountability after rendering instead of awaiting it", async () => {
+    mockRpc({ data: [fixtureCard], error: null });
+
+    await expect(
+      PublicCardPage({ params: Promise.resolve({ id: VALID_ID }) }),
+    ).resolves.toBeDefined();
+
+    // The callback is intentionally deferred. If its database write fails or
+    // hangs, it cannot delay the emergency response rendered above.
+    expect(after).toHaveBeenCalledWith(expect.any(Function));
   });
 
   it("passes axe-core accessibility audit", async () => {

@@ -43,6 +43,15 @@ describe("Structured Logging & Redaction", () => {
       ).toBe("user [REDACTED_ID] commitment [REDACTED_HASH]");
     });
 
+    it("redacts emergency capabilities, including when embedded in a URL", () => {
+      const capability = `lafiya_e1_${"A".repeat(43)}`;
+      const result = redactString(
+        `https://lafiya.example/card/c/${capability}`,
+      );
+      expect(result).not.toContain(capability);
+      expect(result).toContain("[REDACTED_CAPABILITY]");
+    });
+
     it("should leave other strings intact", () => {
       const input = "Database connection failed.";
       expect(redactString(input)).toBe(input);
