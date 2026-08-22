@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { serverEnv } from "@/lib/env-server";
+import { getRuntimeConfig } from "@/lib/runtime-config";
 import { PayoutIndexer } from "@/lib/stellar/payout-indexer/indexer";
 import {
   HorizonPayoutSource,
@@ -12,6 +13,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function configured() {
+  if (!getRuntimeConfig().payoutIndexer.enabled) {
+    return null;
+  }
   const {
     ATTESTATION_CONTRACT_ID,
     CHW_INCENTIVE_POOL_ADDRESS,

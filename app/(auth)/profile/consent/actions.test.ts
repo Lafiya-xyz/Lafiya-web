@@ -18,16 +18,6 @@ import { getConsentHistory, acknowledgeCurrentPolicy } from "./actions";
 const USER_A = { id: "user-a", email: "a@example.com" };
 const USER_B = { id: "user-b", email: "b@example.com" };
 
-function selectChain(result: { data: unknown; error: unknown }) {
-  return {
-    select: vi.fn(() => ({
-      eq: vi.fn(() => ({
-        order: vi.fn(() => result),
-      })),
-    })),
-  };
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
 });

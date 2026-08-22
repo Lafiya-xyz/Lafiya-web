@@ -3,13 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
+  "engines": {
+    "node": "24.14.0",
+    "npm": "11.9.0"
+  },
+  "packageManager": "npm@11.9.0",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "check:client-bundles": "node scripts/check-client-bundles.js",
     "postbuild": "npm run check:client-bundles",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -18,7 +23,11 @@
     "test:integration": "vitest run -c vitest.integration.config.ts",
     "test:e2e": "playwright test",
     "bundle:check": "node scripts/check-bundle-size.mjs",
-    "migration:lint": "node scripts/lint-migrations.mjs"
+    "migration:lint": "node scripts/lint-migrations.mjs",
+    "ci:check-action-pins": "node scripts/check-action-pins.mjs",
+    "ci:check-clean-worktree": "node scripts/check-clean-worktree.mjs",
+    "sbom": "node scripts/generate-sbom.mjs",
+    "release:verify-gate": "node scripts/verify-release-gate.mjs"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.70.0",
@@ -54,5 +63,15 @@
     "typescript": "^5",
     "vitest": "^4.1.10",
     "vitest-axe": "^0.1.0"
+  },
+  "optionalDependencies": {
+    "@rolldown/binding-darwin-arm64": "1.1.5",
+    "@rolldown/binding-darwin-x64": "1.1.5",
+    "@rolldown/binding-linux-arm64-gnu": "1.1.5",
+    "@rolldown/binding-linux-arm64-musl": "1.1.5",
+    "@rolldown/binding-linux-x64-gnu": "1.1.5",
+    "@rolldown/binding-linux-x64-musl": "1.1.5",
+    "@rolldown/binding-win32-arm64-msvc": "1.1.5",
+    "@rolldown/binding-win32-x64-msvc": "1.1.5"
   }
 }

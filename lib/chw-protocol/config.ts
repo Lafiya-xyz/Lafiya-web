@@ -9,7 +9,10 @@ const deploymentSchema = z.enum([
   "test",
   "ci",
   "preview",
+  "staging",
+  "pilot",
   "production",
+  "mainnet",
 ]);
 const modeSchema = z.enum(["mock", "live"]);
 
@@ -49,16 +52,18 @@ export function getProtocolRuntimeConfig(
   const intentSigningKey = env.CHW_PROTOCOL_INTENT_SIGNING_KEY;
   const epochId = env.CHW_PROTOCOL_EPOCH_ID;
 
-  if (deployment === "production" && attestationMode !== "live") {
+  const isProduction = deployment === "production" || deployment === "mainnet";
+
+  if (isProduction && attestationMode !== "live") {
     throw new ProtocolError("UNSUPPORTED_EPOCH", "PRODUCTION_MOCK_FORBIDDEN");
   }
-  if (deployment === "production" && (!intentSigningKey || !epochId)) {
+  if (isProduction && (!intentSigningKey || !epochId)) {
     throw new ProtocolError(
       "UNSUPPORTED_EPOCH",
       "PRODUCTION_PROTOCOL_CONFIG_INCOMPLETE",
     );
   }
-  if (deployment === "production" && attestationMode === "live" && !intentSigningKey) {
+  if (isProduction && attestationMode === "live" && !intentSigningKey) {
     throw new ProtocolError("UNSUPPORTED_EPOCH", "INTENT_SIGNING_KEY_REQUIRED");
   }
   return { deployment, attestationMode, intentSigningKey, epochId };

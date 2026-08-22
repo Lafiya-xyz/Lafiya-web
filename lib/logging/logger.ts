@@ -47,6 +47,15 @@ export const SENSITIVE_KEYS = new Set([
   "cardpublicid",
   "commitment",
   "authorization",
+  "cookie",
+  "set-cookie",
+  "x-api-key",
+  "xapikey",
+  "api_key",
+  "access_token",
+  "refresh_token",
+  "service_role_key",
+  "secret",
   "token",
   "capability",
 ]);
@@ -56,6 +65,12 @@ const UUID_REGEX =
   /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi;
 const HASH_REGEX = /\b[0-9a-f]{64}\b/gi;
 const CAPABILITY_REGEX = /\blafiya_e1_[A-Za-z0-9_-]{43}\b/g;
+const BEARER_TOKEN_REGEX = /\bBearer\s+[^\s,;]+/gi;
+const JWT_REGEX = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g;
+const STELLAR_SECRET_REGEX = /\bS[A-Z2-7]{55}\b/g;
+const PHONE_REGEX = /(?<![A-Za-z0-9])\+?[1-9]\d{7,14}(?![A-Za-z0-9])/g;
+const DATE_OF_BIRTH_REGEX =
+  /\b(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\b/g;
 
 /** Redacts any raw email addresses found in strings. */
 export function redactString(val: string): string {
@@ -63,7 +78,12 @@ export function redactString(val: string): string {
     .replace(EMAIL_REGEX, "[REDACTED_EMAIL]")
     .replace(UUID_REGEX, "[REDACTED_ID]")
     .replace(HASH_REGEX, "[REDACTED_HASH]")
-    .replace(CAPABILITY_REGEX, "[REDACTED_CAPABILITY]");
+    .replace(CAPABILITY_REGEX, "[REDACTED_CAPABILITY]")
+    .replace(BEARER_TOKEN_REGEX, "[REDACTED_BEARER]")
+    .replace(JWT_REGEX, "[REDACTED_JWT]")
+    .replace(STELLAR_SECRET_REGEX, "[REDACTED_STELLAR_SECRET]")
+    .replace(PHONE_REGEX, "[REDACTED_PHONE]")
+    .replace(DATE_OF_BIRTH_REGEX, "[REDACTED_DATE]");
 }
 
 /** Recursively redacts sensitive keys and emails from any object/structure. */
