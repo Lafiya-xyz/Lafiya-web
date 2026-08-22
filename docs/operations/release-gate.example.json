@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "environment": "mainnet",
+  "buildRevision": "replace-with-immutable-commit",
+  "expiresAt": "2030-01-01T00:00:00.000Z",
+  "evidence": {
+    "ciRun": "https://github.com/Lafiya-xyz/Lafiya-web/actions/runs/replace",
+    "sbomProvenance": "https://github.com/Lafiya-xyz/Lafiya-web/attestations/replace",
+    "migrationRehearsal": "approved-private-evidence-reference",
+    "loadAndFaultExercise": "approved-private-evidence-reference",
+    "restoreDrill": "approved-private-evidence-reference",
+    "rotationExercise": "approved-private-evidence-reference",
+    "privacyCanary": "approved-private-evidence-reference",
+    "securityReview": "approved-private-evidence-reference",
+    "pilotRehearsal": "approved-private-evidence-reference"
+  },
+  "approvals": [
+    { "role": "release-owner", "approvedAt": "2030-01-01T00:00:00.000Z" },
+    {
+      "role": "independent-security-or-treasury-approver",
+      "approvedAt": "2030-01-01T00:00:00.000Z"
+    }
+  ]
+}

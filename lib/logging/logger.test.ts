@@ -52,6 +52,21 @@ describe("Structured Logging & Redaction", () => {
       expect(result).toContain("[REDACTED_CAPABILITY]");
     });
 
+    it("redacts credentials and patient-like values embedded in telemetry strings", () => {
+      const rawJwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJwYXRpZW50In0.signature";
+      const stellarSecret = `S${"A".repeat(55)}`;
+      const result = redactString(
+        `Bearer ${rawJwt}; dob 1992-01-31; phone +2348012345678; ${stellarSecret}`,
+      );
+
+      expect(result).toContain("[REDACTED_BEARER]");
+      expect(result).toContain("[REDACTED_DATE]");
+      expect(result).toContain("[REDACTED_PHONE]");
+      expect(result).toContain("[REDACTED_STELLAR_SECRET]");
+      expect(result).not.toContain(rawJwt);
+      expect(result).not.toContain(stellarSecret);
+    });
+
     it("should leave other strings intact", () => {
       const input = "Database connection failed.";
       expect(redactString(input)).toBe(input);
@@ -135,6 +150,22 @@ describe("Structured Logging & Redaction", () => {
         recordHash: "[REDACTED]",
         authorization: "[REDACTED]",
         safeKey: "safeValue",
+      });
+    });
+
+    it("redacts arbitrary credential keys before they reach a log sink", () => {
+      expect(
+        redactSensitiveData({
+          cookie: "session-value",
+          xApiKey: "api-key",
+          refresh_token: "refresh-token",
+          safe: "ok",
+        }),
+      ).toEqual({
+        cookie: "[REDACTED]",
+        xApiKey: "[REDACTED]",
+        refresh_token: "[REDACTED]",
+        safe: "ok",
       });
     });
 

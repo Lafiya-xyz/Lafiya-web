@@ -23,8 +23,8 @@ jobs:
     name: Lint, typecheck, unit tests, build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: npm
@@ -32,8 +32,10 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run migration:lint
+      - run: npm run ci:check-action-pins
       - run: npm test
       - run: npm run build
+      - run: npm run ci:check-clean-worktree
       - name: Verify no client bundle leaks
         run: node scripts/check-client-bundles.js
 
@@ -56,13 +58,13 @@ jobs:
       STELLAR_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
       SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: npm
       - run: npm ci
-      - uses: supabase/setup-cli@v3
+      - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3
       - run: supabase start
       - run: npm run test:integration
       - run: supabase stop
@@ -78,14 +80,16 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
       STELLAR_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
       SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
+      LAFIYA_DEPLOYMENT_ENV: ci
+      ATTESTATION_MODE: mock
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: npm
       - run: npm ci
-      - uses: supabase/setup-cli@v3
+      - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3
       - run: supabase start
       - run: supabase db reset
       - run: npm run build
@@ -106,20 +110,22 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
       STELLAR_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
       SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
+      LAFIYA_DEPLOYMENT_ENV: ci
+      ATTESTATION_MODE: mock
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: npm
       - run: npm ci
-      - uses: supabase/setup-cli@v3
+      - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3
       - run: supabase start
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
       - run: supabase stop
         if: always()
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: failure()
         with:
           name: playwright-report

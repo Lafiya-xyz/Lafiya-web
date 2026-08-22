@@ -32,6 +32,8 @@ env:
   SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
   STELLAR_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
   SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
+  LAFIYA_DEPLOYMENT_ENV: ci
+  ATTESTATION_MODE: mock
 
 jobs:
   load-test:
@@ -41,10 +43,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: npm
@@ -53,7 +55,7 @@ jobs:
         run: npm ci
 
       - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v3
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3
 
       - name: Start local Supabase
         run: supabase start
@@ -113,7 +115,6 @@ jobs:
           echo "Smoke test: GET /card/$CARD_ID → HTTP $STATUS"
           if [ "$STATUS" != "200" ]; then
             echo "::error::Smoke test failed — expected 200, got $STATUS"
-            curl -s "http://localhost:3000/card/$CARD_ID" | head -50
             exit 1
           fi
 
@@ -150,12 +151,11 @@ jobs:
 
       - name: Upload results artifact
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: loadtest-results
           path: |
             loadtest/summary.json
-            loadtest/results.json
           retention-days: 30
 
       - name: Stop Next.js server

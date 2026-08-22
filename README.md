@@ -86,6 +86,7 @@ graph TB
 - **app/(auth)/profile**: authenticated profile editor where a patient manages their private record
 - **lib/supabase/**: Supabase client/server helpers and hand-authored types for the off-chain encrypted store
 - **lib/stellar/**: Soroban attestation lookup — `getAttestation(recordHash)` calls the deployed `lafiya-contracts` registry over RPC in live mode. Mock attestations require an explicitly non-production deployment identity and cannot boot in production.
+- **lib/runtime-config.ts**: fail-closed server configuration boundary. It validates deployment identity, network/contract pairing, feature-group completeness, build/schema compatibility, and production telemetry before traffic; `/api/internal/readiness` exposes only non-secret component state for platform probes.
 - **lib/qr/**: QR code generation for the emergency page
 
 ### Emergency access and offline support
@@ -254,6 +255,10 @@ npm run test:integration  # RLS + RPC tests against real local Postgres
 - [x] Service-worker offline helpers: banner injection + timestamp formatting are unit-tested (`tests/unit/offline-cache-helpers.test.ts`); end-to-end offline behaviour is covered by the manual protocol below
 
 Run `npm run lint && npm run typecheck && npm run build` for the same checks CI runs on every push/PR (see `.github/workflows/ci.yml`).
+
+For the production/mainnet toolchain, configuration matrix, readiness contract,
+SLOs, release evidence, migration/recovery rehearsals, and operator controls,
+see [Production and mainnet assurance](docs/operations/mainnet-assurance.md).
 
 ### Offline support — manual test protocol
 

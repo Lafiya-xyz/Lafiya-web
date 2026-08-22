@@ -1,0 +1,29 @@
+name: Mainnet release gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      evidence_path:
+        description: "Repository path to the approved, non-sensitive release evidence JSON"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify-gate:
+    # Configure the mainnet Environment in GitHub with required reviewers who
+    # do not have deploy credentials. This is the separation-of-duties control.
+    environment: mainnet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: node scripts/verify-release-gate.mjs "${{ inputs.evidence_path }}"
+      # A deployment step is intentionally absent until operators configure the
+      # protected environment, managed credentials, and approved promotion target.

@@ -15,7 +15,6 @@ import { DeleteAccountButton } from "./delete-account-button";
 import { ProfileForm } from "./profile-form";
 import { PrivacyControls } from "./privacy-controls";
 import { QrCardDisplay } from "./qr-card-display";
-import ConsentHistory from "./consent-history";
 
 /**
  * Detects "profile edited since last attestation" and opportunistically

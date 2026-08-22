@@ -11,8 +11,7 @@ vi.hoisted(() => {
   process.env.SOROBAN_RPC_URL = "https://soroban-testnet.stellar.org";
   process.env.ATTESTATION_MODE = "live";
   // A configured contract id flips getAttestation into the real-RPC path.
-  process.env.ATTESTATION_CONTRACT_ID =
-    "C1111111111111111111111111111111111111111111111111111111111111111";
+  process.env.ATTESTATION_CONTRACT_ID = `C${"A".repeat(55)}`;
 });
 
 // getAttestation wraps its lookup in next/cache's unstable_cache, which

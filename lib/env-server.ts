@@ -1,19 +1,12 @@
 import "server-only";
-import { z } from "zod";
-import { clientEnvSchema } from "./env";
+import { getRuntimeConfig, serverEnvSchema } from "./runtime-config";
 
-export const serverEnvSchema = clientEnvSchema.extend({
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
-  STELLAR_NETWORK_PASSPHRASE: z.string().min(1),
-  SOROBAN_RPC_URL: z.url(),
-  ATTESTATION_CONTRACT_ID: z.string().optional(),
-  STELLAR_HORIZON_URL: z.url().optional(),
-  STELLAR_USDC_ISSUER: z.string().optional(),
-  CHW_INCENTIVE_POOL_ADDRESS: z.string().optional(),
-  PAYOUT_INDEXER_START_LEDGER: z.coerce.number().int().positive().optional(),
-  PAYOUT_INDEXER_START_PAYMENT_CURSOR: z.string().optional(),
-  PAYOUT_INDEXER_CRON_SECRET: z.string().min(16).optional(),
-});
+export { serverEnvSchema } from "./runtime-config";
+
+// Startup validation is intentionally evaluated with the server-only module.
+// `instrumentation.ts` validates it before traffic; this protects routes and
+// scripts that load before instrumentation is available as well.
+getRuntimeConfig();
 
 export const serverEnv = serverEnvSchema.parse({
   NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -22,6 +15,7 @@ export const serverEnv = serverEnvSchema.parse({
   STELLAR_NETWORK_PASSPHRASE: process.env.STELLAR_NETWORK_PASSPHRASE,
   SOROBAN_RPC_URL: process.env.SOROBAN_RPC_URL,
   ATTESTATION_CONTRACT_ID: process.env.ATTESTATION_CONTRACT_ID,
+  ATTESTATION_CACHE_TTL_SECONDS: process.env.ATTESTATION_CACHE_TTL_SECONDS,
   STELLAR_HORIZON_URL: process.env.STELLAR_HORIZON_URL,
   STELLAR_USDC_ISSUER: process.env.STELLAR_USDC_ISSUER,
   CHW_INCENTIVE_POOL_ADDRESS: process.env.CHW_INCENTIVE_POOL_ADDRESS,
@@ -29,4 +23,15 @@ export const serverEnv = serverEnvSchema.parse({
   PAYOUT_INDEXER_START_PAYMENT_CURSOR:
     process.env.PAYOUT_INDEXER_START_PAYMENT_CURSOR,
   PAYOUT_INDEXER_CRON_SECRET: process.env.PAYOUT_INDEXER_CRON_SECRET,
+  PAYOUT_INDEXER_ENABLED: process.env.PAYOUT_INDEXER_ENABLED,
+  STELLAR_USDC_ASSET_CODE: process.env.STELLAR_USDC_ASSET_CODE,
+  LAFIYA_DEPLOYMENT_ENV: process.env.LAFIYA_DEPLOYMENT_ENV,
+  ATTESTATION_MODE: process.env.ATTESTATION_MODE,
+  CHW_PROTOCOL_EPOCH_ID: process.env.CHW_PROTOCOL_EPOCH_ID,
+  CHW_PROTOCOL_INTENT_SIGNING_KEY: process.env.CHW_PROTOCOL_INTENT_SIGNING_KEY,
+  SENTRY_ENABLED: process.env.SENTRY_ENABLED,
+  NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
+  SENTRY_DSN: process.env.SENTRY_DSN,
+  LAFIYA_BUILD_REVISION: process.env.LAFIYA_BUILD_REVISION,
+  LAFIYA_SCHEMA_COMPATIBILITY: process.env.LAFIYA_SCHEMA_COMPATIBILITY,
 });
