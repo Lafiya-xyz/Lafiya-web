@@ -31,7 +31,7 @@
   },
   "dependencies": {
     "@sentry/nextjs": "^10.70.0",
-    "@stellar/stellar-sdk": "^16.2.0",
+    "@stellar/stellar-sdk": "^17.0.0",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.112.2",
     "libphonenumber-js": "^1.13.11",
@@ -65,13 +65,13 @@
     "vitest-axe": "^0.1.0"
   },
   "optionalDependencies": {
-    "@rolldown/binding-darwin-arm64": "1.1.5",
-    "@rolldown/binding-darwin-x64": "1.1.5",
-    "@rolldown/binding-linux-arm64-gnu": "1.1.5",
-    "@rolldown/binding-linux-arm64-musl": "1.1.5",
-    "@rolldown/binding-linux-x64-gnu": "1.1.5",
-    "@rolldown/binding-linux-x64-musl": "1.1.5",
-    "@rolldown/binding-win32-arm64-msvc": "1.1.5",
-    "@rolldown/binding-win32-x64-msvc": "1.1.5"
+    "@rolldown/binding-darwin-arm64": "1.2.5",
+    "@rolldown/binding-darwin-x64": "1.2.5",
+    "@rolldown/binding-linux-arm64-gnu": "1.2.5",
+    "@rolldown/binding-linux-arm64-musl": "1.2.5",
+    "@rolldown/binding-linux-x64-gnu": "1.2.5",
+    "@rolldown/binding-linux-x64-musl": "1.2.5",
+    "@rolldown/binding-win32-arm64-msvc": "1.2.5",
+    "@rolldown/binding-win32-x64-msvc": "1.2.5"
   }
 }
