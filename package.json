@@ -33,7 +33,7 @@
     "@sentry/nextjs": "^10.70.0",
     "@stellar/stellar-sdk": "^16.2.0",
     "@supabase/ssr": "^0.12.3",
-    "@supabase/supabase-js": "^2.112.2",
+    "@supabase/supabase-js": "^2.112.3",
     "libphonenumber-js": "^1.13.11",
     "next": "16.3.0",
     "qrcode": "^1.5.4",
