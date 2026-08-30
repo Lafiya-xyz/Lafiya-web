@@ -190,9 +190,13 @@ export function EmergencyCardContent({
         {card.language ? (
           <CardField label="Language spoken" value={card.language} />
         ) : null}
-        <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-500">
-          Not a medical device. Not a substitute for professional medical
-          judgment.
+        <p
+          role="note"
+          className="mt-4 text-xs text-zinc-500 dark:text-zinc-500"
+        >
+          Lafiya is pre-alpha software on the Stellar testnet, not yet
+          audited, and not a medical device. Not a substitute for
+          professional medical judgment.
         </p>
       </main>
       <OfflineEnvelopeSource
