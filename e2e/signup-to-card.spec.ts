@@ -124,3 +124,73 @@ test.describe("Golden path: signup → profile edit → QR scan → public card"
     await visitorContext.close();
   });
 });
+
+test.describe("Fresh signup: profile onboarding empty state", () => {
+  const email = `e2e-onboarding-${Date.now()}@example.com`;
+  const password = "e2e-test-password-123456";
+
+  test.afterAll(async () => {
+    await cleanupTestUser(email);
+  });
+
+  test("a genuinely fresh user (no profile row yet) sees a sensible empty/onboarding state on /profile, not an error", async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+
+    const consoleErrors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error") {
+        consoleErrors.push(msg.text());
+      }
+    });
+    page.on("pageerror", (err) => {
+      consoleErrors.push(err.message);
+    });
+
+    // --- 1. Sign up, same as the golden-path flow ---
+    await page.goto("/signup");
+    await page.fill("#email", email);
+    await page.fill("#password", password);
+    await page.check("#consent");
+    await page.click('button[type="submit"]');
+
+    const infoMessage = page.getByText(/check your email/i);
+    if (await infoMessage.isVisible({ timeout: 3000 }).catch(() => false)) {
+      const confirmationLink = await getConfirmationLinkFromInbucket(email);
+      expect(confirmationLink).not.toBeNull();
+      await page.goto(confirmationLink!);
+
+      await page.goto("/signin");
+      await page.fill("#email", email);
+      await page.fill("#password", password);
+      await page.click('button[type="submit"]');
+    }
+
+    // --- 2. Land on /profile before any profile row has ever been created ---
+    await page.waitForURL("**/profile", { timeout: 30_000 });
+
+    // The page must render a sensible "you haven't filled this in yet" state,
+    // not error out or show a blank layout. With no `profiles` row, the page
+    // falls back to the account email as the heading and an empty form —
+    // it must never crash trying to read fields off a null profile.
+    await expect(
+      page.getByRole("heading", { name: "Your Lafiya card" }),
+    ).toBeVisible();
+    await expect(page.getByText(email)).toBeVisible();
+
+    // The profile form itself must render, empty, ready for first-time input.
+    const nameInput = page.locator("#name");
+    await expect(nameInput).toBeVisible();
+    await expect(nameInput).toHaveValue("");
+
+    // Card sharing / QR / privacy controls only make sense once a profile
+    // exists — they must not render (and must not error trying to) before
+    // the user has saved anything.
+    await expect(page.locator("p.break-all")).toHaveCount(0);
+    await expect(page.getByText("Public emergency card")).toHaveCount(0);
+
+    // --- 3. No console or page errors while in this pre-profile state ---
+    expect(consoleErrors).toEqual([]);
+  });
+});
