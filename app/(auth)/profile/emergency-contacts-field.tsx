@@ -15,6 +15,10 @@ const EMPTY_CONTACT: EmergencyContact = {
  * Up to 3 emergency contacts. Submitted as a single JSON hidden input
  * (rather than indexed field names) so the server action can read the
  * whole structured list back with one formData.get() + JSON.parse.
+ *
+ * The limit is enforced both here (client-side, immediate feedback) and by
+ * the server-side Zod schema in lib/validation/profile.ts, so a crafted
+ * request that bypasses the UI cannot exceed the maximum either.
  */
 export function EmergencyContactsField({
   initialValues,
@@ -26,6 +30,8 @@ export function EmergencyContactsField({
   const [contacts, setContacts] = useState(
     initialValues.length > 0 ? initialValues : [EMPTY_CONTACT],
   );
+
+  const atLimit = contacts.length >= MAX_CONTACTS;
 
   function updateContact(
     index: number,
@@ -105,11 +111,21 @@ export function EmergencyContactsField({
       <button
         type="button"
         onClick={() => setContacts([...contacts, EMPTY_CONTACT])}
-        disabled={contacts.length >= MAX_CONTACTS}
+        disabled={atLimit}
+        aria-describedby={atLimit ? "contacts-limit-message" : undefined}
         className="mt-2 text-sm font-medium text-zinc-950 underline disabled:opacity-40 dark:text-zinc-50"
       >
         + Add contact
       </button>
+      {atLimit ? (
+        <p
+          id="contacts-limit-message"
+          className="mt-1 text-sm text-zinc-500 dark:text-zinc-400"
+        >
+          Maximum of {MAX_CONTACTS} emergency contacts reached. Remove one to
+          add another.
+        </p>
+      ) : null}
       {error ? (
         <p id="emergencyContacts-error" className="mt-1 text-sm text-red-600 dark:text-red-400">
           {error}

@@ -263,3 +263,106 @@ describe("account deletion destroys future preimage-search feasibility", () => {
     expect(found).toBeNull();
   });
 });
+
+/**
+ * #397: Account deletion must revoke all active capability shares as part of
+ * the same atomic operation. A previously-shared link must not keep resolving
+ * to the deleted profile's data.
+ */
+describe("account deletion revokes all active capability shares", () => {
+  let user: TestUser;
+  let tokenDigest: string;
+
+  const allowlist = {
+    name: true,
+    age: true,
+    photo_url: true,
+    blood_group: true,
+    genotype: true,
+    allergies: true,
+    medications: true,
+    chronic_conditions: true,
+    emergency_contacts: true,
+    language: true,
+  };
+
+  beforeAll(async () => {
+    user = await createTestUser();
+
+    // Create a profile for the test user.
+    const { error: profileError } = await user.client.from("profiles").insert({
+      user_id: user.id,
+      name: "Capability Revoke Test",
+      blood_group: "B+",
+      genotype: "AA",
+      allergies: [],
+      medications: [],
+      chronic_conditions: [],
+      emergency_contacts: [],
+    });
+    if (profileError) throw profileError;
+
+    // Patient must have emergency_public_disclosure consent for a capability
+    // to resolve patient data.
+    const { error: consentError } = await user.client.rpc("record_consent", {
+      p_purpose: "emergency_public_disclosure",
+      p_purpose_version: 1,
+      p_action: "acknowledged",
+      p_idempotency_key: crypto.randomUUID(),
+    });
+    if (consentError) throw consentError;
+
+    // Issue an emergency capability that would be valid for 179 days.
+    const { createHash, randomBytes } = await import("node:crypto");
+    const rawToken = randomBytes(32);
+    tokenDigest = createHash("sha256").update(rawToken).digest("hex");
+
+    const { error: capError } = await user.client.rpc(
+      "create_emergency_capability",
+      {
+        p_token_digest: tokenDigest,
+        p_purpose: "emergency",
+        p_field_allowlist: allowlist,
+        p_expires_at: new Date(
+          Date.now() + 179 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+        p_max_views: null,
+      },
+    );
+    if (capError) throw capError;
+  });
+
+  afterAll(async () => {
+    // Best-effort cleanup in case a test assertion failed before deletion.
+    await adminClient.auth.admin.deleteUser(user.id);
+  });
+
+  it("creates a valid capability, deletes the account, and confirms the token no longer resolves", async () => {
+    const anon = createClient<Database>(url, anonKey);
+
+    // 1. Confirm the capability resolves patient data before deletion.
+    const { data: beforeData, error: beforeError } = await anon.rpc(
+      "consume_emergency_capability",
+      { p_token_digest: tokenDigest },
+    );
+    expect(beforeError).toBeNull();
+    expect(beforeData![0]).toMatchObject({
+      access_state: "active",
+      name: "Capability Revoke Test",
+    });
+
+    // 2. Delete the account via the same function used by the server action.
+    await deleteAccountAndData(adminClient, user.id);
+
+    // 3. The previously-valid capability must no longer return patient data.
+    //    Whether the row was revoked or cascade-deleted, the outcome for a
+    //    caller must be "inactive" — never the deleted profile's fields.
+    const { data: afterData, error: afterError } = await anon.rpc(
+      "consume_emergency_capability",
+      { p_token_digest: tokenDigest },
+    );
+    expect(afterError).toBeNull();
+    expect(afterData![0]).toMatchObject({ access_state: "inactive" });
+    expect(afterData![0].name).toBeNull();
+  });
+});

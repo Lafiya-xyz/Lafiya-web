@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { generateQrDataUrl } from "./generateQrDataUrl";
+import { generateQrDataUrl, QrCapacityError } from "./generateQrDataUrl";
 
 describe("generateQrDataUrl", () => {
   it("returns a PNG data URL", async () => {
@@ -14,5 +14,31 @@ describe("generateQrDataUrl", () => {
     const a = await generateQrDataUrl("https://lafiya.example/card/aaaa");
     const b = await generateQrDataUrl("https://lafiya.example/card/bbbb");
     expect(a).not.toBe(b);
+  });
+
+  it("throws QrCapacityError for an oversized input — never silently producing a broken QR", async () => {
+    // QR codes with error-correction level Q top out at 1,273 characters
+    // for alphanumeric and less for binary (UTF-8) data. A 4 KB URL is
+    // comfortably past any symbol capacity.
+    const oversizedUrl = "https://lafiya.example/card/" + "a".repeat(4000);
+
+    await expect(generateQrDataUrl(oversizedUrl)).rejects.toThrow(
+      QrCapacityError,
+    );
+    await expect(generateQrDataUrl(oversizedUrl)).rejects.toThrow(
+      /too long to encode as a QR code/,
+    );
+  });
+
+  it("QrCapacityError is a catchable, named error type", async () => {
+    const oversizedUrl = "https://lafiya.example/card/" + "b".repeat(4000);
+    let caught: unknown;
+    try {
+      await generateQrDataUrl(oversizedUrl);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(QrCapacityError);
+    expect((caught as QrCapacityError).name).toBe("QrCapacityError");
   });
 });

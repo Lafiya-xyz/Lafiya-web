@@ -154,3 +154,109 @@ describe("runtime configuration matrix", () => {
     );
   });
 });
+
+describe("runtime configuration — additional negative test cases", () => {
+  // #396: verify every value consumed from runtime-config is validated at
+  // load time, mirroring the standard set by lib/env.ts / lib/env-server.ts.
+
+  it("rejects a malformed URL for NEXT_PUBLIC_SUPABASE_URL", () => {
+    expect(() =>
+      getRuntimeConfig(
+        baseEnv({ NEXT_PUBLIC_SUPABASE_URL: "not-a-valid-url" }),
+      ),
+    ).toThrow("MALFORMED_VALUE");
+  });
+
+  it("rejects a malformed URL for SOROBAN_RPC_URL", () => {
+    expect(() =>
+      getRuntimeConfig(baseEnv({ SOROBAN_RPC_URL: "not-a-url" })),
+    ).toThrow("MALFORMED_VALUE");
+  });
+
+  it("rejects an unknown ATTESTATION_MODE value", () => {
+    expect(() =>
+      getRuntimeConfig(baseEnv({ ATTESTATION_MODE: "unknown-mode" })),
+    ).toThrow("MALFORMED_VALUE");
+  });
+
+  it("rejects a mainnet passphrase in a non-production environment", () => {
+    // MAINNET_NETWORK_OUTSIDE_MAINNET — testnet environments must not use the
+    // mainnet passphrase, which would silently point real traffic at the wrong
+    // network.
+    expect(() =>
+      getRuntimeConfig(
+        baseEnv({
+          LAFIYA_DEPLOYMENT_ENV: "staging",
+          STELLAR_NETWORK_PASSPHRASE: MAINNET,
+          ATTESTATION_MODE: "live",
+          ATTESTATION_CONTRACT_ID: CONTRACT_ID,
+        }),
+      ),
+    ).toThrow("MAINNET_NETWORK_OUTSIDE_MAINNET");
+  });
+
+  it("rejects a mock attestation contract ID when ATTESTATION_MODE is mock", () => {
+    // MOCK_ATTESTATION_CONTRACT_FORBIDDEN — a contract ID in mock mode is a
+    // configuration mistake: it implies live lookups but won't perform them.
+    expect(() =>
+      getRuntimeConfig(
+        baseEnv({
+          LAFIYA_DEPLOYMENT_ENV: "staging",
+          ATTESTATION_MODE: "mock",
+          ATTESTATION_CONTRACT_ID: CONTRACT_ID,
+        }),
+      ),
+    ).toThrow("MOCK_ATTESTATION_CONTRACT_FORBIDDEN");
+  });
+
+  it("rejects Sentry DSN configuration when SENTRY_ENABLED is false", () => {
+    // SENTRY_DISABLED_WITH_CONFIGURATION — a DSN present with Sentry disabled
+    // is a misconfiguration: the DSN would silently go unused, hiding an
+    // operator mistake.
+    expect(() =>
+      getRuntimeConfig(
+        baseEnv({
+          SENTRY_ENABLED: "false",
+          SENTRY_DSN: "https://public@example.ingest.sentry.io/1",
+        }),
+      ),
+    ).toThrow("SENTRY_DISABLED_WITH_CONFIGURATION");
+  });
+
+  it("rejects a missing required anon key (empty string is treated as absent)", () => {
+    expect(() =>
+      getRuntimeConfig(
+        baseEnv({ NEXT_PUBLIC_SUPABASE_ANON_KEY: "" }),
+      ),
+    ).toThrow("MALFORMED_VALUE");
+  });
+
+  it("rejects a missing required service role key", () => {
+    expect(() =>
+      getRuntimeConfig(
+        baseEnv({ SUPABASE_SERVICE_ROLE_KEY: "" }),
+      ),
+    ).toThrow("MALFORMED_VALUE");
+  });
+
+  it("rejects an ATTESTATION_CACHE_TTL_SECONDS value exceeding the allowed maximum", () => {
+    expect(() =>
+      getRuntimeConfig(
+        baseEnv({ ATTESTATION_CACHE_TTL_SECONDS: "9999" }),
+      ),
+    ).toThrow("MALFORMED_VALUE");
+  });
+
+  it("accepts a valid non-production configuration end-to-end", () => {
+    const config = getRuntimeConfig(
+      baseEnv({
+        LAFIYA_DEPLOYMENT_ENV: "staging",
+        ATTESTATION_MODE: "live",
+        ATTESTATION_CONTRACT_ID: CONTRACT_ID,
+      }),
+    );
+    expect(config.deployment).toBe("staging");
+    expect(config.isProduction).toBe(false);
+    expect(config.attestation.mode).toBe("live");
+  });
+});
