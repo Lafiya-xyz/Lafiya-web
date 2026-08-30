@@ -19,6 +19,44 @@ Endpoint: `GET /profile/export` (authenticated patients only)
 }
 \`\`\`
 
+## `profile` field set
+
+`profile` is populated from an explicit column list on `public.profiles`
+(see `exportMyProfileData` in `app/(auth)/profile/actions.ts`), never
+`select("*")`. This is deliberate: `profiles` also carries internal,
+non-patient-meaningful columns (for example `last_attested_hash`, an
+attestation-reconciliation value that the codebase explicitly never exposes
+to patients — see the comment on `ProfileRow` in `lib/supabase/types.ts` and
+`profiles-column-contract.test.ts`) that must never leak into a patient
+export just because they live on the same row.
+
+The exact, exhaustive key set of `profile` is:
+
+- `user_id`
+- `card_public_id`
+- `name`
+- `date_of_birth`
+- `photo_url`
+- `language`
+- `blood_group`
+- `genotype`
+- `allergies`
+- `medications`
+- `chronic_conditions`
+- `emergency_contacts`
+- `last_verified_at`
+- `created_at`
+- `updated_at`
+- `current_revision_id`
+- `disclosure_policy`
+- `legacy_card_sunset_at`
+
+No other key (in particular, no secret material from
+`lib/attestation/recordSecret.ts`'s `profile_secrets` table, which is never
+queried by the export path, and no `last_attested_hash`) may ever appear
+under `profile`. A regression test locks this key set down — see
+`app/(auth)/profile/export/route.test.ts`.
+
 ## Access control
 
 - The export is generated via a Supabase server-side client scoped to the

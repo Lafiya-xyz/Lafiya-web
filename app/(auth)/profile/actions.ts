@@ -133,9 +133,16 @@ export async function exportMyProfileData(): Promise<
     return { error: "Not authenticated" };
   }
 
+  // Explicit column list rather than `select("*")`: `last_attested_hash` is
+  // an internal reconciliation field that must never be exposed to the
+  // patient (see the ProfileRow comment in lib/supabase/types.ts and
+  // profiles-column-contract.test.ts) and `select("*")` would silently pick
+  // up any future internal/admin-only column added to `profiles`.
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("*")
+    .select(
+      "user_id,card_public_id,name,date_of_birth,photo_url,language,blood_group,genotype,allergies,medications,chronic_conditions,emergency_contacts,last_verified_at,created_at,updated_at,current_revision_id,disclosure_policy,legacy_card_sunset_at",
+    )
     .eq("user_id", user.id)
     .single();
 
