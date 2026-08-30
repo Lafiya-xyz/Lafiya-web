@@ -250,5 +250,56 @@ describe("Structured Logging & Redaction", () => {
       expect(parsed.context.action).toBe("signUp");
       expect(parsed.timestamp).toBeDefined();
     });
+
+    it("sanitizes attestation observability context", () => {
+      const recordHash = "a".repeat(64);
+      const cardId = "123e4567-e89b-42d3-a456-426614174000";
+
+      logInfo("Attestation lookup completed", {
+        routeClass: "attestation_lookup",
+        outcome: "verified",
+        latencyBucket: "under_100_ms",
+        recordHash,
+        cardId,
+        bloodGroup: "O+",
+      });
+
+      const loggedString = consoleLogSpy.mock.calls[0][0];
+      const parsed = JSON.parse(loggedString);
+      expect(parsed.context).toEqual({
+        routeClass: "attestation_lookup",
+        outcome: "verified",
+        latencyBucket: "under_100_ms",
+        recordHash: "[REDACTED]",
+        cardId: "[REDACTED]",
+        bloodGroup: "[REDACTED]",
+      });
+      expect(loggedString).not.toContain(recordHash);
+      expect(loggedString).not.toContain(cardId);
+      expect(loggedString).not.toContain("O+");
+    });
+
+    it("redacts attestation hashes from provider errors before telemetry", () => {
+      const recordHash = "b".repeat(64);
+
+      logError(
+        "Attestation lookup failed",
+        new Error(`provider failed for ${recordHash}`),
+        {
+          routeClass: "attestation_lookup",
+          outcome: "error",
+          latencyBucket: "100_to_499_ms",
+        },
+      );
+
+      const loggedString = consoleErrorSpy.mock.calls[0][0];
+      expect(loggedString).not.toContain(recordHash);
+      expect(loggedString).toContain("[REDACTED_HASH]");
+      expect(Sentry.captureException).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: "provider failed for [REDACTED_HASH]",
+        }),
+      );
+    });
   });
 });
