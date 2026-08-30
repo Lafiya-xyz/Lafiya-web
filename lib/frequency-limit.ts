@@ -37,10 +37,36 @@ export async function checkAndIncrementFrequency(
     throw error;
   }
 
-  return {
+  return sanitizeFrequencyLimitResult({
     allowed: data.allowed,
     count: data.count,
     retryAfterSeconds: data.retry_after_seconds,
+  });
+}
+
+/**
+ * A backward clock jump (NTP correction, DST fold, container clock skew) can
+ * make a window-based count look like it has already expired even though it
+ * hasn't, which would otherwise surface here as a nonsensical negative
+ * `retryAfterSeconds` or an `allowed: true` alongside a count at/over the
+ * cap. Treat any such inconsistency as "deny" rather than silently letting
+ * the caller through -- fail closed, not open.
+ */
+export function sanitizeFrequencyLimitResult(
+  result: FrequencyLimitResult,
+): FrequencyLimitResult {
+  const inconsistent =
+    result.retryAfterSeconds < 0 ||
+    (result.allowed === false && result.retryAfterSeconds === 0);
+
+  if (!inconsistent) {
+    return result;
+  }
+
+  return {
+    ...result,
+    allowed: false,
+    retryAfterSeconds: Math.max(result.retryAfterSeconds, 1),
   };
 }
 
