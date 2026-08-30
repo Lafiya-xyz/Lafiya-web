@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { useEffect, useState } from "react";
 
 import { BLOOD_GROUPS, GENOTYPES } from "@/lib/validation/profile";
 import type { ProfileRow } from "@/lib/supabase/types";
@@ -22,8 +23,25 @@ export function ProfileForm({
     undefined,
   );
 
+  const [isDirtyState, setIsDirtyState] = useState(false);
+
+  // isDirty is true when the form has been changed AND the last action did not succeed
+  const isDirty = isDirtyState && !state?.success;
+
+  // Warn on tab close / page reload when there are unsaved changes
+  useEffect(() => {
+    if (!isDirty) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [isDirty]);
+
   return (
-    <form action={formAction} className="flex flex-col gap-6">
+    <form action={formAction} onChange={() => setIsDirtyState(true)} data-dirty={isDirty ? "true" : undefined} className="flex flex-col gap-6">
       {profile ? (
         <input
           type="hidden"
