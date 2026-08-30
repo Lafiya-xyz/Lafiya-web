@@ -94,6 +94,51 @@ Always mention in your PR description if you have touched any of these contracts
 
 ---
 
+## Testing offline mode locally
+
+The service worker (`public/sw.js`, registered from `app/offline-register.tsx`)
+can't be exercised under jsdom/Vitest — it needs a real browser. If your
+change touches `app/offline-register.tsx`, `public/sw.js`, or
+`public/offline-cache-helpers.js`, verify it manually against a running
+build before opening a PR:
+
+1. **Build and run production mode.** Registration is skipped in
+   `next dev`, so use a production build:
+   ```bash
+   npm run build && npm start
+   ```
+2. **Warm the cache.** With DevTools open, visit a card you can authenticate
+   to and consent to offline caching, e.g.
+   `http://localhost:3000/card/11111111-1111-1111-1111-111111111111`
+   (seeded demo patient). Open DevTools ▸ **Application** tab ▸
+   **Service Workers** and confirm `sw.js` shows as `activated and running`.
+   Under **Cache Storage**, confirm `lafiya-emergency-envelopes-v1` now has
+   an entry for that card.
+3. **Clear state to start from a clean slate.** In DevTools ▸ Application ▸
+   **Storage**, click **Clear site data** if you need to re-test registration
+   or admission from scratch (do this between test runs so a stale envelope
+   from a previous change doesn't mask a regression).
+4. **Simulate offline mode.** In DevTools ▸ **Network** tab, change the
+   throttling dropdown from "No throttling" to **Offline**. Reload the card
+   page.
+   - **Expected:** the cached card still renders — name, blood group,
+     allergies, medications, and emergency contacts are all visible, with a
+     notice that authorization/revocation cannot be checked while offline
+     and separate timestamps for when the record was last updated and when
+     it was cached on this device.
+5. **Verify scope.** While still offline, navigate to a card id you have
+   never visited. Confirm you get a "No cached card available" message, not
+   a partial or guessed render.
+6. **Go back online** (reset the Network dropdown to "No throttling") and
+   reload — confirm the live card renders again and the cached envelope is
+   refreshed.
+
+This procedure was followed on a clean checkout to confirm it works before
+being documented here; see `docs/card-caching-strategy.md` for the caching
+contract these steps are verifying.
+
+---
+
 ## Pull Request Expectations & Checklist
 
 Every Pull Request must be verified before merging. Please ensure the following checklist is completed:
