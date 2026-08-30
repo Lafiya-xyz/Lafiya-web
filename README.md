@@ -163,6 +163,10 @@ Everything else (full history, documents, notes) stays private, behind authentic
 - **Nigeria Data Protection Act (2023)** governs all personal data held. Consent, encryption, and minimal disclosure are designed in from day one.
 - Patients opt into exactly what appears on their public page.
 - No health data on-chain; only non-reversible hashes and attestations.
+- For the exact per-field visibility classification (public-by-default,
+  private-by-default, or always private/never shown) verified against the
+  actual privacy-controls UI and public card query, see
+  [`docs/profile-field-visibility.md`](docs/profile-field-visibility.md).
 
 For the current threat model, access paths, and accepted tradeoffs across the public card, attestation lookup, avatars bucket, and authenticated profile editor, see the shared document in the separate docs repo: [lafiya-docs threat model](../lafiya-docs/threat-model.md).
 
