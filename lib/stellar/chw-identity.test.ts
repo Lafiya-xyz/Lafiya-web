@@ -62,6 +62,76 @@ describe("address ownership proof (enrollment binding)", () => {
   });
 });
 
+describe("address ownership proof — edge cases", () => {
+  const keypair = Keypair.fromRawEd25519Seed(Buffer.alloc(32, 1));
+  const userId = "00000000-0000-0000-0000-000000000001";
+  const nonce = "enroll-edge";
+  const challenge = createEnrollmentChallenge(userId, nonce);
+
+  it("throws on a malformed public key (not a valid StrKey)", () => {
+    expect(() =>
+      verifyAddressOwnership("not-a-valid-public-key", challenge, "00"),
+    ).toThrow();
+  });
+
+  it("throws on a malformed public key (truncated/invalid checksum)", () => {
+    const truncated = keypair.publicKey().slice(0, 10);
+    expect(() =>
+      verifyAddressOwnership(truncated, challenge, "00".repeat(64)),
+    ).toThrow();
+  });
+
+  it("throws on a public key that decodes as the wrong key type (e.g. a secret seed)", () => {
+    expect(() =>
+      verifyAddressOwnership(keypair.secret(), challenge, "00".repeat(64)),
+    ).toThrow();
+  });
+
+  it("rejects a not-yet-registered CHW identity: no on-chain binding exists yet, so any signature claiming that address must fail verification against a challenge the enrollment flow never issued for it", () => {
+    // A freshly-generated keypair with no enrollment record: nothing has ever
+    // signed a challenge for it, so a caller presenting an arbitrary
+    // signature must be rejected rather than accepted by coincidence.
+    const neverEnrolled = Keypair.fromRawEd25519Seed(Buffer.alloc(32, 99));
+    const bogusSignature = "00".repeat(64);
+    expect(
+      verifyAddressOwnership(
+        neverEnrolled.publicKey(),
+        challenge,
+        bogusSignature,
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a signature for an identity whose key material has been revoked/deactivated (simulated by verifying against a since-rotated/withdrawn challenge)", () => {
+    // Model revocation as the enrollment challenge being superseded: a CHW
+    // that was previously valid but has since been deactivated must not
+    // verify successfully against its original (now-revoked) binding once
+    // the challenge/nonce it was bound to has moved on.
+    const originalSignature = signAddressOwnership(
+      keypair.secret(),
+      challenge,
+    );
+    expect(
+      verifyAddressOwnership(keypair.publicKey(), challenge, originalSignature),
+    ).toBe(true);
+
+    const revokedChallenge = createEnrollmentChallenge(userId, "revoked-nonce");
+    expect(
+      verifyAddressOwnership(
+        keypair.publicKey(),
+        revokedChallenge,
+        originalSignature,
+      ),
+    ).toBe(false);
+  });
+
+  it("throws rather than silently verifying when the signature hex is malformed", () => {
+    expect(() =>
+      verifyAddressOwnership(keypair.publicKey(), challenge, "not-hex-zz"),
+    ).toThrow();
+  });
+});
+
 describe("buildAndSignAttestTransaction (custodial Phase 0 path)", () => {
   const signer = Keypair.fromRawEd25519Seed(Buffer.alloc(32, 3));
   // A valid (checksummed) Soroban contract id, generated from 32 raw bytes.
