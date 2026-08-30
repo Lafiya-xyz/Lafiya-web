@@ -6,6 +6,7 @@ import { BLOOD_GROUPS, GENOTYPES } from "@/lib/validation/profile";
 import type { ProfileRow } from "@/lib/supabase/types";
 
 import { upsertProfile } from "./actions";
+import { CriticalFieldsBanner } from "./critical-fields-banner";
 import { EmergencyContactsField } from "./emergency-contacts-field";
 import { PhotoUploadField } from "./photo-upload-field";
 import { TagListField } from "./tag-list-field";
@@ -60,6 +61,13 @@ export function ProfileForm({
           </p>
         </div>
       ) : null}
+
+      <CriticalFieldsBanner
+        bloodGroupMissing={
+          !profile?.blood_group || profile.blood_group === "unknown"
+        }
+        allergiesMissing={!profile?.allergies || profile.allergies.length === 0}
+      />
 
       <PhotoUploadField
         userId={userId}
