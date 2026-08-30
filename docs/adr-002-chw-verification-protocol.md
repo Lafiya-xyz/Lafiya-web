@@ -114,3 +114,7 @@ suspend new work but cannot sign as a CHW or redirect an obligation.
 5. Activate live protocol only after compatibility tests pass.
 
 Production rejects mock attestations and incomplete protocol configuration.
+
+## Consequences
+
+The multiple independent state machines (identity, request, intent, trust, obligation) mean no single provider response can advance more than one machine at a time. This prevents silent shortcuts (e.g., a successful provider call implying finality) but adds implementation surface. The at-least-once indexer requires idempotent event processing and a tested replay/rewind path. Break-glass and dual-control requirements mean no single operator can reroute a payout or sign as a CHW, at the cost of slower key-rotation and credential-change operations. Legacy `attest()` calls cannot create new protocol trust or payout state and must be deprecated once all verifiers move to the new intent/event protocol.

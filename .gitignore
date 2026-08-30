@@ -12,6 +12,9 @@
 
 # testing
 /coverage
+**/__snapshots__/
+*.snap
+.nyc_output/
 
 # next.js
 /.next/
