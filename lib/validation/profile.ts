@@ -45,8 +45,12 @@ export const profileFormSchema = z.object({
     ),
   language: z.string().trim().max(100).optional(),
   photoUrl: z.string().trim().max(2048).optional(),
-  bloodGroup: z.enum(BLOOD_GROUPS),
-  genotype: z.enum(GENOTYPES),
+  bloodGroup: z.enum(BLOOD_GROUPS, {
+    error: `Blood group must be one of: ${BLOOD_GROUPS.join(", ")}`,
+  }),
+  genotype: z.enum(GENOTYPES, {
+    error: `Genotype must be one of: ${GENOTYPES.join(", ")}`,
+  }),
   allergies: z.array(z.string().trim().min(1).max(200)).max(20),
   medications: z.array(z.string().trim().min(1).max(200)).max(20),
   chronicConditions: z.array(z.string().trim().min(1).max(200)).max(20),
