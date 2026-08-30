@@ -14,6 +14,7 @@ import {
 const signInSchema = z.object({
   email: z.email("Enter a valid email address"),
   password: z.string().min(1, "Password is required"),
+  rememberMe: z.enum(["on"]).optional(),
 });
 
 export interface SignInState {
@@ -24,6 +25,14 @@ export interface SignInState {
  * Server action to handle sign-in.
  * Implements application-level rate limiting keyed on email + IP to protect
  * sensitive patient accounts from credential stuffing and brute-force attacks.
+ *
+ * Session behavior (Issue #378):
+ * Supabase issues a short-lived access token (default 1h) and a refresh token
+ * (default 30 days). The `rememberMe` option controls whether the refresh token
+ * is stored in localStorage (persists across browser sessions) or
+ * sessionStorage (cleared when the tab/window closes). When the checkbox is
+ * checked, the session can survive browser restarts for up to the refresh
+ * token TTL; when unchecked, closing the tab ends the session.
  *
  * Rate limiting rules:
  * - Attempts 1-4: No restriction.
@@ -43,6 +52,7 @@ export async function signIn(
   const parsed = signInSchema.safeParse({
     email: emailInput,
     password: formData.get("password"),
+    rememberMe: formData.get("rememberMe"),
   });
 
   if (!parsed.success) {
@@ -66,6 +76,9 @@ export async function signIn(
   const { error } = await supabase.auth.signInWithPassword({
     email: parsed.data.email,
     password: parsed.data.password,
+    options: {
+      rememberMe: parsed.data.rememberMe === "on",
+    },
   });
 
   if (error) {
