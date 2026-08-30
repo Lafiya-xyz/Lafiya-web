@@ -63,5 +63,29 @@ export default async function PublicCardPage({
     }
   });
 
-  return <EmergencyCardContent card={data[0]} authorizationKind="legacy" />;
+  // Issue #383: get_emergency_card deliberately never returns the card's
+  // user_id (see the function's own comment), so ownership can't be
+  // determined from `data`. Instead: if someone is signed in, look up
+  // *their own* card_public_id (an ordinary read of their own row, already
+  // permitted by RLS) and compare it to the route param.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  let isOwner = false;
+  if (user) {
+    const { data: ownProfile } = await supabase
+      .from("profiles")
+      .select("card_public_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    isOwner = ownProfile?.card_public_id === id;
+  }
+
+  return (
+    <EmergencyCardContent
+      card={data[0]}
+      authorizationKind="legacy"
+      isOwner={isOwner}
+    />
+  );
 }

@@ -84,6 +84,49 @@ export async function createEmergencyCapability(
   };
 }
 
+export type RevokeCapabilityState = {
+  error?: string;
+  revokedId?: string;
+};
+
+/**
+ * Issue #385: individually revoke one active emergency capability share,
+ * rather than only being able to issue new ones with no way to manage
+ * existing ones. Wraps the revoke_emergency_capability RPC (already
+ * existed in the schema, unused anywhere in the app until now) — it's
+ * already scoped to auth.uid() and idempotent (revoking an
+ * already-revoked capability is a no-op, not an error).
+ */
+export async function revokeEmergencyCapability(
+  _previous: RevokeCapabilityState | undefined,
+  formData: FormData,
+): Promise<RevokeCapabilityState> {
+  void _previous;
+  const capabilityId = formData.get("capabilityId");
+  if (typeof capabilityId !== "string" || !capabilityId) {
+    return { error: "Missing capability id." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You must be signed in." };
+
+  const { error } = await supabase.rpc("revoke_emergency_capability", {
+    p_capability_id: capabilityId,
+  });
+  if (error) {
+    logError("Failed to revoke emergency capability", error, {
+      route: "/profile (action: revokeEmergencyCapability)",
+    });
+    return { error: "Could not revoke this share. Please try again." };
+  }
+
+  revalidatePath("/profile");
+  return { revokedId: capabilityId };
+}
+
 // --- Data export (Issue #12) ---
 
 export type ProfileExport = {
