@@ -5,12 +5,7 @@ import {
   POLICY_ROUTES,
 } from "@/lib/consent";
 import { AcknowledgeConsentButton } from "./acknowledge-consent-button";
-
-function formatAcceptedAt(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString();
-}
+import { ConsentHistoryList } from "./consent-history-list";
 
 /**
  * Presentational consent-history section. Pure (no server-only imports) so it
@@ -59,21 +54,7 @@ export function ConsentHistoryView({
           No consent recorded yet.
         </p>
       ) : (
-        <ul className="flex flex-col gap-1 text-sm">
-          {history.map((entry) => (
-            <li
-              key={entry.policyVersion}
-              className="flex items-center justify-between"
-            >
-              <span className="font-medium text-zinc-800 dark:text-zinc-200">
-                {entry.policyVersion}
-              </span>
-              <span className="text-zinc-500 dark:text-zinc-400">
-                accepted {formatAcceptedAt(entry.acceptedAt)}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <ConsentHistoryList history={history} />
       )}
 
       {needsAcknowledgement ? (

@@ -46,3 +46,29 @@ next-env.d.ts
 # codespace / local environment
 /.config
 /.npm
+
+# test snapshots
+**/__snapshots__/
+*.snap
+
+# playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
+# local dev / editor
+*.local
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+
+# lighthouse CI
+.lighthouseci/
+
+# load test results
+/loadtest/results/
+/bench/rpc-provider-benchmark/results/
