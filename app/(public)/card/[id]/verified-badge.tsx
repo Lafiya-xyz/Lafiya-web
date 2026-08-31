@@ -12,7 +12,10 @@ export type VerificationStatus =
 export function VerifiedBadge({ status }: { status: VerificationStatus }) {
   if (status === "verified") {
     return (
-      <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-sm font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+      <span 
+        className="inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1 text-sm font-medium text-white dark:bg-emerald-600 dark:text-white"
+        aria-label="Verified: Health-worker attestation finalized"
+      >
         <svg
           className="h-4 w-4 shrink-0 fill-current"
           viewBox="0 0 20 20"
@@ -32,7 +35,10 @@ export function VerifiedBadge({ status }: { status: VerificationStatus }) {
 
   if (status === "unavailable") {
     return (
-      <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+      <span 
+        className="inline-flex w-fit items-center gap-1.5 rounded-full bg-amber-600 px-3 py-1 text-sm font-medium text-white dark:bg-amber-600 dark:text-white"
+        aria-label="Verification status unavailable"
+      >
         Verification status unavailable
       </span>
     );
@@ -49,14 +55,20 @@ export function VerifiedBadge({ status }: { status: VerificationStatus }) {
   const label = pendingLabels[status];
   if (label) {
     return (
-      <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+      <span 
+        className="inline-flex w-fit items-center gap-1.5 rounded-full bg-amber-600 px-3 py-1 text-sm font-medium text-white dark:bg-amber-600 dark:text-white"
+        aria-label={label}
+      >
         {label}
       </span>
     );
   }
 
   return (
-    <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-zinc-100 px-3 py-1 text-sm font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+    <span 
+      className="inline-flex w-fit items-center gap-1.5 rounded-full bg-zinc-500 px-3 py-1 text-sm font-medium text-white dark:bg-zinc-600 dark:text-white"
+      aria-label="Not yet verified"
+    >
       <svg
         className="h-4 w-4 shrink-0 stroke-current"
         viewBox="0 0 24 24"
@@ -64,6 +76,7 @@ export function VerifiedBadge({ status }: { status: VerificationStatus }) {
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
+        aria-hidden="true"
         data-testid="unverified-icon"
       >
         <circle cx="12" cy="12" r="10" />

@@ -19,13 +19,13 @@ export default function Home() {
         <div className="flex flex-col gap-4 sm:flex-row">
           <Link
             href="/signup"
-            className="flex h-12 items-center justify-center rounded-full bg-zinc-950 px-6 text-base font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+            className="flex h-12 items-center justify-center rounded-full bg-zinc-950 px-6 text-base font-medium text-white transition-colors hover:bg-zinc-800 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:focus:ring-zinc-600"
           >
             Create your card
           </Link>
           <Link
             href="/signin"
-            className="flex h-12 items-center justify-center rounded-full border border-zinc-300 px-6 text-base font-medium text-zinc-950 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-900"
+            className="flex h-12 items-center justify-center rounded-full border border-zinc-300 px-6 text-base font-medium text-zinc-950 transition-colors hover:bg-zinc-100 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-900 dark:focus:ring-zinc-600"
           >
             Sign in
           </Link>

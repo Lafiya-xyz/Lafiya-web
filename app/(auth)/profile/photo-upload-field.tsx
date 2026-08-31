@@ -96,7 +96,7 @@ export function PhotoUploadField({
             No photo
           </div>
         )}
-        <label className="cursor-pointer rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-950 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-900">
+        <label className="cursor-pointer rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-950 transition-colors hover:bg-zinc-100 focus-within:ring-2 focus-within:ring-zinc-400 focus-within:ring-offset-0 focus-within:outline-none dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-900 dark:focus-within:ring-zinc-600">
           {isUploading ? "Uploading…" : photoUrl ? "Change photo" : "Add photo"}
           <input
             type="file"

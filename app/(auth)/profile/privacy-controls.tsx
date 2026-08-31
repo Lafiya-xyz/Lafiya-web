@@ -69,7 +69,7 @@ export function PrivacyControls({
                   ({active ? "allowed" : "withdrawn"})
                 </span>
               </span>
-              <button className="rounded-full border px-4 py-2" type="submit">
+              <button className="rounded-full border px-4 py-2 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:focus:ring-zinc-600" type="submit">
                 {active ? "Withdraw" : "Allow"}
               </button>
             </form>
@@ -89,6 +89,7 @@ export function PrivacyControls({
                   type="checkbox"
                   name={`field:${field}`}
                   defaultChecked={policy.fields[field]}
+                  className="focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 dark:focus:ring-zinc-600"
                 />
                 <span>{field.replaceAll("_", " ")}</span>
               </label>
@@ -96,7 +97,7 @@ export function PrivacyControls({
           </div>
         </fieldset>
         <button
-          className="self-start rounded-full bg-zinc-950 px-5 py-2 text-white dark:bg-zinc-50 dark:text-zinc-950"
+          className="self-start rounded-full bg-zinc-950 px-5 py-2 text-white focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:bg-zinc-50 dark:text-zinc-950 dark:focus:ring-zinc-600"
           type="submit"
         >
           Save disclosure choices
