@@ -23,9 +23,7 @@ export function EmergencyContactsField({
   initialValues: EmergencyContact[];
   error?: string;
 }) {
-  const [contacts, setContacts] = useState(
-    initialValues.length > 0 ? initialValues : [EMPTY_CONTACT],
-  );
+  const [contacts, setContacts] = useState(initialValues);
 
   function updateContact(
     index: number,
@@ -49,8 +47,23 @@ export function EmergencyContactsField({
         value={JSON.stringify(contacts)}
         readOnly
       />
-      <div className="mt-1 flex flex-col gap-3">
-        {contacts.map((contact, index) => (
+      {contacts.length === 0 ? (
+        <div className="mt-1 flex flex-col items-start gap-3 rounded-md border border-dashed border-zinc-300 p-4 dark:border-zinc-700">
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            No emergency contacts added yet. Add someone we can reach if you
+            have a medical emergency.
+          </p>
+          <button
+            type="button"
+            onClick={() => setContacts([EMPTY_CONTACT])}
+            className="rounded-full bg-zinc-950 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+          >
+            + Add contact
+          </button>
+        </div>
+      ) : (
+        <div className="mt-1 flex flex-col gap-3">
+          {contacts.map((contact, index) => (
           <div
             key={index}
             className="flex flex-col gap-2 rounded-md border border-zinc-300 p-3 sm:flex-row dark:border-zinc-700"
@@ -93,23 +106,23 @@ export function EmergencyContactsField({
               onClick={() =>
                 setContacts(contacts.filter((_, i) => i !== index))
               }
-              disabled={contacts.length === 1}
               aria-label="Remove emergency contact"
               className="shrink-0 rounded-md border border-zinc-300 px-3 text-zinc-600 transition-colors hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900"
             >
               &times;
             </button>
           </div>
-        ))}
-      </div>
-      <button
-        type="button"
-        onClick={() => setContacts([...contacts, EMPTY_CONTACT])}
-        disabled={contacts.length >= MAX_CONTACTS}
-        className="mt-2 text-sm font-medium text-zinc-950 underline disabled:opacity-40 dark:text-zinc-50"
-      >
-        + Add contact
-      </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setContacts([...contacts, EMPTY_CONTACT])}
+            disabled={contacts.length >= MAX_CONTACTS}
+            className="text-sm font-medium text-zinc-950 underline disabled:opacity-40 dark:text-zinc-50"
+          >
+            + Add contact
+          </button>
+        </div>
+      )}
       {error ? (
         <p id="emergencyContacts-error" className="mt-1 text-sm text-red-600 dark:text-red-400">
           {error}
