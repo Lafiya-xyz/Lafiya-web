@@ -12,6 +12,13 @@
 
 # testing
 /coverage
+/test-results
+/playwright-report
+/blob-report
+
+# vitest / jest snapshots
+**/__snapshots__/
+*.snap
 
 # next.js
 /.next/
@@ -46,3 +53,13 @@ next-env.d.ts
 # codespace / local environment
 /.config
 /.npm
+
+# benchmark results (transient runs; only the committed baseline is tracked)
+bench/rpc-provider-benchmark/results/*.json
+!bench/rpc-provider-benchmark/results/2026-08-20-baseline.json
+
+# lighthouse CI output
+.lighthouseci/
+
+# sbom output
+sbom.json

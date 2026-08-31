@@ -33,6 +33,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run migration:lint
       - run: npm run ci:check-action-pins
+      - run: npm run types:check
+      - run: npm run secrets:scan -- --all
       - run: npm test
       - run: npm run build
       - run: npm run ci:check-clean-worktree

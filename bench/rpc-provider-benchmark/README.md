@@ -36,6 +36,41 @@ node bench/rpc-provider-benchmark/harness.mjs --iterations 25 --timeout 6000 --o
 node bench/rpc-provider-benchmark/harness.mjs --only 'gateway|lightsail'
 ```
 
+## Comparing against the baseline
+
+A committed baseline lives at `bench/rpc-provider-benchmark/results/2026-08-20-baseline.json`.
+Use `compare.mjs` to diff any new run against it — it reports **improved / regressed / unchanged**
+for every (provider × probe × metric) triple rather than raw numbers in isolation.
+
+```bash
+# 1. Run the harness and write results to a file
+node bench/rpc-provider-benchmark/harness.mjs --out results/current.json
+
+# 2. Compare against the baseline
+node bench/rpc-provider-benchmark/compare.mjs \
+  results/2026-08-20-baseline.json \
+  results/current.json
+
+# 3. CI / gate mode — exits 1 if any regression is detected
+node bench/rpc-provider-benchmark/compare.mjs \
+  results/2026-08-20-baseline.json \
+  results/current.json \
+  --fail-on-regression
+```
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| positional arg 1 | — | path to baseline JSON |
+| positional arg 2 | — | path to current run JSON |
+| `--baseline` | — | alternative named form for baseline path |
+| `--current` | — | alternative named form for current path |
+| `--threshold` | `1.20` | ratio beyond which a metric is flagged (1.20 = 20% worse) |
+| `--fail-on-regression` | off | exit 1 when regressions are found (for CI gates) |
+
+Output is a colour-coded diff grouped by provider and probe, plus a summary line
+showing total regression and improvement counts. Providers with no significant
+changes are collapsed to a single "no significant changes" line.
+
 | Flag | Default | Meaning |
 | --- | --- | --- |
 | `--iterations` | `10` | samples per probe (raise for tighter p95/p99) |

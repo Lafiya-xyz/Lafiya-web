@@ -1,0 +1,13 @@
+#!/bin/sh
+# .githooks/pre-commit
+#
+# Scans staged files for accidental secret commits before they reach the remote.
+# Installed automatically by `npm install` via the `prepare` script in package.json.
+#
+# To bypass in an emergency (use sparingly):
+#   git commit --no-verify -m "..."
+#
+# To install manually:
+#   git config core.hooksPath .githooks
+
+node scripts/scan-secrets.mjs --staged

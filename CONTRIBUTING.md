@@ -22,6 +22,41 @@ Before you start writing code, please set up your local development environment:
 
 ---
 
+## Common Commands
+
+All frequently-used commands have a named `npm run` script so you never need to remember the raw multi-part form.
+
+| Script | What it does |
+| --- | --- |
+| `npm run dev` | Start the Next.js development server |
+| `npm run build` | Build the production Next.js bundle |
+| `npm start` | Serve a previously built production bundle |
+| `npm test` | Run unit and component tests (Vitest, jsdom) |
+| `npm run test:watch` | Run unit tests in watch mode |
+| `npm run test:integration` | Run Supabase RLS/RPC integration tests (requires `npm run db:start` first) |
+| `npm run test:e2e` | Run Playwright end-to-end tests |
+| `npm run lint` | Run ESLint (zero warnings allowed) |
+| `npm run typecheck` | Run TypeScript type-checker without emitting |
+| `npm run format` | Auto-format all files with Prettier |
+| `npm run format:check` | Check formatting without writing changes |
+| `npm run migration:lint` | Lint Supabase migration files |
+| `npm run migration:new` | Create a new Supabase migration file (pass a name after `--`) |
+| `npm run db:start` | Start the local Supabase stack (`supabase start`) |
+| `npm run db:stop` | Stop the local Supabase stack (`supabase stop`) |
+| `npm run db:reset` | Reset and re-seed the local database (`supabase db reset`) |
+| `npm run types:check` | Verify `lib/supabase/types.ts` is in sync with current migrations |
+| `npm run secrets:scan` | Scan staged/changed files for accidentally committed secrets |
+| `npm run bench` | Run the Soroban RPC/Horizon provider benchmark harness |
+| `npm run bench:compare` | Diff a benchmark result file against the committed baseline |
+| `npm run bundle:check` | Check Next.js production bundle sizes against budgets |
+| `npm run ci:check-action-pins` | Verify all GitHub Actions are pinned to full SHA digests |
+| `npm run ci:check-clean-worktree` | Assert the git worktree is clean (no uncommitted changes) |
+| `npm run ci:check-all` | Run the full local CI pipeline in one command |
+| `npm run sbom` | Generate a software bill of materials |
+| `npm run release:verify-gate` | Verify the release gate before a production deploy |
+
+---
+
 ## Branching & Commit Conventions
 
 To maintain a clean and legible project history, we use the following conventions:
@@ -69,6 +104,42 @@ When updating the database schema:
 2. **Rule: Use `type` aliases, NEVER `interface`**.
    * **Why**: `supabase-js`'s generic type checking requires the database schema to extend `Record<string, GenericTable>`. TypeScript's structural `extends` check only recognizes plain object `type` aliases as satisfying index signatures.
    * **The Risk**: If you use an `interface` (even deep inside nested types like emergency contacts or custom row models), the database query result types will **silently collapse to `never`** without any compilation error at the `Database` declaration. The error will only manifest downstream at `.from(...).select(...)` calls, making it hard to debug.
+3. **Verify sync before committing** by running:
+   ```bash
+   npm run types:check
+   ```
+   This script scans every `CREATE TABLE` and `CREATE TYPE … AS ENUM` in `supabase/migrations/` and confirms each one has a matching entry in `lib/supabase/types.ts`. CI runs this check on every push and PR — if it fails you will see a clear message listing exactly which tables or enums are missing and how to fix them.
+
+---
+
+## Secret Scanning
+
+A lightweight secret-pattern scanner runs automatically as a **pre-commit hook** and as a **CI step** to catch accidental credential commits before they reach the remote.
+
+### What it checks
+Common patterns including API keys, PEM private keys, Supabase service role JWTs (production-length), Stellar secret keys (`S…`, 56-char base32), AWS access keys, GitHub tokens, and Stripe secret keys.
+
+### Pre-commit hook
+The hook is installed automatically when you run `npm install` (via the `prepare` script, which sets `git config core.hooksPath .githooks`). After that, every `git commit` automatically scans staged files. To install manually:
+```bash
+git config core.hooksPath .githooks
+```
+
+### Running manually
+```bash
+npm run secrets:scan           # scan staged files (same as pre-commit)
+npm run secrets:scan -- --all  # scan all tracked files (CI mode)
+```
+
+### Suppressing a known false positive
+If a line is a genuine test fixture or placeholder, add a suppression hint on the same line:
+```bash
+MY_KEY=fake-key-for-testing   # dummy
+```
+Words that suppress: `dummy`, `placeholder`, `example`, `replace-me`, `fake`, `demo`, `test-only`.
+
+### Skipped files
+`.env.test`, `.env.example`, `package-lock.json`, and CI workflow files (which intentionally contain the well-known public Supabase demo JWTs) are excluded from scanning.
 
 ---
 
@@ -101,12 +172,13 @@ Every Pull Request must be verified before merging. Please ensure the following 
 ### 1. Build and Quality Checks
 Run the following verification pipeline locally:
 ```bash
-npm run lint && npm run typecheck && npm test && npm run build
+npm run ci:check-all
 ```
-* **Linting**: No ESLint/Prettier warnings or errors.
-* **Typechecking**: No TypeScript errors.
-* **Unit/Component Tests**: All unit/component tests in `tests/` pass.
-* **Build**: The Next.js production build completes without warnings.
+This runs lint, typecheck, migration lint, types sync check, secrets scan, action-pin check, unit tests, build, and clean-worktree check in sequence. You can also run steps individually:
+* **Linting**: `npm run lint` — no ESLint/Prettier warnings or errors.
+* **Typechecking**: `npm run typecheck` — no TypeScript errors.
+* **Unit/Component Tests**: `npm test` — all unit/component tests pass.
+* **Build**: `npm run build` — the Next.js production build completes without warnings.
 
 ### 2. Integration & RLS/RPC Tests
 Ensure your local Supabase instance is running and verify database-specific behavior:
@@ -121,5 +193,6 @@ Before hitting submit on your PR:
 - [ ] Code builds, lints, and passes type-checking.
 - [ ] Unit and component tests pass.
 - [ ] Integration tests pass against a running local Supabase.
-- [ ] If a database migration was added, the hand-authored types in `lib/supabase/types.ts` were updated as `type` aliases.
+- [ ] If a database migration was added, the hand-authored types in `lib/supabase/types.ts` were updated as `type` aliases **and** `npm run types:check` passes.
+- [ ] `npm run secrets:scan` passes (no accidental credentials committed).
 - [ ] You have declared whether this PR impacts a shared cross-repo contract.

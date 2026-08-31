@@ -98,6 +98,31 @@ export type RecordLifecycleState =
   | "revoked"
   | "deleted";
 
+/** Mirrors public.data_provenance SQL enum. */
+export type DataProvenance =
+  | "absent"
+  | "unknown"
+  | "patient_reported"
+  | "clinician_verified";
+
+/** Mirrors public.protocol_epoch_status SQL enum. */
+export type ProtocolEpochStatus = "active" | "deprecated" | "retired";
+
+/** Mirrors public.trust_decision_state SQL enum. */
+export type TrustDecisionState =
+  | "unverified"
+  | "submitted"
+  | "confirming"
+  | "verified"
+  | "expired"
+  | "revoked"
+  | "superseded"
+  | "conflicted"
+  | "unavailable";
+
+/** Mirrors public.payout_obligation_status SQL enum. */
+export type PayoutObligationStatus = "pending" | "settled" | "quarantined" | "adjusted";
+
 export type RecordRevisionRow = {
   id: string;
   user_id: string;
@@ -200,7 +225,7 @@ export type ProtocolEpochRow = {
   payout_amount_usdc: number;
   asset_identifier: string;
   sponsor_pool: string;
-  status: "active" | "deprecated" | "retired";
+  status: ProtocolEpochStatus;
   activated_at: string;
   deprecated_at: string | null;
   created_at: string;
@@ -240,16 +265,7 @@ export type AttestationEvidenceRow = {
 
 export type TrustDecisionRow = {
   revision_id: string;
-  state:
-    | "unverified"
-    | "submitted"
-    | "confirming"
-    | "verified"
-    | "expired"
-    | "revoked"
-    | "superseded"
-    | "conflicted"
-    | "unavailable";
+  state: TrustDecisionState;
   evidence_id: string | null;
   reason_code: string | null;
   decided_at: string;
@@ -266,7 +282,7 @@ export type PayoutObligationRow = {
   amount_usdc: number;
   asset_identifier: string;
   sponsor_pool: string;
-  status: "pending" | "settled" | "quarantined" | "adjusted";
+  status: PayoutObligationStatus;
   eligibility_key: string;
   created_at: string;
   adjusted_at: string | null;
@@ -829,6 +845,12 @@ export type Database = {
       blood_group_enum: BloodGroup;
       genotype_enum: Genotype;
       record_lifecycle_state: RecordLifecycleState;
+      data_provenance: DataProvenance;
+      protocol_epoch_status: ProtocolEpochStatus;
+      trust_decision_state: TrustDecisionState;
+      payout_obligation_status: PayoutObligationStatus;
+      chw_identity_status: ChwIdentityStatus;
+      emergency_capability_purpose: EmergencyCapabilityPurpose;
     };
   };
 };
