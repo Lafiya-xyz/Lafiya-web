@@ -26,14 +26,37 @@ const payoutRowSchema = z.object({
 
 type PayoutRow = z.infer<typeof payoutRowSchema>;
 
-function decodeCursor(value: string | null) {
+export interface ValidationError {
+  field: string;
+  message: string;
+}
+
+function decodeCursor(
+  value: string | null,
+): ReturnType<typeof cursorSchema.parse> | null | { error: ValidationError } {
   if (!value) return null;
 
   try {
     const decoded = Buffer.from(value, "base64url").toString("utf8");
-    return cursorSchema.parse(JSON.parse(decoded));
+    const result = cursorSchema.safeParse(JSON.parse(decoded));
+    if (!result.success) {
+      const firstIssue = result.error.issues[0];
+      const field = firstIssue?.path.join(".") || "cursor";
+      return {
+        error: {
+          field: `cursor.${field}`,
+          message: firstIssue?.message ?? "Invalid cursor field",
+        },
+      };
+    }
+    return result.data;
   } catch {
-    return undefined;
+    return {
+      error: {
+        field: "cursor",
+        message: "Cursor is not valid base64url-encoded JSON",
+      },
+    };
   }
 }
 
@@ -77,15 +100,40 @@ function serializePayout(row: unknown) {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const requestedLimit = Number(searchParams.get("limit") ?? DEFAULT_PAGE_SIZE);
+  const rawLimit = searchParams.get("limit");
+  const requestedLimit = Number(rawLimit ?? DEFAULT_PAGE_SIZE);
+
+  if (rawLimit !== null && (!Number.isInteger(requestedLimit) || requestedLimit < 1)) {
+    return NextResponse.json(
+      {
+        error: "Validation failed",
+        fields: [
+          {
+            field: "limit",
+            message: `Must be a positive integer between 1 and ${MAX_PAGE_SIZE}`,
+          },
+        ],
+      },
+      { status: 400 },
+    );
+  }
+
   const limit = Number.isInteger(requestedLimit)
     ? Math.min(Math.max(requestedLimit, 1), MAX_PAGE_SIZE)
     : DEFAULT_PAGE_SIZE;
-  const cursor = decodeCursor(searchParams.get("cursor"));
+  const cursorResult = decodeCursor(searchParams.get("cursor"));
 
-  if (cursor === undefined) {
-    return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
+  if (cursorResult !== null && "error" in cursorResult) {
+    return NextResponse.json(
+      {
+        error: "Validation failed",
+        fields: [cursorResult.error],
+      },
+      { status: 400 },
+    );
   }
+
+  const cursor = cursorResult;
 
   try {
     const supabase = await createClient();

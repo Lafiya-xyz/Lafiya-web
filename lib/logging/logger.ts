@@ -160,6 +160,9 @@ export function redactSensitiveData(
 /**
  * Logs an error to console.error as structured JSON and captures it in Sentry.
  * Recursively redacts all sensitive fields and email patterns.
+ *
+ * Sentry errors are caught and never allowed to propagate — a logging failure
+ * must not crash whatever code was trying to log something.
  */
 export function logError(
   message: string,
@@ -184,28 +187,37 @@ export function logError(
 
   console.error(JSON.stringify(logPayload));
 
-  if (error instanceof Error) {
-    Sentry.withScope((scope) => {
-      if (redactedContext) {
-        scope.setExtras(redactedContext);
-      }
-      // Never send the original error to telemetry. Database/provider error
-      // messages may interpolate identifiers which are not safe to retain.
-      Sentry.captureException(new Error(redactString(error.message)));
-    });
-  } else if (error) {
-    Sentry.captureMessage(redactString(message), {
-      level: "error",
-      extra: {
-        error: redactedError,
-        ...redactedContext,
-      },
-    });
-  } else {
-    Sentry.captureMessage(redactString(message), {
-      level: "error",
-      extra: redactedContext,
-    });
+  try {
+    if (error instanceof Error) {
+      Sentry.withScope((scope) => {
+        if (redactedContext) {
+          scope.setExtras(redactedContext);
+        }
+        // Never send the original error to telemetry. Database/provider error
+        // messages may interpolate identifiers which are not safe to retain.
+        Sentry.captureException(new Error(redactString(error.message)));
+      });
+    } else if (error) {
+      Sentry.captureMessage(redactString(message), {
+        level: "error",
+        extra: {
+          error: redactedError,
+          ...redactedContext,
+        },
+      });
+    } else {
+      Sentry.captureMessage(redactString(message), {
+        level: "error",
+        extra: redactedContext,
+      });
+    }
+  } catch (sentryError) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn(
+        "[logger] logError: Sentry sink threw — logging is degraded.",
+        sentryError,
+      );
+    }
   }
 }
 

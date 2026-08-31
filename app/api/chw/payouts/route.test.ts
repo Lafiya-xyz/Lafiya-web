@@ -127,8 +127,49 @@ describe("CHW payout history route", () => {
     const response = await GET(request("?cursor=not-a-cursor"));
 
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: "Invalid cursor" });
+    const body = await response.json();
+    expect(body.error).toBe("Validation failed");
+    expect(body.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: expect.stringContaining("cursor") }),
+      ]),
+    );
     expect(mocks.createClient).not.toHaveBeenCalled();
+  });
+
+  it("rejects a cursor with a missing required field", async () => {
+    setupQuery([]);
+    // Encode a cursor that is valid base64url JSON but missing the `id` field
+    const malformedCursor = Buffer.from(
+      JSON.stringify({ attestedAt: "2026-08-19T12:00:00.000Z" }),
+    ).toString("base64url");
+
+    const response = await GET(request(`?cursor=${malformedCursor}`));
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toBe("Validation failed");
+    expect(body.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: expect.stringContaining("cursor") }),
+      ]),
+    );
+    expect(mocks.createClient).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-integer limit", async () => {
+    setupQuery([]);
+
+    const response = await GET(request("?limit=abc"));
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toBe("Validation failed");
+    expect(body.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: "limit" }),
+      ]),
+    );
   });
 
   it("rejects invalid payout amounts and transaction hashes", async () => {

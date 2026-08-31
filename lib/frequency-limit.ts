@@ -1,5 +1,14 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
+/**
+ * Concrete per-feature limit values (maxCount, windowSeconds) are defined as
+ * named constants at each call site (e.g. UPLOAD_FREQUENCY_MAX,
+ * UPLOAD_FREQUENCY_WINDOW_SECONDS in app/api/profile/photo/route.ts) so each
+ * caller's policy is self-documented alongside the code that enforces it.
+ * This file intentionally contains no hardcoded limit numbers — all numeric
+ * parameters are passed in by the caller.
+ */
+
 export interface FrequencyLimitResult {
   allowed: boolean;
   count: number;

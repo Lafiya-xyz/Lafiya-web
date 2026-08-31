@@ -250,5 +250,47 @@ describe("Structured Logging & Redaction", () => {
       expect(parsed.context.action).toBe("signUp");
       expect(parsed.timestamp).toBeDefined();
     });
+
+    it("logError does not propagate when the Sentry sink throws", () => {
+      vi.mocked(Sentry.captureException).mockImplementationOnce(() => {
+        throw new Error("Sentry network error");
+      });
+
+      // Must not throw even though Sentry fails
+      expect(() => {
+        logError("test message", new Error("inner error"));
+      }).not.toThrow();
+
+      // The structured console.error line is still written before Sentry is called
+      expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+      const parsed = JSON.parse(consoleErrorSpy.mock.calls[0][0]);
+      expect(parsed.level).toBe("error");
+      expect(parsed.message).toBe("test message");
+    });
+
+    it("logError emits a console.warn in development when the Sentry sink throws", () => {
+      const consoleWarnSpy = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
+      // Use vi.stubEnv to safely override NODE_ENV in this test environment
+      vi.stubEnv("NODE_ENV", "development");
+
+      try {
+        vi.mocked(Sentry.captureException).mockImplementationOnce(() => {
+          throw new Error("Sentry DSN misconfigured");
+        });
+
+        logError("test message", new Error("inner error"));
+
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+          expect.stringContaining("[logger]"),
+          expect.any(Error),
+        );
+      } finally {
+        vi.unstubAllEnvs();
+        consoleWarnSpy.mockRestore();
+      }
+    });
   });
 });
