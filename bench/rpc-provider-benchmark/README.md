@@ -51,6 +51,34 @@ classification (`http_429_throttled`, `http_5xx_server`, `rpc_error`,
 contract-state outcome, not a provider failure, so it is kept in the latency
 samples.
 
+## Comparing a new run against the baseline
+
+A committed baseline lives at `bench/rpc-provider-benchmark/results/2026-08-20-baseline.json`.
+After running the harness, use the comparison script to get a clear diff instead of
+eyeballing raw numbers:
+
+```bash
+# Run the harness and save output
+node bench/rpc-provider-benchmark/harness.mjs --out bench/rpc-provider-benchmark/results/my-run.json
+
+# Compare against the baseline (exits non-zero on regression > 20%)
+node scripts/compare-benchmark.mjs --current bench/rpc-provider-benchmark/results/my-run.json
+
+# Or via npm
+npm run bench:compare -- --current bench/rpc-provider-benchmark/results/my-run.json
+```
+
+The comparison script:
+- Prints a table with `improved / regressed / unchanged` for every `provider / probe / metric` pair.
+- Exits `1` if any metric exceeds the regression threshold (default `20%` on `p50`).
+- Accepts `--threshold <N>` and `--metric <p50|p95|p99|mean>` to adjust sensitivity.
+
+**Updating the baseline:** if a regression is intentional (e.g. a provider changed their
+infrastructure or you are switching to a slower but more reliable endpoint), update the
+baseline file by running the harness and replacing
+`bench/rpc-provider-benchmark/results/2026-08-20-baseline.json` (or adding a new dated
+baseline file and updating the `--baseline` default in `scripts/compare-benchmark.mjs`).
+
 ## Running from a target region
 
 Latency here is from whatever machine runs the harness, so the committed
