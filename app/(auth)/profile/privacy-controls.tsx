@@ -69,7 +69,7 @@ export function PrivacyControls({
                   ({active ? "allowed" : "withdrawn"})
                 </span>
               </span>
-              <button className="rounded-full border px-4 py-2" type="submit">
+              <button className="min-h-11 rounded-full border px-4 py-2" type="submit">
                 {active ? "Withdraw" : "Allow"}
               </button>
             </form>
@@ -96,7 +96,7 @@ export function PrivacyControls({
           </div>
         </fieldset>
         <button
-          className="self-start rounded-full bg-zinc-950 px-5 py-2 text-white dark:bg-zinc-50 dark:text-zinc-950"
+          className="min-h-11 self-start rounded-full bg-zinc-950 px-5 py-2 text-white dark:bg-zinc-50 dark:text-zinc-950"
           type="submit"
         >
           Save disclosure choices

@@ -36,7 +36,7 @@ export function AcknowledgeConsentButton() {
         type="button"
         onClick={handleClick}
         disabled={pending || status === "done"}
-        className="w-fit rounded-md bg-zinc-950 px-3 py-2 text-sm font-medium text-white disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-950"
+        className="min-h-11 w-fit rounded-md bg-zinc-950 px-3 py-2 text-sm font-medium text-white disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-950"
       >
         {pending
           ? "Saving…"

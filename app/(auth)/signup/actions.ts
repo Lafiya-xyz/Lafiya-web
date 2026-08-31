@@ -48,7 +48,22 @@ export async function signUp(
       route: "/signup (action: signUp)",
       email: parsed.data.email,
     });
-    return { error: error.message };
+    const message = error.message.toLowerCase();
+    if (message.includes("already registered") || message.includes("already exists")) {
+      return {
+        error: "That email is already registered — try signing in instead.",
+      };
+    }
+    if (message.includes("password")) {
+      return {
+        error:
+          "That password doesn't meet the requirements. Please choose a stronger password.",
+      };
+    }
+    return {
+      error:
+        "We couldn't create your account. Please try again or contact support if the problem continues.",
+    };
   }
 
   if (data.user) {

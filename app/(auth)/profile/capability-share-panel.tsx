@@ -55,7 +55,7 @@ export function CapabilitySharePanel() {
         <button
           type="submit"
           disabled={isPending}
-          className="rounded-full bg-zinc-950 px-5 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950"
+          className="flex h-11 items-center justify-center rounded-full bg-zinc-950 px-6 text-base font-semibold text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
         >
           {isPending ? "Creating…" : "Create emergency QR"}
         </button>
@@ -78,11 +78,11 @@ export function CapabilitySharePanel() {
           ) : (
             <p className="text-sm">Preparing QR code…</p>
           )}
-          <p className="max-w-full text-xs break-all text-zinc-600 dark:text-zinc-400">
+          <p className="max-w-full text-xs break-all text-zinc-400 dark:text-zinc-500">
             {state.capabilityUrl}
           </p>
           <CopyLinkButton text={state.capabilityUrl} />
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-zinc-400 dark:text-zinc-500">
             Valid until {formatDate(state.expiresAt)}. Anyone with this QR can
             view only the fields you allow on your emergency card.
           </p>
