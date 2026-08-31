@@ -7,6 +7,10 @@ import type { ProfileRow } from "@/lib/supabase/types";
 import { validateAttestation } from "@/lib/stellar/attestation";
 import { getBaseUrl } from "@/lib/url/getBaseUrl";
 
+import { PreviewCardButton } from "./preview-card-button";
+import { DownloadCardButton } from "./download-card-button";
+import { ProfileCompleteness } from "./profile-completeness";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { SignOutButton } from "../signout/sign-out-button";
 import { AttestationStatusBanner } from "./attestation-status-banner";
 import { AccessSummary } from "./access-summary";
@@ -128,14 +132,44 @@ export default async function ProfilePage() {
             {user.email}
           </p>
         </div>
-        <SignOutButton />
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <SignOutButton />
+        </div>
       </div>
 
       {profile ? (
-        <QrCardDisplay
-          cardUrl={`${await getBaseUrl()}/card/${profile.card_public_id}`}
-          legacySunsetAt={profile.legacy_card_sunset_at}
-        />
+        <>
+          <QrCardDisplay
+            cardUrl={`${await getBaseUrl()}/card/${profile.card_public_id}`}
+            legacySunsetAt={profile.legacy_card_sunset_at}
+          />
+          <p className="text-xs text-zinc-500 dark:text-zinc-500">
+            Preview shows your last-saved public card. Unsaved draft changes
+            are not reflected until you save.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <PreviewCardButton
+              cardUrl={`${await getBaseUrl()}/card/${profile.card_public_id}`}
+            />
+            <DownloadCardButton
+              cardUrl={`${await getBaseUrl()}/card/${profile.card_public_id}`}
+              card={{
+                name: profile.name,
+                age: null,
+                blood_group: profile.blood_group,
+                genotype: profile.genotype,
+                allergies: profile.allergies,
+                medications: profile.medications,
+                chronic_conditions: profile.chronic_conditions,
+                emergency_contacts: profile.emergency_contacts,
+                language: profile.language,
+                record_updated_at: profile.updated_at,
+              }}
+            />
+          </div>
+          <ProfileCompleteness profile={profile} />
+        </>
       ) : null}
 
       {profile ? <CapabilitySharePanel /> : null}

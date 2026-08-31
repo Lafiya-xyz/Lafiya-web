@@ -12,6 +12,11 @@
 
 # testing
 /coverage
+**/__snapshots__/
+*.snap
+*.snap.orig
+test_snapshots/
+**/test_snapshots/
 
 # next.js
 /.next/
@@ -46,3 +51,10 @@ next-env.d.ts
 # codespace / local environment
 /.config
 /.npm
+
+# playwright
+playwright-report/
+test-results/
+
+# vitest
+.vitest/

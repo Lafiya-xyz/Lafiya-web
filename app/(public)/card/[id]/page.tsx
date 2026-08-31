@@ -63,5 +63,20 @@ export default async function PublicCardPage({
     }
   });
 
-  return <EmergencyCardContent card={data[0]} authorizationKind="legacy" />;
+  return (
+    <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6 sm:py-16">
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
+          Emergency card
+        </h1>
+        <a
+          href={`mailto:support@lafiya.xyz?subject=Report%20an%20issue%20with%20card%20${encodeURIComponent(id)}&body=Card%20ID:%20${encodeURIComponent(id)}%0A%0APlease%20describe%20the%20issue%20you%20noticed:`}
+          className="text-sm text-zinc-600 underline dark:text-zinc-400"
+        >
+          Report an issue
+        </a>
+      </div>
+      <EmergencyCardContent card={data[0]} authorizationKind="legacy" />
+    </div>
+  );
 }
