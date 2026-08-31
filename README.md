@@ -87,7 +87,7 @@ graph TB
 - **lib/supabase/**: Supabase client/server helpers and hand-authored types for the off-chain encrypted store
 - **lib/stellar/**: Soroban attestation lookup — `getAttestation(recordHash)` calls the deployed `lafiya-contracts` registry over RPC in live mode. Mock attestations require an explicitly non-production deployment identity and cannot boot in production.
 - **lib/runtime-config.ts**: fail-closed server configuration boundary. It validates deployment identity, network/contract pairing, feature-group completeness, build/schema compatibility, and production telemetry before traffic; `/api/internal/readiness` exposes only non-secret component state for platform probes.
-- **lib/qr/**: QR code generation for the emergency page
+- **lib/qr/**: QR code generation — see [docs/qr-code-format.md](docs/qr-code-format.md) for the encoded payload specification and the reasoning behind the chosen QR options
 
 ### Emergency access and offline support
 
@@ -228,7 +228,7 @@ npx supabase start
 cp .env.example .env.local
 ```
 
-`supabase start` prints an `ANON_KEY` and `SERVICE_ROLE_KEY` — put those (and the printed `API_URL`, usually `http://127.0.0.1:54321`) into `.env.local` as `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. `supabase db reset` applies migrations and seeds one demo patient (`demo@lafiya.test` / `lafiya-demo-password`, card id `11111111-1111-1111-1111-111111111111`) for local testing. See [Lafiya Organization](#lafiya-organization) for what each variable is for.
+`supabase start` prints an `ANON_KEY` and `SERVICE_ROLE_KEY` — put those (and the printed `API_URL`, usually `http://127.0.0.1:54321`) into `.env.local` as `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. `supabase db reset` applies migrations and seeds one demo patient (`demo@lafiya.test` / `lafiya-demo-password`, card id `11111111-1111-1111-1111-111111111111`) for local testing. For a full description of every variable — what it does, whether it is required, and which subsystem it belongs to — see [docs/environment-variables.md](docs/environment-variables.md).
 
 ### 3. Run the dev server
 

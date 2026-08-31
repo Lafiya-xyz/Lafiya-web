@@ -22,6 +22,28 @@ Before you start writing code, please set up your local development environment:
 
 ---
 
+## Before Opening a PR
+
+Run these commands locally in the order listed. Each one catches a different class of problem, and the order is cheapest-first.
+
+```bash
+npm run lint          # ESLint + Prettier — catches style and obvious code issues
+npm run typecheck     # tsc --noEmit — catches type errors without a full build
+npm test              # Vitest unit/component tests (jsdom, no Supabase needed)
+npm run build         # Next.js production build — catches module graph and env errors
+```
+
+> **Requires a running local Supabase** (see [Local Setup](#getting-started--local-setup) and the [Supabase troubleshooting](#troubleshooting-local-supabase) section below):
+>
+> ```bash
+> npx supabase start
+> npm run test:integration   # RLS + RPC tests against a real local Postgres
+> ```
+
+These match what CI runs on every push and pull request (`.github/workflows/ci.yml` — `lint` → `typecheck` → `migration:lint` → `test` → `build`). If all of the above pass locally, CI should be green.
+
+---
+
 ## Branching & Commit Conventions
 
 To maintain a clean and legible project history, we use the following conventions:
@@ -69,6 +91,70 @@ When updating the database schema:
 2. **Rule: Use `type` aliases, NEVER `interface`**.
    * **Why**: `supabase-js`'s generic type checking requires the database schema to extend `Record<string, GenericTable>`. TypeScript's structural `extends` check only recognizes plain object `type` aliases as satisfying index signatures.
    * **The Risk**: If you use an `interface` (even deep inside nested types like emergency contacts or custom row models), the database query result types will **silently collapse to `never`** without any compilation error at the `Database` declaration. The error will only manifest downstream at `.from(...).select(...)` calls, making it hard to debug.
+
+---
+
+## Troubleshooting local Supabase
+
+The most common failure modes when running `supabase start` or `supabase db reset`, in order of frequency:
+
+### Docker daemon not running
+
+**Symptom:**
+```
+Error: Cannot connect to the Docker daemon at unix:///var/run/docker.sock.
+Is the docker daemon running?
+```
+
+**Fix:** Start Docker Desktop (or your Docker daemon) and wait until it is fully ready before retrying:
+```bash
+open -a Docker   # macOS — wait for the whale icon in the menu bar
+supabase start
+```
+
+---
+
+### Port already in use (stale container from a previous session)
+
+**Symptom:**
+```
+Error: listen tcp 0.0.0.0:54321: bind: address already in use
+```
+or similar for ports 54322, 54323, 54324, or 54329.
+
+**Fix:** Stop the existing Supabase containers, then restart:
+```bash
+supabase stop
+supabase start
+```
+
+If `supabase stop` itself fails or the port is held by something unrelated:
+```bash
+docker ps                  # identify the container holding the port
+docker stop <container_id>
+supabase start
+```
+
+---
+
+### Migration drift (local schema out of sync with migration files)
+
+**Symptom:** `npm run test:integration` fails with a table-not-found, column-not-found, or RLS policy error shortly after pulling new commits.
+
+**Fix:** Reset the local database. This drops and recreates the schema, replays all migrations in order, and re-runs the seed:
+```bash
+supabase db reset
+```
+
+> **Note:** `supabase db reset` destroys all local data. For development purposes this is fine — `seed.sql` re-creates the demo patient fixture (`demo@lafiya.test`). Do not run `db reset` against a hosted project URL.
+
+---
+
+### Stale generated types after a schema change
+
+**Symptom:** TypeScript errors in `lib/supabase/types.ts` after `supabase db reset`, or `.from(...).select(...)` calls that collapse to `never`.
+
+**Fix:** Manually update [`lib/supabase/types.ts`](lib/supabase/types.ts) to match the new schema (see [Critical Constraint: Hand-Authored Types](#3-critical-constraint-hand-authored-types) above). There is no `supabase gen types` step. The mismatch is usually a missing column, a renamed table, or a new RPC function. Compare the type file against the migration files under `supabase/migrations/` to find the delta.
 
 ---
 
