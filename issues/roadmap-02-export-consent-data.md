@@ -59,4 +59,3 @@ Medium — closes a concrete completeness gap in a user-facing privacy workflow.
 ## Suggested Labels
 
 `good-first-issue`, `privacy`, `data-export`
-

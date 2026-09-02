@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { isValidPhoneNumber } from "libphonenumber-js";
 
+export { formatZodError } from "./zod";
+
 export const BLOOD_GROUPS = [
   "A+",
   "A-",
@@ -15,6 +17,24 @@ export const BLOOD_GROUPS = [
 
 export const GENOTYPES = ["AA", "AS", "SS", "SC", "AC", "unknown"] as const;
 
+// Common relationship types for emergency contacts
+export const RELATIONSHIP_TYPES = [
+  "Spouse",
+  "Parent",
+  "Child",
+  "Sibling",
+  "Grandparent",
+  "Grandchild",
+  "Aunt",
+  "Uncle",
+  "Cousin",
+  "In-law",
+  "Friend",
+  "Caregiver",
+  "Healthcare Provider",
+  "Other",
+] as const;
+
 export const emergencyContactSchema = z.object({
   name: z.string().trim().min(1, "Contact name is required").max(100),
   phone: z
@@ -25,7 +45,17 @@ export const emergencyContactSchema = z.object({
     .refine((val) => isValidPhoneNumber(val, "NG"), {
       message: "This doesn't look like a valid phone number",
     }),
-  relationship: z.string().trim().min(1, "Relationship is required").max(50),
+  relationship: z
+    .string()
+    .trim()
+    .min(1, "Relationship is required")
+    .max(50)
+    .refine(
+      (val) =>
+        RELATIONSHIP_TYPES.includes(val as typeof RELATIONSHIP_TYPES[number]) ||
+        val.length > 0,
+      "Please select a relationship type or enter a custom value",
+    ),
 });
 
 /**

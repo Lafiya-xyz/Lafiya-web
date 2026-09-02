@@ -59,4 +59,3 @@ High
 ## Suggested Labels
 
 `spike`, `observability`, `privacy`, `reliability`, `operations`
-

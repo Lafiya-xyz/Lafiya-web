@@ -61,11 +61,7 @@ try {
 // ─── Find the card route key ─────────────────────────────────────────────────
 // The route group segment "(public)" is stripped from manifest keys in some
 // Next.js versions; try both forms.
-const ROUTE_KEYS = [
-  "/(public)/card/[id]",
-  "/card/[id]",
-  "(public)/card/[id]",
-];
+const ROUTE_KEYS = ["/(public)/card/[id]", "/card/[id]", "(public)/card/[id]"];
 
 let routeKey = null;
 for (const key of ROUTE_KEYS) {
@@ -88,10 +84,7 @@ if (!routeKey) {
   console.error(
     "✗ Could not find the card/[id] route in .next/build-manifest.json.",
   );
-  console.error(
-    "  Known pages:",
-    Object.keys(manifest.pages ?? {}).join(", "),
-  );
+  console.error("  Known pages:", Object.keys(manifest.pages ?? {}).join(", "));
   process.exit(1);
 }
 
@@ -133,7 +126,9 @@ console.log("\n── Bundle size check: card/[id] route ───────�
 console.log(`  Route key: ${routeKey}`);
 console.log(`  JS  chunks: ${jsChunks.length} files → ${kb(jsBytes)}`);
 console.log(`  CSS chunks: ${kb(cssBytes)}`);
-console.log(`  Budgets:    JS ≤ ${kb(JS_BUDGET_BYTES)} | CSS ≤ ${kb(CSS_BUDGET_BYTES)}`);
+console.log(
+  `  Budgets:    JS ≤ ${kb(JS_BUDGET_BYTES)} | CSS ≤ ${kb(CSS_BUDGET_BYTES)}`,
+);
 
 let failed = false;
 
@@ -158,7 +153,9 @@ if (cssBytes > CSS_BUDGET_BYTES) {
   );
   failed = true;
 } else {
-  console.log(`✓ CSS within budget (${kb(cssBytes)} ≤ ${kb(CSS_BUDGET_BYTES)})`);
+  console.log(
+    `✓ CSS within budget (${kb(cssBytes)} ≤ ${kb(CSS_BUDGET_BYTES)})`,
+  );
 }
 
 console.log("────────────────────────────────────────────────────────────\n");
