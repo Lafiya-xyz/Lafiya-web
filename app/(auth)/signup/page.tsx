@@ -107,6 +107,12 @@ export default function SignUpPage() {
             Sign in
           </Link>
         </p>
+
+        <p role="note" className="mt-6 text-xs text-zinc-500 dark:text-zinc-500">
+          Lafiya is pre-alpha software on the Stellar testnet, not yet
+          audited, and not a medical device. Not a substitute for
+          professional medical judgment.
+        </p>
       </div>
     </div>
   );
