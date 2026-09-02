@@ -40,6 +40,13 @@ export async function QrCardDisplay({
         unoptimized
         className="rounded-md"
       />
+      <p className="sr-only">
+        This QR code links to your public emergency card — the page a first
+        responder or clinician sees when they scan it. It shows only the health
+        information you have chosen to make visible in your privacy settings.
+        No login is required to view it. Scan or share the link below to give
+        responders access to your emergency information.
+      </p>
       <p
         data-testid="card-url"
         className="max-w-xs text-xs break-all text-zinc-500 dark:text-zinc-500"
