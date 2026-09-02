@@ -59,4 +59,3 @@ High — reduces silent production misconfiguration in the trust and payment pat
 ## Suggested Labels
 
 `intermediate`, `deployment`, `security`, `operations`
-

@@ -4,12 +4,11 @@ import {
   CURRENT_POLICY_LABEL,
   POLICY_ROUTES,
 } from "@/lib/consent";
+import { formatDateTime } from "@/lib/format/datetime";
 import { AcknowledgeConsentButton } from "./acknowledge-consent-button";
 
 function formatAcceptedAt(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString();
+  return formatDateTime(iso, iso);
 }
 
 /**

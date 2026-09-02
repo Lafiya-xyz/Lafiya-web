@@ -1,23 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-// getAttestation wraps its lookup in next/cache's unstable_cache, which
-// requires a full Next.js request/render context to have an incremental
-// cache available. Outside that context (here, under Vitest) it throws, so
-// tests stub it with a simple in-memory memoizer instead.
-vi.mock("next/cache", () => ({
-  unstable_cache: (fn: (...args: unknown[]) => unknown) => {
-    const cacheStore = new Map<string, unknown>();
-    return async (...args: unknown[]) => {
-      const key = JSON.stringify(args);
-      if (cacheStore.has(key)) {
-        return cacheStore.get(key);
-      }
-      const result = await fn(...args);
-      cacheStore.set(key, result);
-      return result;
-    };
-  },
-}));
+import { mockUnstableCache } from "@/tests/fixtures/next-cache";
+
+void mockUnstableCache;
 
 // No ATTESTATION_CONTRACT_ID here: this exercises the local-dev / pre-deploy
 // fallback path, where getAttestation short-circuits to the in-memory mock and
@@ -47,7 +32,10 @@ vi.mock("@stellar/stellar-sdk", () => ({
   scValToNative: (scval: unknown) => scval,
 }));
 
-import { getAttestation, DEMO_VERIFIED_RECORD_HASH } from "@/lib/stellar/attestation";
+import {
+  getAttestation,
+  DEMO_VERIFIED_RECORD_HASH,
+} from "@/lib/stellar/attestation";
 
 describe("getAttestation (local-dev mock fallback)", () => {
   it("returns the demo attestation for the fixture hash when no contract is configured", async () => {

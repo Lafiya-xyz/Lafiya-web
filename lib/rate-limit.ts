@@ -2,6 +2,31 @@ import { headers } from "next/headers";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 
+/**
+ * Milliseconds per second — used to convert a future timestamp (ms) to a
+ * seconds-remaining countdown for callers and Retry-After headers.
+ */
+export const MS_PER_SECOND = 1000;
+
+/**
+ * Fallback client IP returned when no forwarding headers are present.
+ * Matches the loopback address used by local dev and CI environments.
+ */
+export const FALLBACK_CLIENT_IP = "127.0.0.1";
+
+/**
+ * The backoff schedule (first lockout duration, cap, and free-attempt
+ * threshold) lives in the `rate_limit_record_failure()` Postgres function
+ * defined in supabase/migrations/20260729120001_rate_limits_table.sql.
+ * Constants are not duplicated here to keep a single source of truth;
+ * change them there, not here.
+ *
+ * Summary for reference:
+ *   - Attempts 1–4: no lockout.
+ *   - Attempt 5: locked out for 30 s.
+ *   - Attempts 6+: exponential doubling (30 s × 2^(n-5)), capped at 900 s (15 min).
+ */
+
 export interface RateLimitResult {
   allowed: boolean;
   blockedUntil: Date | null;
@@ -38,7 +63,7 @@ export async function checkRateLimit(key: string): Promise<RateLimitResult> {
     return {
       allowed: false,
       blockedUntil: new Date(blockedUntil),
-      secondsRemaining: Math.ceil((blockedUntil - now) / 1000),
+      secondsRemaining: Math.ceil((blockedUntil - now) / MS_PER_SECOND),
     };
   }
 
@@ -113,5 +138,5 @@ export async function getClientIp(): Promise<string> {
   }
   const realIp = headersList.get("x-real-ip")?.trim();
   if (realIp) return realIp;
-  return "127.0.0.1";
+  return FALLBACK_CLIENT_IP;
 }

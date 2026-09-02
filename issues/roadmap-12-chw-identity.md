@@ -59,4 +59,3 @@ Critical
 ## Suggested Labels
 
 `spike`, `security`, `authentication`, `wallet`, `stellar`
-

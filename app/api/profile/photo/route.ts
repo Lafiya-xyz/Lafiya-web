@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import sharp from "sharp";
 
 import { checkAndIncrementFrequency } from "@/lib/frequency-limit";
+import { logError } from "@/lib/logging/logger";
 import { createClient } from "@/lib/supabase/server";
 
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -112,6 +113,20 @@ export async function POST(request: Request) {
       );
     }
 
+    const FORMAT_TO_MIME: Record<string, string> = {
+      jpeg: "image/jpeg",
+      jpg: "image/jpeg",
+      png: "image/png",
+      webp: "image/webp",
+    };
+    const actualMime = FORMAT_TO_MIME[metadata.format];
+    if (!actualMime || actualMime !== file.type) {
+      return NextResponse.json(
+        { error: "File content does not match declared type" },
+        { status: 400 },
+      );
+    }
+
     const { width, height } = metadata;
     if (
       !width ||
@@ -178,9 +193,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ publicUrl: data.publicUrl });
   } catch (error: unknown) {
-    console.error("Error handling avatar upload:", error);
-    const message =
-      error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    logError("Error handling avatar upload", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

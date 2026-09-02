@@ -1,5 +1,14 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
+/**
+ * Concrete per-feature limit values (maxCount, windowSeconds) are defined as
+ * named constants at each call site (e.g. UPLOAD_FREQUENCY_MAX,
+ * UPLOAD_FREQUENCY_WINDOW_SECONDS in app/api/profile/photo/route.ts) so each
+ * caller's policy is self-documented alongside the code that enforces it.
+ * This file intentionally contains no hardcoded limit numbers — all numeric
+ * parameters are passed in by the caller.
+ */
+
 export interface FrequencyLimitResult {
   allowed: boolean;
   count: number;
@@ -37,10 +46,36 @@ export async function checkAndIncrementFrequency(
     throw error;
   }
 
-  return {
+  return sanitizeFrequencyLimitResult({
     allowed: data.allowed,
     count: data.count,
     retryAfterSeconds: data.retry_after_seconds,
+  });
+}
+
+/**
+ * A backward clock jump (NTP correction, DST fold, container clock skew) can
+ * make a window-based count look like it has already expired even though it
+ * hasn't, which would otherwise surface here as a nonsensical negative
+ * `retryAfterSeconds` or an `allowed: true` alongside a count at/over the
+ * cap. Treat any such inconsistency as "deny" rather than silently letting
+ * the caller through -- fail closed, not open.
+ */
+export function sanitizeFrequencyLimitResult(
+  result: FrequencyLimitResult,
+): FrequencyLimitResult {
+  const inconsistent =
+    result.retryAfterSeconds < 0 ||
+    (result.allowed === false && result.retryAfterSeconds === 0);
+
+  if (!inconsistent) {
+    return result;
+  }
+
+  return {
+    ...result,
+    allowed: false,
+    retryAfterSeconds: Math.max(result.retryAfterSeconds, 1),
   };
 }
 
