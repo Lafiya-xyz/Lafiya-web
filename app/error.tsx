@@ -10,7 +10,13 @@ export default function ErrorPage({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("Unhandled application error", error);
+    // Only log the opaque digest in production — never the raw message or stack
+    // which could leak internal implementation details to anyone with devtools open.
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Unhandled application error", error);
+    } else {
+      console.error("Application error", { digest: error.digest });
+    }
   }, [error]);
 
   return (
