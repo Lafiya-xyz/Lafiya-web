@@ -85,9 +85,9 @@ describe("profileFormSchema", () => {
   it("accepts valid emergency contact phone numbers in various formats", () => {
     const formats = [
       "+2348012345678", // Nigerian international
-      "08012345678",    // Nigerian local
-      "0803 123 4567",   // Nigerian local with spaces
-      "+14155552671",   // US international
+      "08012345678", // Nigerian local
+      "0803 123 4567", // Nigerian local with spaces
+      "+14155552671", // US international
     ];
     for (const phone of formats) {
       const result = profileFormSchema.safeParse({
@@ -101,12 +101,7 @@ describe("profileFormSchema", () => {
   });
 
   it("rejects invalid emergency contact phone numbers", () => {
-    const invalidPhones = [
-      "123",
-      "not-a-phone",
-      "080",
-      "++2348012345678",
-    ];
+    const invalidPhones = ["123", "not-a-phone", "080", "++2348012345678"];
     for (const phone of invalidPhones) {
       const result = profileFormSchema.safeParse({
         ...validProfile,
@@ -117,7 +112,9 @@ describe("profileFormSchema", () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         const error = result.error.issues.find((e) => e.path.includes("phone"));
-        expect(error?.message).toBe("This doesn't look like a valid phone number");
+        expect(error?.message).toBe(
+          "This doesn't look like a valid phone number",
+        );
       }
     }
   });

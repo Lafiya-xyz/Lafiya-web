@@ -110,7 +110,11 @@ export function PhotoUploadField({
         </label>
       </div>
       {activeError ? (
-        <p id="photoUrl-error" role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+        <p
+          id="photoUrl-error"
+          role="alert"
+          className="mt-2 text-sm text-red-600 dark:text-red-400"
+        >
           {activeError}
         </p>
       ) : null}

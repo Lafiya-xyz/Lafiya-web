@@ -5,15 +5,17 @@ Please include a summary of the changes, the problem solved, and any relevant co
 ## Shared Contract Impact
 
 Does this PR modify or touch a shared cross-repo contract?
+
 - [ ] **No**
 - [ ] **Yes**
 
 If **Yes**, please check which contract(s) are affected and provide details on how the change is coordinated:
+
 - [ ] **Attestation Schema** (effects on `lafiya-contracts`)
 - [ ] **Emergency Data Model** (effects on `lafiya-docs`)
 - [ ] **Environment/Config Keys** (effects on `.env.example`, stellar deployment keys, etc.)
 
-*Details on coordination:* 
+_Details on coordination:_
 
 ## Verification Checklist
 

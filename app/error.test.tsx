@@ -7,7 +7,9 @@ describe("ErrorPage", () => {
   it("renders a recovery message and calls reset", async () => {
     const user = userEvent.setup();
     const reset = vi.fn();
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
 
     render(<ErrorPage error={new Error("boom")} reset={reset} />);
 
@@ -16,7 +18,9 @@ describe("ErrorPage", () => {
         name: /we couldn’t load this page right now/i,
       }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /try again/i }),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /try again/i }));
 

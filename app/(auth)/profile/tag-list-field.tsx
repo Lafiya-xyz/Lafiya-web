@@ -66,7 +66,10 @@ export function TagListField({
         + Add {label.toLowerCase()}
       </button>
       {error ? (
-        <p id={`${name}-error`} className="mt-1 text-sm text-red-600 dark:text-red-400">
+        <p
+          id={`${name}-error`}
+          className="mt-1 text-sm text-red-600 dark:text-red-400"
+        >
           {error}
         </p>
       ) : null}

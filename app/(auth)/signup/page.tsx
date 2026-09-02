@@ -65,7 +65,8 @@ export default function SignUpPage() {
               htmlFor="consent"
               className="text-sm text-zinc-600 dark:text-zinc-400"
             >
-              I consent to the collection and processing of my health data in accordance with the{" "}
+              I consent to the collection and processing of my health data in
+              accordance with the{" "}
               <Link
                 href="/privacy"
                 className="font-medium text-zinc-950 underline dark:text-zinc-50"
