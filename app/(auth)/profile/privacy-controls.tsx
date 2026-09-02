@@ -1,3 +1,4 @@
+import { formatDateTime } from "@/lib/format/datetime";
 import type { ConsentEventRow, DisclosurePolicy } from "@/lib/supabase/types";
 
 import { recordConsentChoice, updateDisclosureChoices } from "./actions";
@@ -117,7 +118,7 @@ export function PrivacyControls({
             <li key={event.id}>
               {event.purpose.replaceAll("_", " ")} — {event.action} —{" "}
               <time dateTime={event.occurred_at}>
-                {new Date(event.occurred_at).toLocaleString()}
+                {formatDateTime(event.occurred_at)}
               </time>
             </li>
           ))}

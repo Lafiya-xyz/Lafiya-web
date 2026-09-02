@@ -48,6 +48,31 @@ const HEX_SECRET_PATTERN = /^[0-9a-f]{64}$/i;
  * arrays) would not.
  *
  * Array fields are sorted first so field order never changes the hash.
+ *
+ * @example
+ * ```ts
+ * const fields: RecordHashFields = {
+ *   name: "Amina Yusuf",
+ *   blood_group: "O+",
+ *   genotype: "AS",
+ *   allergies: ["Penicillin", "Peanuts"],
+ *   medications: ["Insulin"],
+ *   chronic_conditions: ["Asthma"],
+ *   emergency_contacts: [
+ *     { name: "Halima Yusuf", phone: "+2348012345678", relationship: "Mother" },
+ *   ],
+ *   language: "Hausa",
+ * };
+ * // secretHex: 64 lowercase hex chars, from getSecretByUserId (never a
+ * // literal like this outside a test — see recordSecret.ts).
+ * const secretHex = "a".repeat(64);
+ *
+ * const hash = computeRecordHash(fields, secretHex);
+ * // hash: a 64-character lowercase hex string, e.g.
+ * // "3f2a1e...9c7b" — deterministic for the same fields + secret,
+ * // regardless of array element order (["Penicillin", "Peanuts"] and
+ * // ["Peanuts", "Penicillin"] produce the identical hash).
+ * ```
  */
 export function computeRecordHash(
   fields: RecordHashFields,
@@ -76,7 +101,17 @@ export function computeRecordHash(
   );
 }
 
-/** Returns whether the current on-chain attestation exists and remains valid. */
+/**
+ * Returns whether the current on-chain attestation exists and remains valid.
+ *
+ * @example
+ * ```ts
+ * const hash = computeRecordHash(fields, secretHex);
+ * const isVerified = await validateAttestation(hash);
+ * // true only if an attestation for exactly this hash exists on-chain,
+ * // is not revoked, and (if it carries an expiry) hasn't expired yet.
+ * ```
+ */
 export async function validateAttestation(
   recordHash: string,
 ): Promise<boolean> {

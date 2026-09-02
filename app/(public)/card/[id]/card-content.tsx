@@ -1,5 +1,6 @@
 import Image from "next/image";
 
+import { formatDateTime } from "@/lib/format/datetime";
 import { OfflineEnvelopeSource } from "@/lib/emergency/offline-source";
 import type { EmergencyCardRow } from "@/lib/supabase/types";
 
@@ -11,13 +12,7 @@ function formatList(values: string[] | null): string {
 }
 
 function formatTime(value: string | null): string {
-  if (!value) return "Unavailable";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unavailable";
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  return formatDateTime(value);
 }
 
 function phoneHref(phone: string): string | null {
