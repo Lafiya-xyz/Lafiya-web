@@ -3,9 +3,35 @@ import { NextResponse } from "next/server";
 import { getAttestation } from "@/lib/stellar/attestation";
 import { checkRateLimit, getClientIp, recordFailure } from "@/lib/rate-limit";
 
-import { logError } from "@/lib/logging/logger";
+import { logError, logInfo } from "@/lib/logging/logger";
 
 const RECORD_HASH_PATTERN = /^[0-9a-f]{64}$/i;
+const ROUTE_CLASS = "attestation_lookup";
+
+type AttestationLookupOutcome =
+  "invalid_request" | "rate_limited" | "verified" | "not_found" | "error";
+
+function latencyBucket(elapsedMs: number): string {
+  if (elapsedMs < 100) return "under_100_ms";
+  if (elapsedMs < 500) return "100_to_499_ms";
+  if (elapsedMs < 2_000) return "500_to_1999_ms";
+  return "2000_ms_or_more";
+}
+
+function lookupContext(outcome: AttestationLookupOutcome, startedAt: number) {
+  return {
+    routeClass: ROUTE_CLASS,
+    outcome,
+    latencyBucket: latencyBucket(Math.max(0, Date.now() - startedAt)),
+  };
+}
+
+function logLookupCompleted(
+  outcome: Exclude<AttestationLookupOutcome, "error">,
+  startedAt: number,
+) {
+  logInfo("Attestation lookup completed", lookupContext(outcome, startedAt));
+}
 
 /**
  * Read-only, unauthenticated lookup of an attestation by record hash. A
@@ -35,42 +61,50 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ recordHash: string }> },
 ) {
+  const startedAt = Date.now();
   const { recordHash } = await params;
 
   if (!RECORD_HASH_PATTERN.test(recordHash)) {
+    logLookupCompleted("invalid_request", startedAt);
     return NextResponse.json(
       { error: "recordHash must be a 64-character hex SHA-256 digest" },
       { status: 400 },
     );
   }
 
-  const ip = await getClientIp();
-  const rateLimitKey = `attestation-lookup:${ip}`;
-
-  const limitCheck = await checkRateLimit(rateLimitKey);
-  if (!limitCheck.allowed) {
-    return NextResponse.json(
-      {
-        error: "Too many requests. Please try again later.",
-        secondsRemaining: limitCheck.secondsRemaining,
-      },
-      { status: 429 },
-    );
-  }
-
-  await recordFailure(rateLimitKey);
-
   try {
+    const ip = await getClientIp();
+    const rateLimitKey = `attestation-lookup:${ip}`;
+
+    const limitCheck = await checkRateLimit(rateLimitKey);
+    if (!limitCheck.allowed) {
+      logLookupCompleted("rate_limited", startedAt);
+      return NextResponse.json(
+        {
+          error: "Too many requests. Please try again later.",
+          secondsRemaining: limitCheck.secondsRemaining,
+        },
+        { status: 429 },
+      );
+    }
+
+    await recordFailure(rateLimitKey);
+
     const attestation = await getAttestation(recordHash);
+    logLookupCompleted(
+      attestation === null ? "not_found" : "verified",
+      startedAt,
+    );
     return NextResponse.json({
       verified: attestation !== null,
       attestation,
     });
-  } catch (error) {
-    logError("Failed to lookup attestation", error, {
-      route: "/api/attestation/[recordHash]",
-      recordHash,
-    });
+  } catch {
+    logError(
+      "Attestation lookup failed",
+      new Error("ATTESTATION_LOOKUP_FAILED"),
+      lookupContext("error", startedAt),
+    );
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 },
