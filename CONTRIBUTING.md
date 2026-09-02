@@ -19,6 +19,39 @@ Before you start writing code, please set up your local development environment:
 1. **Install Dependencies**: Run `npm install`.
 2. **Local Supabase & Configuration**: Follow the **Quick Start** instructions in the [README.md](README.md#quick-start) to start the local database and populate your environment variables.
 3. **Run Dev Server**: Start the local server using `npm run dev`.
+4. **Install the pre-commit hook** (one-time per clone): Run `npm run hooks:install`. This wires `scripts/scan-secrets.mjs` into git so secret patterns are caught before they reach the remote.
+
+---
+
+## Common Commands
+
+All commands below are available as `npm run <script>`. Run `npm run` with no arguments to see the full list.
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Start the Next.js development server |
+| `npm run build` | Production build (also runs bundle size check) |
+| `npm start` | Start the production server (after `build`) |
+| `npm run lint` | ESLint with zero-warning policy |
+| `npm run typecheck` | TypeScript type check (no emit) |
+| `npm run format` | Auto-format all files with Prettier |
+| `npm run format:check` | Check formatting without writing |
+| `npm test` | Unit + component tests (Vitest, jsdom) |
+| `npm run test:watch` | Vitest in interactive watch mode |
+| `npm run test:integration` | RLS + RPC integration tests (requires `npm run db:start`) |
+| `npm run test:e2e` | Playwright end-to-end tests |
+| `npm run db:start` | Start local Supabase (`npx supabase start`) |
+| `npm run db:stop` | Stop local Supabase |
+| `npm run db:reset` | Recreate local DB from migrations + seed |
+| `npm run migration:lint` | Check migration files for security anti-patterns |
+| `npm run types:verify` | Verify `lib/supabase/types.ts` is consistent with migrations |
+| `npm run secrets:scan` | Scan staged files for secret patterns (also runs as pre-commit hook) |
+| `npm run secrets:scan-all` | Scan all tracked files for secret patterns |
+| `npm run bench:compare` | Compare a new benchmark run against the committed baseline |
+| `npm run bundle:check` | Verify Next.js bundle stays within budget |
+| `npm run hooks:install` | Configure git to use `.githooks/` (one-time per clone) |
+| `npm run sbom` | Generate a software bill of materials |
+| `npm run release:verify-gate` | Verify all release-gate evidence is present |
 
 ---
 
@@ -167,6 +200,23 @@ supabase db reset
 
 **Fix:** Manually update [`lib/supabase/types.ts`](lib/supabase/types.ts) to match the new schema (see [Critical Constraint: Hand-Authored Types](#3-critical-constraint-hand-authored-types) above). There is no `supabase gen types` step. The mismatch is usually a missing column, a renamed table, or a new RPC function. Compare the type file against the migration files under `supabase/migrations/` to find the delta.
 
+### 4. Verify Types Are In Sync (required step after every migration)
+
+After updating `lib/supabase/types.ts`, run the types verification script to confirm it is consistent with the current migrations:
+
+```bash
+node scripts/verify-supabase-types.mjs
+# or
+npm run types:verify
+```
+
+This script checks that:
+- Every public table defined in a migration has a corresponding entry in `lib/supabase/types.ts`.
+- Every column from `CREATE TABLE` and `ALTER TABLE … ADD COLUMN` statements is referenced in the types file.
+- (Local-only) No migration file is newer than `lib/supabase/types.ts`.
+
+**CI fails with a clear message if the check does not pass.** If you see the failure locally, update `lib/supabase/types.ts` to match the migrations and re-run `npm run types:verify` before pushing.
+
 ---
 
 ## Coordinating Cross-Repo Changes (Shared Contracts)
@@ -188,6 +238,28 @@ If your changes affect any of the following, you **must** flag it in your Pull R
 3. **Environment & Configuration Keys**: Shared configuration keys in `.env.example` (such as contract IDs or stellar RPC urls).
 
 Always mention in your PR description if you have touched any of these contracts so the repository maintainers can coordinate the matching changes in the other repositories.
+
+---
+
+## Secret Scanning
+
+Lafiya runs a lightweight secret-pattern scan on every CI push and pull request (`scripts/scan-secrets.mjs`). The same script runs as a pre-commit hook when you install it with `npm run hooks:install`.
+
+It catches common accidental credential commits: JWTs, private keys, AWS access keys, Stellar secret keys, Google API keys, and hardcoded password literals.
+
+**To install the pre-commit hook** (one-time per clone):
+```bash
+npm run hooks:install
+```
+
+**To scan all tracked files manually:**
+```bash
+npm run secrets:scan-all
+```
+
+**False positives:** Add `// scan-secrets-ignore` (or `# scan-secrets-ignore`) as a comment on the specific line to suppress it. This is intentionally narrow — suppress a line only when you are certain it contains no real secret.
+
+> This scan complements, and does not replace, GitHub's own secret scanning. Rotate any credential that was accidentally staged even if this script doesn't catch it.
 
 ---
 
@@ -302,4 +374,6 @@ Before hitting submit on your PR:
 - [ ] Unit and component tests pass.
 - [ ] Integration tests pass against a running local Supabase.
 - [ ] If a database migration was added, the hand-authored types in `lib/supabase/types.ts` were updated as `type` aliases.
+- [ ] `npm run types:verify` passes (types are consistent with migrations).
+- [ ] `npm run secrets:scan-all` passes (no secret patterns found in tracked files).
 - [ ] You have declared whether this PR impacts a shared cross-repo contract.
