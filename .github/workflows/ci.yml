@@ -32,6 +32,8 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run migration:lint
+      - run: npm run types:verify
+      - run: npm run secrets:scan-all
       - run: npm run ci:check-action-pins
       - run: npm test
       - run: npm run build

@@ -4,15 +4,9 @@ import QRCode from "qrcode";
 import { useActionState, useEffect, useState } from "react";
 import Image from "next/image";
 
+import { formatDate } from "@/lib/format/datetime";
 import { createEmergencyCapability } from "./actions";
 import { CopyLinkButton } from "./copy-link-button";
-
-function formatDate(value: string | undefined): string {
-  if (!value) return "";
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    new Date(value),
-  );
-}
 
 export function CapabilitySharePanel() {
   const [state, action, isPending] = useActionState(
@@ -55,7 +49,7 @@ export function CapabilitySharePanel() {
         <button
           type="submit"
           disabled={isPending}
-          className="rounded-full bg-zinc-950 px-5 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950"
+          className="rounded-full bg-zinc-950 px-5 py-2 text-sm font-medium text-white disabled:opacity-50 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:bg-zinc-50 dark:text-zinc-950 dark:focus:ring-zinc-600"
         >
           {isPending ? "Creating…" : "Create emergency QR"}
         </button>

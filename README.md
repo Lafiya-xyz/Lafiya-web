@@ -1,5 +1,6 @@
 # Lafiya
 
+[![CI Status](https://github.com/Lafiya-xyz/Lafiya-web/actions/workflows/ci.yml/badge.svg)](https://github.com/Lafiya-xyz/Lafiya-web/actions/workflows/ci.yml)
 [![Built on Stellar](https://img.shields.io/badge/Built%20on-Stellar-blue?logo=stellar)](https://stellar.org)
 [![Soroban Smart Contracts](https://img.shields.io/badge/Smart%20Contracts-Soroban-purple)](https://soroban.stellar.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](#license)
@@ -87,7 +88,7 @@ graph TB
 - **lib/supabase/**: Supabase client/server helpers and hand-authored types for the off-chain encrypted store
 - **lib/stellar/**: Soroban attestation lookup — `getAttestation(recordHash)` calls the deployed `lafiya-contracts` registry over RPC in live mode. Mock attestations require an explicitly non-production deployment identity and cannot boot in production.
 - **lib/runtime-config.ts**: fail-closed server configuration boundary. It validates deployment identity, network/contract pairing, feature-group completeness, build/schema compatibility, and production telemetry before traffic; `/api/internal/readiness` exposes only non-secret component state for platform probes.
-- **lib/qr/**: QR code generation for the emergency page
+- **lib/qr/**: QR code generation — see [docs/qr-code-format.md](docs/qr-code-format.md) for the encoded payload specification and the reasoning behind the chosen QR options
 
 ### Emergency access and offline support
 
@@ -163,6 +164,10 @@ Everything else (full history, documents, notes) stays private, behind authentic
 - **Nigeria Data Protection Act (2023)** governs all personal data held. Consent, encryption, and minimal disclosure are designed in from day one.
 - Patients opt into exactly what appears on their public page.
 - No health data on-chain; only non-reversible hashes and attestations.
+- For the exact per-field visibility classification (public-by-default,
+  private-by-default, or always private/never shown) verified against the
+  actual privacy-controls UI and public card query, see
+  [`docs/profile-field-visibility.md`](docs/profile-field-visibility.md).
 
 For the current threat model, access paths, and accepted tradeoffs across the public card, attestation lookup, avatars bucket, and authenticated profile editor, see the shared document in the separate docs repo: [lafiya-docs threat model](../lafiya-docs/threat-model.md).
 
@@ -228,7 +233,7 @@ npx supabase start
 cp .env.example .env.local
 ```
 
-`supabase start` prints an `ANON_KEY` and `SERVICE_ROLE_KEY` — put those (and the printed `API_URL`, usually `http://127.0.0.1:54321`) into `.env.local` as `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. `supabase db reset` applies migrations and seeds one demo patient (`demo@lafiya.test` / `lafiya-demo-password`, card id `11111111-1111-1111-1111-111111111111`) for local testing. See [Lafiya Organization](#lafiya-organization) for what each variable is for.
+`supabase start` prints an `ANON_KEY` and `SERVICE_ROLE_KEY` — put those (and the printed `API_URL`, usually `http://127.0.0.1:54321`) into `.env.local` as `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. `supabase db reset` applies migrations and seeds one demo patient (`demo@lafiya.test` / `lafiya-demo-password`, card id `11111111-1111-1111-1111-111111111111`) for local testing. For a full description of every variable — what it does, whether it is required, and which subsystem it belongs to — see [docs/environment-variables.md](docs/environment-variables.md).
 
 ### 3. Run the dev server
 

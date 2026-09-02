@@ -16,6 +16,14 @@
 /playwright-report
 **/__snapshots__
 
+# test snapshots (Vitest / Jest)
+**/__snapshots__/
+*.snap
+
+# playwright
+/playwright-report/
+/test-results/
+
 # next.js
 /.next/
 /out/
@@ -49,3 +57,30 @@ next-env.d.ts
 # codespace / local environment
 /.config
 /.npm
+
+# benchmark run outputs (only the committed baseline is tracked)
+bench/rpc-provider-benchmark/results/*.json
+!bench/rpc-provider-benchmark/results/2026-08-20-baseline.json
+
+# Lighthouse CI
+.lighthouseci/
+
+# sbom output
+sbom.json
+
+# editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+Thumbs.db
+ehthumbs.db
+
+# Playwright
+/playwright/.cache/
+
+# Sentry
+.sentryclirc

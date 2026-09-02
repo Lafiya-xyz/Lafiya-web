@@ -1,3 +1,4 @@
+import { formatDateTime } from "@/lib/format/datetime";
 import type { ConsentEventRow, DisclosurePolicy } from "@/lib/supabase/types";
 
 import { recordConsentChoice, updateDisclosureChoices } from "./actions";
@@ -55,6 +56,7 @@ export function PrivacyControls({
             <form
               action={recordConsentChoice}
               key={purpose}
+              data-testid={`consent-form-${purpose}`}
               className="flex items-center justify-between gap-4"
             >
               <input type="hidden" name="purpose" value={purpose} />
@@ -65,11 +67,18 @@ export function PrivacyControls({
               />
               <span>
                 {label}{" "}
-                <span className="text-xs text-zinc-500">
+                <span
+                  data-testid={`consent-status-${purpose}`}
+                  className="text-xs text-zinc-500"
+                >
                   ({active ? "allowed" : "withdrawn"})
                 </span>
               </span>
-              <button className="rounded-full border px-4 py-2" type="submit">
+              <button
+                type="submit"
+                data-testid={`consent-toggle-${purpose}`}
+                className="rounded-full border px-4 py-2 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:focus:ring-zinc-600"
+              >
                 {active ? "Withdraw" : "Allow"}
               </button>
             </form>
@@ -89,6 +98,7 @@ export function PrivacyControls({
                   type="checkbox"
                   name={`field:${field}`}
                   defaultChecked={policy.fields[field]}
+                  className="focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 dark:focus:ring-zinc-600"
                 />
                 <span>{field.replaceAll("_", " ")}</span>
               </label>
@@ -96,7 +106,7 @@ export function PrivacyControls({
           </div>
         </fieldset>
         <button
-          className="self-start rounded-full bg-zinc-950 px-5 py-2 text-white dark:bg-zinc-50 dark:text-zinc-950"
+          className="self-start rounded-full bg-zinc-950 px-5 py-2 text-white focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:bg-zinc-50 dark:text-zinc-950 dark:focus:ring-zinc-600"
           type="submit"
         >
           Save disclosure choices
@@ -109,7 +119,7 @@ export function PrivacyControls({
             <li key={event.id}>
               {event.purpose.replaceAll("_", " ")} — {event.action} —{" "}
               <time dateTime={event.occurred_at}>
-                {new Date(event.occurred_at).toLocaleString()}
+                {formatDateTime(event.occurred_at)}
               </time>
             </li>
           ))}

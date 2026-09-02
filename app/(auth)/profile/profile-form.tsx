@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { useEffect, useState } from "react";
 
 import { BLOOD_GROUPS, GENOTYPES } from "@/lib/validation/profile";
 import type { ProfileRow } from "@/lib/supabase/types";
@@ -22,8 +23,25 @@ export function ProfileForm({
     undefined,
   );
 
+  const [isDirtyState, setIsDirtyState] = useState(false);
+
+  // isDirty is true when the form has been changed AND the last action did not succeed
+  const isDirty = isDirtyState && !state?.success;
+
+  // Warn on tab close / page reload when there are unsaved changes
+  useEffect(() => {
+    if (!isDirty) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [isDirty]);
+
   return (
-    <form action={formAction} className="flex flex-col gap-6">
+    <form action={formAction} onChange={() => setIsDirtyState(true)} data-dirty={isDirty ? "true" : undefined} className="flex flex-col gap-6">
       {profile ? (
         <input
           type="hidden"
@@ -43,6 +61,7 @@ export function ProfileForm({
       {state?.success ? (
         <p
           role="status"
+          data-testid="profile-save-status"
           className="text-sm text-emerald-600 dark:text-emerald-400"
         >
           Saved.
@@ -61,6 +80,15 @@ export function ProfileForm({
         </div>
       ) : null}
 
+      <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        Fields marked with{" "}
+        <span aria-hidden="true" className="text-red-600 dark:text-red-400">
+          *
+        </span>
+        <span className="sr-only"> (required)</span> are required. Everything
+        else is optional but helps make the emergency card more useful.
+      </p>
+
       <PhotoUploadField
         userId={userId}
         initialUrl={profile?.photo_url ?? null}
@@ -72,7 +100,11 @@ export function ProfileForm({
           htmlFor="name"
           className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
         >
-          Full name
+          Full name{" "}
+          <span aria-hidden="true" className="text-red-600 dark:text-red-400">
+            *
+          </span>
+          <span className="sr-only"> (required)</span>
         </label>
         <input
           id="name"
@@ -82,7 +114,7 @@ export function ProfileForm({
           defaultValue={profile?.name ?? ""}
           aria-invalid={state?.errors?.name ? "true" : undefined}
           aria-describedby={state?.errors?.name ? "name-error" : undefined}
-          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-zinc-600"
         />
         {state?.errors?.name ? (
           <p
@@ -110,7 +142,7 @@ export function ProfileForm({
           aria-describedby={
             state?.errors?.dateOfBirth ? "dateOfBirth-error" : undefined
           }
-          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-zinc-600"
         />
         {state?.errors?.dateOfBirth ? (
           <p
@@ -139,7 +171,7 @@ export function ProfileForm({
           aria-describedby={
             state?.errors?.language ? "language-error" : undefined
           }
-          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-zinc-600"
         />
         {state?.errors?.language ? (
           <p
@@ -167,7 +199,7 @@ export function ProfileForm({
             aria-describedby={
               state?.errors?.bloodGroup ? "bloodGroup-error" : undefined
             }
-            className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-zinc-600"
           >
             {BLOOD_GROUPS.map((value) => (
               <option key={value} value={value}>
@@ -200,7 +232,7 @@ export function ProfileForm({
             aria-describedby={
               state?.errors?.genotype ? "genotype-error" : undefined
             }
-            className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-zinc-600"
           >
             {GENOTYPES.map((value) => (
               <option key={value} value={value}>
@@ -250,8 +282,9 @@ export function ProfileForm({
 
       <button
         type="submit"
+        data-testid="profile-save"
         disabled={isPending}
-        className="flex h-11 items-center justify-center rounded-full bg-zinc-950 px-6 text-base font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+        className="flex h-11 items-center justify-center rounded-full bg-zinc-950 px-6 text-base font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:focus:ring-zinc-600"
       >
         {isPending ? "Saving…" : "Save"}
       </button>

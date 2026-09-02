@@ -120,6 +120,15 @@ export type ConsentPurpose =
   | "clinical_verification"
   | "optional_analytics";
 
+/** Row shape of public.consent_purposes. */
+export type ConsentPurposeRow = {
+  purpose: ConsentPurpose;
+  version: number;
+  required: boolean;
+  description: string;
+  active: boolean;
+};
+
 export type ConsentEventRow = {
   id: string;
   user_id: string;
@@ -328,7 +337,7 @@ export type EmergencyCardRow = {
 };
 
 export type CapabilityEmergencyCardRow = EmergencyCardRow & {
-  access_state: "active" | "inactive";
+  access_state: "active" | "revoked" | "expired" | "exhausted" | "not_found";
   capability_id: string | null;
 };
 
@@ -472,6 +481,12 @@ export type Database = {
           occurred_at?: string;
         };
         Update: never;
+        Relationships: [];
+      };
+      consent_purposes: {
+        Row: ConsentPurposeRow;
+        Insert: ConsentPurposeRow;
+        Update: Partial<ConsentPurposeRow>;
         Relationships: [];
       };
       emergency_capabilities: {

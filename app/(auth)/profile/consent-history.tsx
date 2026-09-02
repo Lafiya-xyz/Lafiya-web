@@ -4,12 +4,11 @@ import {
   CURRENT_POLICY_LABEL,
   POLICY_ROUTES,
 } from "@/lib/consent";
+import { formatDateTime } from "@/lib/format/datetime";
 import { AcknowledgeConsentButton } from "./acknowledge-consent-button";
 
 function formatAcceptedAt(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString();
+  return formatDateTime(iso, iso);
 }
 
 /**
@@ -44,11 +43,11 @@ export function ConsentHistoryView({
       </h2>
       <p className="text-sm text-zinc-600 dark:text-zinc-400">
         You can review the data-processing consent you have granted under our{" "}
-        <a className="underline" href={termsRoute}>
+        <a className="underline focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none rounded px-1 dark:focus:ring-zinc-600" href={termsRoute}>
           Terms
         </a>{" "}
         and{" "}
-        <a className="underline" href={privacyRoute}>
+        <a className="underline focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none rounded px-1 dark:focus:ring-zinc-600" href={privacyRoute}>
           Privacy Policy
         </a>
         .

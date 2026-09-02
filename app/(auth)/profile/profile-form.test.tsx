@@ -60,39 +60,55 @@ describe("ProfileForm Accessibility", () => {
       false,
     ]);
 
-    const { container } = render(<ProfileForm profile={null} userId="user-123" />);
+    const { container } = render(
+      <ProfileForm profile={null} userId="user-123" />,
+    );
 
     // Check name input
     const nameInput = screen.getByLabelText(/full name/i);
     expect(nameInput).toHaveAttribute("aria-invalid", "true");
     expect(nameInput).toHaveAttribute("aria-describedby", "name-error");
-    expect(container.querySelector("#name-error")).toHaveTextContent("Name is required");
+    expect(container.querySelector("#name-error")).toHaveTextContent(
+      "Name is required",
+    );
 
     // Check date of birth input
     const dobInput = screen.getByLabelText(/date of birth/i);
     expect(dobInput).toHaveAttribute("aria-invalid", "true");
     expect(dobInput).toHaveAttribute("aria-describedby", "dateOfBirth-error");
-    expect(container.querySelector("#dateOfBirth-error")).toHaveTextContent("Enter a valid date");
+    expect(container.querySelector("#dateOfBirth-error")).toHaveTextContent(
+      "Enter a valid date",
+    );
 
     // Check blood group select
     const bloodSelect = screen.getByLabelText(/blood group/i);
     expect(bloodSelect).toHaveAttribute("aria-invalid", "true");
     expect(bloodSelect).toHaveAttribute("aria-describedby", "bloodGroup-error");
-    expect(container.querySelector("#bloodGroup-error")).toHaveTextContent("Invalid blood group");
+    expect(container.querySelector("#bloodGroup-error")).toHaveTextContent(
+      "Invalid blood group",
+    );
 
     // Check allergies inputs (represented inside TagListField)
     const allergiesInput = screen.getByPlaceholderText(/e\.g\. Penicillin/i);
     expect(allergiesInput).toHaveAttribute("aria-invalid", "true");
-    expect(allergiesInput).toHaveAttribute("aria-describedby", "allergies-error");
-    expect(container.querySelector("#allergies-error")).toHaveTextContent("Allergies list error");
+    expect(allergiesInput).toHaveAttribute(
+      "aria-describedby",
+      "allergies-error",
+    );
+    expect(container.querySelector("#allergies-error")).toHaveTextContent(
+      "Allergies list error",
+    );
 
     // Check emergency contacts inputs
     const contactNameInput = screen.getByPlaceholderText(/name/i);
     expect(contactNameInput).toHaveAttribute("aria-invalid", "true");
-    expect(contactNameInput).toHaveAttribute("aria-describedby", "emergencyContacts-error");
-    expect(container.querySelector("#emergencyContacts-error")).toHaveTextContent(
-      "Invalid emergency contacts",
+    expect(contactNameInput).toHaveAttribute(
+      "aria-describedby",
+      "emergencyContacts-error",
     );
+    expect(
+      container.querySelector("#emergencyContacts-error"),
+    ).toHaveTextContent("Invalid emergency contacts");
   });
 
   it("announces general form validation error using role='alert'", () => {

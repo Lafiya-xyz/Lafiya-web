@@ -59,4 +59,3 @@ Medium — improves patient control and compliance transparency.
 ## Suggested Labels
 
 `good-first-issue`, `privacy`, `enhancement`
-

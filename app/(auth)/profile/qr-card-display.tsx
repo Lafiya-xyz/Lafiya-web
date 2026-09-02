@@ -1,7 +1,7 @@
 import Image from "next/image";
 
 import { formatDate } from "@/lib/format/datetime";
-import { generateQrDataUrl, QrCapacityError } from "@/lib/qr/generateQrDataUrl";
+import { generateQrDataUrl } from "@/lib/qr/generateQrDataUrl";
 
 import { CopyLinkButton } from "./copy-link-button";
 import { RegenerateCardButton } from "./regenerate-card-button";
@@ -32,23 +32,14 @@ export async function QrCardDisplay({
       <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
         Legacy emergency card (migration link)
       </p>
-      {qrDataUrl ? (
-        <Image
-          src={qrDataUrl}
-          alt="QR code linking to your public emergency card"
-          width={200}
-          height={200}
-          unoptimized
-          className="rounded-md"
-        />
-      ) : (
-        <p
-          role="alert"
-          className="max-w-xs text-sm text-amber-700 dark:text-amber-300"
-        >
-          {qrError}
-        </p>
-      )}
+      <Image
+        src={qrDataUrl}
+        alt="QR code linking to your public emergency card"
+        width={200}
+        height={200}
+        unoptimized
+        className="rounded-md"
+      />
       <p
         data-testid="card-url"
         className="max-w-xs text-xs break-all text-zinc-500 dark:text-zinc-500"

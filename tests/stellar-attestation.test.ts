@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { mockUnstableCache } from "@/tests/fixtures/next-cache";
+
+void mockUnstableCache;
+
 // Env must be set before any module (notably lib/env) is imported, because
 // serverEnv parses process.env at module-evaluation time. vi.hoisted runs
 // before all hoisted imports, so this is the safe place to seed it.
@@ -13,25 +17,6 @@ vi.hoisted(() => {
   // A configured contract id flips getAttestation into the real-RPC path.
   process.env.ATTESTATION_CONTRACT_ID = `C${"A".repeat(55)}`;
 });
-
-// getAttestation wraps its lookup in next/cache's unstable_cache, which
-// requires a full Next.js request/render context to have an incremental
-// cache available. Outside that context (here, under Vitest) it throws, so
-// tests stub it with a simple in-memory memoizer instead.
-vi.mock("next/cache", () => ({
-  unstable_cache: (fn: (...args: unknown[]) => unknown) => {
-    const cacheStore = new Map<string, unknown>();
-    return async (...args: unknown[]) => {
-      const key = JSON.stringify(args);
-      if (cacheStore.has(key)) {
-        return cacheStore.get(key);
-      }
-      const result = await fn(...args);
-      cacheStore.set(key, result);
-      return result;
-    };
-  },
-}));
 
 // Recorded-RPC-fixture style mock: no network, fully deterministic. We drive
 // the simulation outcome per-test via mutable holders so we can assert both

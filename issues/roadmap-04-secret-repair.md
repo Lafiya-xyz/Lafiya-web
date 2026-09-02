@@ -59,4 +59,3 @@ High — prevents a recoverable infrastructure failure from breaking the attesta
 ## Suggested Labels
 
 `intermediate`, `reliability`, `security`, `attestation`
-
