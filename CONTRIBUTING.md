@@ -264,6 +264,36 @@ npm run test:integration
 
 - Every schema change (e.g., changes to Row-Level Security (RLS) policies or Postgres functions) **must** have a corresponding integration test in `tests/integration/`.
 
+### Running a single test file
+
+Re-running the whole suite on every iteration is slow. Use these commands to
+target only the file you are working on.
+
+**Vitest unit test (one file, run once):**
+```bash
+npx vitest run lib/url/getBaseUrl.test.ts
+```
+
+**Vitest unit test (one file, watch mode — re-runs on save):**
+```bash
+npx vitest lib/url/getBaseUrl.test.ts
+```
+
+**Vitest integration test (one file, run once):**
+```bash
+npx vitest run --config vitest.integration.config.ts tests/integration/profiles.test.ts
+```
+
+**Playwright spec (one file):**
+```bash
+npx playwright test e2e/public-card.spec.ts
+```
+
+> The Playwright `webServer` block in `playwright.config.ts` runs
+> `npm run build && npm run start` automatically when needed, so the app
+> does not have to be running separately. Pass `--headed` to watch the
+> browser while the test runs.
+
 ### 3. Checklist Summary
 
 Before hitting submit on your PR:
