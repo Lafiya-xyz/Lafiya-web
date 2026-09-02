@@ -80,6 +80,15 @@ export function ProfileForm({
         </div>
       ) : null}
 
+      <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        Fields marked with{" "}
+        <span aria-hidden="true" className="text-red-600 dark:text-red-400">
+          *
+        </span>
+        <span className="sr-only"> (required)</span> are required. Everything
+        else is optional but helps make the emergency card more useful.
+      </p>
+
       <PhotoUploadField
         userId={userId}
         initialUrl={profile?.photo_url ?? null}
@@ -91,7 +100,11 @@ export function ProfileForm({
           htmlFor="name"
           className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
         >
-          Full name
+          Full name{" "}
+          <span aria-hidden="true" className="text-red-600 dark:text-red-400">
+            *
+          </span>
+          <span className="sr-only"> (required)</span>
         </label>
         <input
           id="name"

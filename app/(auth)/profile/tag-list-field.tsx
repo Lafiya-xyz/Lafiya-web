@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 
+// Mirrors the .max(20) / .max(200) bounds in lib/validation/profile.ts.
+const MAX_ITEMS = 20;
+const MAX_TAG_LENGTH = 200;
+
 /**
  * A dynamic, add/remove list of plain-text values (allergies, medications,
  * chronic conditions). Renders one input per item, all sharing `name`, so
@@ -23,12 +27,29 @@ export function TagListField({
   const [values, setValues] = useState(
     initialValues.length > 0 ? initialValues : [""],
   );
+  const [limitMessage, setLimitMessage] = useState<string | null>(null);
+
+  function handleAdd() {
+    if (values.length >= MAX_ITEMS) {
+      setLimitMessage(
+        `You've reached the limit of ${MAX_ITEMS} ${label.toLowerCase()}.`,
+      );
+      return;
+    }
+    setLimitMessage(null);
+    setValues([...values, ""]);
+  }
 
   return (
     <div>
-      <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-        {label}
-      </span>
+      <div className="flex items-baseline justify-between">
+        <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          {label}
+        </span>
+        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          {values.length} / {MAX_ITEMS}
+        </span>
+      </div>
       <div className="mt-1 flex flex-col gap-2">
         {values.map((value, index) => (
           <div key={index} className="flex gap-2">
@@ -37,6 +58,7 @@ export function TagListField({
               type="text"
               value={value}
               placeholder={placeholder}
+              maxLength={MAX_TAG_LENGTH}
               onChange={(event) => {
                 const next = [...values];
                 next[index] = event.target.value;
@@ -58,13 +80,22 @@ export function TagListField({
           </div>
         ))}
       </div>
+      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+        Up to {MAX_ITEMS} entries, {MAX_TAG_LENGTH} characters each.
+      </p>
       <button
         type="button"
-        onClick={() => setValues([...values, ""])}
-        className="mt-2 text-sm font-medium text-zinc-950 underline dark:text-zinc-50"
+        onClick={handleAdd}
+        disabled={values.length >= MAX_ITEMS}
+        className="mt-2 text-sm font-medium text-zinc-950 underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline dark:text-zinc-50"
       >
         + Add {label.toLowerCase()}
       </button>
+      {limitMessage ? (
+        <p role="alert" className="mt-1 text-sm text-amber-600 dark:text-amber-400">
+          {limitMessage}
+        </p>
+      ) : null}
       {error ? (
         <p
           id={`${name}-error`}
