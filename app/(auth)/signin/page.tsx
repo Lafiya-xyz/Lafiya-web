@@ -52,6 +52,22 @@ export default function SignInPage() {
             />
           </div>
 
+          <div className="flex items-center gap-2">
+            <input
+              id="rememberMe"
+              name="rememberMe"
+              type="checkbox"
+              defaultChecked
+              className="h-4 w-4 rounded border-zinc-300 text-zinc-950 focus:ring-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:ring-zinc-50"
+            />
+            <label
+              htmlFor="rememberMe"
+              className="text-sm text-zinc-700 dark:text-zinc-300"
+            >
+              Stay signed in
+            </label>
+          </div>
+
           {state?.error ? (
             <p className="text-sm text-red-600 dark:text-red-400">
               {state.error}

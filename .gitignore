@@ -15,7 +15,10 @@
 # test snapshots (Vitest / Jest)
 **/__snapshots__/
 *.snap
+*.snap.orig
 .nyc_output/
+test_snapshots/
+**/test_snapshots/
 
 # playwright
 /playwright-report/
@@ -61,6 +64,9 @@ bench/rpc-provider-benchmark/results/*.json
 
 # Lighthouse CI
 .lighthouseci/
+
+# vitest
+.vitest/
 
 # sbom output
 sbom.json

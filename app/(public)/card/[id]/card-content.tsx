@@ -15,6 +15,26 @@ function formatTime(value: string | null): string {
   return formatDateTime(value);
 }
 
+function formatRelativeTime(value: string | null): string {
+  if (!value) return "Unavailable";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unavailable";
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSeconds = Math.floor(diffMs / 1000);
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffSeconds < 60) return "Just now";
+  if (diffMinutes < 60) return `${diffMinutes} minute${diffMinutes === 1 ? "" : "s"} ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+  if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+  }).format(date);
+}
+
 function phoneHref(phone: string): string | null {
   const normalized = phone.replace(/[\s().-]/g, "");
   return /^\+?[1-9]\d{6,14}$/.test(normalized) ? `tel:${normalized}` : null;
@@ -53,6 +73,10 @@ export function EmergencyCardContent({
             <div className="flex flex-wrap justify-between gap-x-4 gap-y-1">
               <dt className="font-medium">Record updated</dt>
               <dd>{formatTime(card.record_updated_at)}</dd>
+            </div>
+            <div className="flex flex-wrap justify-between gap-x-4 gap-y-1">
+              <dt className="font-medium">Last updated</dt>
+              <dd>{formatRelativeTime(card.record_updated_at)}</dd>
             </div>
             <div className="flex flex-wrap justify-between gap-x-4 gap-y-1">
               <dt className="font-medium">Authorization valid until</dt>
