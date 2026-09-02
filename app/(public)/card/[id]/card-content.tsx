@@ -173,7 +173,7 @@ export function EmergencyCardContent({
                     {href ? (
                       <a
                         href={href}
-                        className="mt-2 inline-flex min-h-11 items-center rounded-full bg-zinc-950 px-4 text-sm font-medium text-white underline-offset-2 hover:underline dark:bg-zinc-50 dark:text-zinc-950"
+                        className="mt-2 inline-flex min-h-11 items-center rounded-full bg-zinc-950 px-4 text-sm font-medium text-white underline-offset-2 hover:underline focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:bg-zinc-50 dark:text-zinc-950 dark:focus:ring-zinc-600"
                       >
                         Call {contact.phone}
                       </a>

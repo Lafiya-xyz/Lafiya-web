@@ -53,7 +53,11 @@ export function TagListField({
       <div className="mt-1 flex flex-col gap-2">
         {values.map((value, index) => (
           <div key={index} className="flex gap-2">
+            <label htmlFor={`${name}-${index}`} className="sr-only">
+              {label} {index + 1}
+            </label>
             <input
+              id={`${name}-${index}`}
               name={name}
               type="text"
               value={value}
@@ -66,14 +70,14 @@ export function TagListField({
               }}
               aria-invalid={error ? "true" : undefined}
               aria-describedby={error ? `${name}-error` : undefined}
-              className="w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+              className="w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-zinc-600"
             />
             <button
               type="button"
               onClick={() => setValues(values.filter((_, i) => i !== index))}
               disabled={values.length === 1}
               aria-label={`Remove ${label.toLowerCase()} entry`}
-              className="rounded-md border border-zinc-300 px-3 text-zinc-600 transition-colors hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900"
+              className="rounded-md border border-zinc-300 px-3 text-zinc-600 transition-colors hover:bg-zinc-100 disabled:opacity-40 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:focus:ring-zinc-600"
             >
               &times;
             </button>
@@ -87,7 +91,7 @@ export function TagListField({
         type="button"
         onClick={handleAdd}
         disabled={values.length >= MAX_ITEMS}
-        className="mt-2 text-sm font-medium text-zinc-950 underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline dark:text-zinc-50"
+        className="mt-2 text-sm font-medium text-zinc-950 underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none rounded px-1 dark:text-zinc-50 dark:focus:ring-zinc-600"
       >
         + Add {label.toLowerCase()}
       </button>

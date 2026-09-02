@@ -32,7 +32,7 @@ export default function SignInPage() {
               type="email"
               required
               autoComplete="email"
-              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-zinc-600"
             />
           </div>
           <div>
@@ -48,7 +48,7 @@ export default function SignInPage() {
               type="password"
               required
               autoComplete="current-password"
-              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-zinc-600"
             />
           </div>
 
@@ -62,7 +62,7 @@ export default function SignInPage() {
             type="submit"
             data-testid="signin-submit"
             disabled={isPending}
-            className="mt-2 flex h-11 items-center justify-center rounded-full bg-zinc-950 px-6 text-base font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+            className="mt-2 flex h-11 items-center justify-center rounded-full bg-zinc-950 px-6 text-base font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:focus:ring-zinc-600"
           >
             {isPending ? "Signing in…" : "Sign in"}
           </button>
@@ -72,7 +72,7 @@ export default function SignInPage() {
           Don&apos;t have a card yet?{" "}
           <Link
             href="/signup"
-            className="font-medium text-zinc-950 underline dark:text-zinc-50"
+            className="font-medium text-zinc-950 underline focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none rounded px-1 dark:text-zinc-50 dark:focus:ring-zinc-600"
           >
             Create one
           </Link>
