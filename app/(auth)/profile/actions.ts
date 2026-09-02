@@ -16,6 +16,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { ProfileRow } from "@/lib/supabase/types";
 import type { ConsentPurpose, DisclosurePolicy } from "@/lib/supabase/types";
 import { profileFormSchema } from "@/lib/validation/profile";
+import { formatZodError } from "@/lib/validation/zod";
 import {
   computeRevisionCommitment,
   DEFAULT_DISCLOSURE_POLICY,
@@ -417,17 +418,7 @@ export async function upsertProfile(
   });
 
   if (!parsed.success) {
-    const fieldErrors: Record<string, string> = {};
-    parsed.error.issues.forEach((issue) => {
-      const field = issue.path[0];
-      if (typeof field === "string" && !fieldErrors[field]) {
-        fieldErrors[field] = issue.message;
-      }
-    });
-    return {
-      error: parsed.error.issues[0]?.message ?? "Invalid input",
-      errors: fieldErrors,
-    };
+    return formatZodError(parsed.error);
   }
 
   const emergencyData = normalizeEmergencyRecord({

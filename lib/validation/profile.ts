@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { isValidPhoneNumber } from "libphonenumber-js";
 
+export { formatZodError } from "./zod";
+
 export const BLOOD_GROUPS = [
   "A+",
   "A-",
