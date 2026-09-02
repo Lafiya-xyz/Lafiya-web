@@ -30,7 +30,7 @@ jobs:
           path: ./
           extra_args: --only-verified
       - run: npm run sbom
-      - uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           subject-path: artifacts/lafiya-web.sbom.cdx.json
