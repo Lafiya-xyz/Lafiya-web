@@ -11,6 +11,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 import { EmergencyCardContent } from "../../[id]/card-content";
+import { ExpiredCapabilityState } from "./expired-state";
 
 /**
  * ROUTE: /card/c/[token]
@@ -81,13 +82,29 @@ export default async function CapabilityCardPage({
   }
 
   const resolution = data?.[0];
+
+  // Malformed and unknown tokens (and a profile made unavailable through
+  // consent/lifecycle changes) are indistinguishable from each other, since
+  // none of those are properties of the capability itself.
+  if (!resolution || resolution.access_state === "not_found") {
+    notFound();
+  }
+
+  // Revoked/expired/exhausted ARE properties of the capability the holder
+  // presented, so surfacing them (as one shared message, not three) tells a
+  // responder to ask the patient for a new link instead of re-trying a dead
+  // one. Distinguishing this from "unknown link" is not an oracle: the
+  // token is a digest of 256 random bits, so guessing a real one is
+  // infeasible regardless of what the response reveals.
   if (
-    !resolution ||
-    resolution.access_state !== "active" ||
-    !resolution.capability_id
+    resolution.access_state === "revoked" ||
+    resolution.access_state === "expired" ||
+    resolution.access_state === "exhausted"
   ) {
-    // Do not distinguish malformed, unknown, revoked, exhausted, or expired
-    // capability values. That prevents the public route becoming an oracle.
+    return <ExpiredCapabilityState />;
+  }
+
+  if (resolution.access_state !== "active" || !resolution.capability_id) {
     notFound();
   }
 
