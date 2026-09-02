@@ -1,9 +1,33 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const rpcSingleMock = vi.fn();
+const rpcMock = vi.fn();
+const eqMock = vi.fn();
+
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => ({
+    rpc: rpcMock,
+    from: () => ({
+      delete: () => ({
+        eq: eqMock,
+      }),
+    }),
+  }),
+}));
+
 import {
   checkAndIncrementFrequency,
+  clearFrequencyLimit,
   sanitizeFrequencyLimitResult,
 } from "./frequency-limit";
+
+// Helper to build the RPC response the Postgres function returns.
+function rpcResult(allowed: boolean, count: number, retryAfterSeconds: number) {
+  return {
+    data: { allowed, count, retry_after_seconds: retryAfterSeconds },
+    error: null,
+  };
+}
 
 /**
  * In-memory stand-in for the `frequency_limit_check_and_increment` Postgres
@@ -36,16 +60,13 @@ function createNaiveWindow(maxCount: number, windowSeconds: number) {
   };
 }
 
-const rpcSingleMock = vi.fn();
-const rpcMock = vi.fn(() => ({ single: rpcSingleMock }));
-
-vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: () => ({ rpc: rpcMock }),
-}));
-
 describe("checkAndIncrementFrequency / clock resilience", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    // Restore the default single-shot-per-call implementation explicitly —
+    // a preceding describe block below overrides rpcMock's return value with
+    // mockReturnValue, which otherwise persists across describe blocks.
+    rpcMock.mockImplementation(() => ({ single: rpcSingleMock }));
     rpcSingleMock.mockReset();
     rpcMock.mockClear();
   });
@@ -120,6 +141,140 @@ describe("checkAndIncrementFrequency / clock resilience", () => {
       allowed: true,
       count: 1,
       retryAfterSeconds: 0,
+    });
+  });
+});
+
+describe("checkAndIncrementFrequency", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("allows a request comfortably under the limit", async () => {
+    // 2 out of 5 allowed — well below the cap.
+    rpcMock.mockReturnValue({
+      single: () => Promise.resolve(rpcResult(true, 2, 0)),
+    });
+
+    const result = await checkAndIncrementFrequency(
+      "user:abc:photo-upload",
+      5,
+      60,
+    );
+
+    expect(result.allowed).toBe(true);
+    expect(result.count).toBe(2);
+    expect(result.retryAfterSeconds).toBe(0);
+  });
+
+  it("allows a request that hits the limit exactly (at-limit request is permitted)", async () => {
+    // The RPC atomically increments then checks. Reaching count===maxCount
+    // is the boundary: by design the nth request is still allowed (the
+    // window started with 0; you're allowed maxCount total requests).
+    rpcMock.mockReturnValue({
+      single: () => Promise.resolve(rpcResult(true, 5, 0)),
+    });
+
+    const result = await checkAndIncrementFrequency(
+      "user:abc:photo-upload",
+      5,
+      60,
+    );
+
+    expect(result.allowed).toBe(true);
+    expect(result.count).toBe(5);
+  });
+
+  it("rejects a request that exceeds the limit", async () => {
+    // count > maxCount — window not yet expired.
+    rpcMock.mockReturnValue({
+      single: () => Promise.resolve(rpcResult(false, 6, 42)),
+    });
+
+    const result = await checkAndIncrementFrequency(
+      "user:abc:photo-upload",
+      5,
+      60,
+    );
+
+    expect(result.allowed).toBe(false);
+    expect(result.count).toBe(6);
+    expect(result.retryAfterSeconds).toBeGreaterThan(0);
+  });
+
+  it("maps retryAfterSeconds from the snake_case RPC field", async () => {
+    rpcMock.mockReturnValue({
+      single: () => Promise.resolve(rpcResult(false, 10, 37)),
+    });
+
+    const result = await checkAndIncrementFrequency("k", 5, 60);
+
+    expect(result.retryAfterSeconds).toBe(37);
+  });
+
+  it("allows again once the window resets (counter back to 1)", async () => {
+    // Simulate window expiry: the DB resets the row and returns count=1.
+    rpcMock.mockReturnValue({
+      single: () => Promise.resolve(rpcResult(true, 1, 0)),
+    });
+
+    const result = await checkAndIncrementFrequency(
+      "user:abc:photo-upload",
+      5,
+      60,
+    );
+
+    expect(result.allowed).toBe(true);
+    expect(result.count).toBe(1);
+    expect(result.retryAfterSeconds).toBe(0);
+  });
+
+  it("passes p_key, p_max_count, and p_window_seconds to the RPC", async () => {
+    rpcMock.mockReturnValue({
+      single: () => Promise.resolve(rpcResult(true, 1, 0)),
+    });
+
+    await checkAndIncrementFrequency("myKey", 10, 120);
+
+    expect(rpcMock).toHaveBeenCalledWith(
+      "frequency_limit_check_and_increment",
+      {
+        p_key: "myKey",
+        p_max_count: 10,
+        p_window_seconds: 120,
+      },
+    );
+  });
+
+  it("throws when the RPC returns an error", async () => {
+    const dbError = { message: "connection refused", code: "08006" };
+    rpcMock.mockReturnValue({
+      single: () => Promise.resolve({ data: null, error: dbError }),
+    });
+
+    await expect(
+      checkAndIncrementFrequency("k", 5, 60),
+    ).rejects.toMatchObject({ message: "connection refused" });
+  });
+});
+
+describe("clearFrequencyLimit", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    eqMock.mockResolvedValue({ error: null });
+  });
+
+  it("deletes the row for the given key without error", async () => {
+    await expect(clearFrequencyLimit("user:abc:photo-upload")).resolves.toBeUndefined();
+    expect(eqMock).toHaveBeenCalledWith("key", "user:abc:photo-upload");
+  });
+
+  it("throws when the delete returns an error", async () => {
+    const dbError = { message: "permission denied", code: "42501" };
+    eqMock.mockResolvedValue({ error: dbError });
+
+    await expect(clearFrequencyLimit("k")).rejects.toMatchObject({
+      message: "permission denied",
     });
   });
 });
