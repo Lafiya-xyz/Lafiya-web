@@ -7,6 +7,7 @@ import { BLOOD_GROUPS, GENOTYPES } from "@/lib/validation/profile";
 import type { ProfileRow } from "@/lib/supabase/types";
 
 import { upsertProfile } from "./actions";
+import { CriticalFieldsBanner } from "./critical-fields-banner";
 import { EmergencyContactsField } from "./emergency-contacts-field";
 import { PhotoUploadField } from "./photo-upload-field";
 import { TagListField } from "./tag-list-field";
@@ -88,6 +89,13 @@ export function ProfileForm({
         <span className="sr-only"> (required)</span> are required. Everything
         else is optional but helps make the emergency card more useful.
       </p>
+
+      <CriticalFieldsBanner
+        bloodGroupMissing={
+          !profile?.blood_group || profile.blood_group === "unknown"
+        }
+        allergiesMissing={!profile?.allergies || profile.allergies.length === 0}
+      />
 
       <PhotoUploadField
         userId={userId}

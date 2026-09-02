@@ -308,6 +308,34 @@ contract these steps are verifying.
 
 ---
 
+## `contracts/`, `lib/stellar/`, and `lib/chw-protocol/`: what lives where
+
+This repo has three overlapping-sounding pieces related to the attestation/Soroban layer, plus a fully separate `lafiya-contracts` repo. None of them duplicate each other — here's the boundary:
+
+### `contracts/` (this repo) — shared interface definitions, not on-chain code
+
+`contracts/` contains **JSON Schema documents** (`chw-attestation-protocol-v1.json`, `record-canonicalization-v1.json`, and their `.schema.json` validators). These define the *wire format* that this web app and `lafiya-contracts` must agree on — e.g. the exact shape of a canonicalized record hash input, or the CHW attestation protocol envelope. They are versioned, language-agnostic contract documents, consumed by this repo's TypeScript at build/runtime for validation.
+
+**They contain no executable contract logic and nothing here runs on-chain.** The actual Soroban smart contracts — the Rust code that gets compiled to Wasm and deployed to the Stellar network — live entirely in the separate [`lafiya-contracts`](https://github.com/lafiya-xyz/lafiya-contracts) repo. If you change a schema in `contracts/`, the corresponding Rust struct in `lafiya-contracts` must change too (see "Shared Contracts" above); if you're looking for the code that actually executes when an attestation is recorded, it isn't in this repo at all.
+
+### `lib/stellar/` — this app's client to the chain
+
+`lib/stellar/` is ordinary TypeScript that runs in this app (server or client, never on-chain). It's the boundary code that talks *to* the deployed Soroban contracts and to Horizon:
+
+- `attestation.ts` — calls `simulateTransaction` against the deployed attestation registry's `get_attestation` function (read-only) and exposes the result with the shape the real Soroban call has.
+- `chw-identity.ts` — derives/validates Stellar addresses for health workers.
+- `payout-indexer/`, `verification-indexer/` — off-chain indexers that poll Horizon/Soroban RPC and mirror on-chain payment and attestation state into Supabase, so the app doesn't have to hit RPC on every page load.
+
+Nothing in `lib/stellar/` is deployed to the network; it only reads from and constructs calls to contracts that live in `lafiya-contracts`.
+
+### `lib/chw-protocol/` — protocol config and guardrails, also off-chain
+
+`lib/chw-protocol/` holds the CHW protocol's deployment configuration and business rules as plain TypeScript: `config.ts` resolves the deployment guard (`LAFIYA_DEPLOYMENT_ENV`, `ATTESTATION_MODE`, epoch ID, signing key), `types.ts` and `intent.ts` define and validate the shape of a CHW registration/attestation intent before it's sent, and `trust.ts` encodes the allowlist/trust rules this app applies client-side. This is policy and validation logic for *this app's* use of the protocol — it does not execute on-chain and is distinct from both the wire-format schemas in `contracts/` and the RPC boundary code in `lib/stellar/`.
+
+**In short:** `contracts/` = shared data-format specs (this repo mirrors, doesn't own or execute); `lib/stellar/` = this app's RPC/indexing boundary to already-deployed contracts; `lib/chw-protocol/` = this app's own config/validation logic layered on top; `lafiya-contracts` (separate repo) = the actual on-chain Soroban source.
+
+---
+
 ## Pull Request Expectations & Checklist
 
 Every Pull Request must be verified before merging. Please ensure the following checklist is completed:

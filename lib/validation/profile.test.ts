@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { profileFormSchema, RELATIONSHIP_TYPES } from "./profile";
+import {
+  BLOOD_GROUPS,
+  GENOTYPES,
+  profileFormSchema,
+  RELATIONSHIP_TYPES,
+} from "./profile";
 
 const validProfile = {
   name: "Amina Yusuf",
@@ -225,5 +230,59 @@ describe("profileFormSchema", () => {
       });
       expect(result.success).toBe(true);
     });
+  });
+
+  it("accepts every clinically valid blood group value", () => {
+    for (const bloodGroup of BLOOD_GROUPS) {
+      const result = profileFormSchema.safeParse({
+        ...validProfile,
+        bloodGroup,
+      });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it("accepts every clinically valid genotype value", () => {
+    for (const genotype of GENOTYPES) {
+      const result = profileFormSchema.safeParse({
+        ...validProfile,
+        genotype,
+      });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it("rejects blood group values outside the clinical enum with a specific error", () => {
+    const invalidValues = ["", "X+", "o+", "AB", "A+B", "invalid"];
+    for (const bloodGroup of invalidValues) {
+      const result = profileFormSchema.safeParse({
+        ...validProfile,
+        bloodGroup,
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const error = result.error.issues.find((e) =>
+          e.path.includes("bloodGroup"),
+        );
+        expect(error).toBeDefined();
+      }
+    }
+  });
+
+  it("rejects genotype values outside the clinical enum with a specific error", () => {
+    const invalidValues = ["", "AB", "aa", "SS+", "not-a-genotype"];
+    for (const genotype of invalidValues) {
+      const result = profileFormSchema.safeParse({
+        ...validProfile,
+        genotype,
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const error = result.error.issues.find((e) =>
+          e.path.includes("genotype"),
+        );
+        expect(error).toBeDefined();
+      }
+    }
   });
 });
