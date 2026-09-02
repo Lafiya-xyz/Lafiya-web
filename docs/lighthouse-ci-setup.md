@@ -4,6 +4,16 @@
 
 Added a Lighthouse CI job to `.github/workflows/ci.yml` that audits the public card page (`/card/[demo-id]`) against defined performance and accessibility budgets. The job runs after the existing build step, starts a local Supabase instance with the seeded demo profile, and fails the PR if any budget is violated.
 
+> **Doc/CI drift check (2026-08-30):** this doc was compared line-by-line
+> against the current `performance` job in `.github/workflows/ci.yml` and
+> `.lighthouserc.json`. One discrepancy was found and fixed: this doc
+> referenced `supabase/setup-cli@v1`, but the workflow actually pins
+> `supabase/setup-cli` to a commit SHA tagged `v3`. The doc has been updated
+> to match the workflow (the workflow is the source of truth). All budget
+> thresholds below (performance ≥0.85, accessibility ≥0.9, LCP/TBT/CLS/payload
+> limits) were confirmed to match `.lighthouserc.json` exactly — no drift
+> found there.
+
 ## Files changed
 
 - `package.json` — added `@lhci/cli` to devDependencies
@@ -51,7 +61,9 @@ Budgets (deliberately tight for this route and audience):
 The new `performance` job:
 
 - Depends on `test` (build already validated)
-- Boots a local Supabase stack via `supabase/setup-cli@v1`
+- Boots a local Supabase stack via `supabase/setup-cli@v3` (pinned by commit
+  SHA in the workflow, per this repo's supply-chain policy — see
+  `.github/workflows/supply-chain.yml`)
 - Runs `supabase db reset` to apply migrations + `supabase/seed.sql` (the seeded demo patient)
 - Builds the Next.js app
 - Starts `next start` in the background and waits for the card route to respond
