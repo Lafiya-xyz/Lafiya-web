@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+
 import { computeRecordHash } from "@/lib/attestation/recordHash";
 import { getSecretByUserId } from "@/lib/attestation/recordSecret";
 import { logError } from "@/lib/logging/logger";
@@ -19,6 +21,10 @@ import { LastChangeNotice, type RevisionSnapshot } from "./last-change-notice";
 import { ProfileForm } from "./profile-form";
 import { PrivacyControls } from "./privacy-controls";
 import { QrCardDisplay } from "./qr-card-display";
+
+export const metadata: Metadata = {
+  title: "Your Profile · Lafiya",
+};
 
 /**
  * Detects "profile edited since last attestation" and opportunistically

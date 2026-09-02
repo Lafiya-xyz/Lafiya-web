@@ -51,6 +51,7 @@ export const dynamic = "force-dynamic";
 // the point — a responder scanning a QR shouldn't need to log in), but it
 // must never be indexed or crawled.
 export const metadata: Metadata = {
+  title: "Emergency Card · Lafiya",
   robots: { index: false, follow: false },
 };
 

@@ -181,7 +181,7 @@ export function EmergencyContactsField({
                 setContacts(contacts.filter((_, i) => i !== index))
               }
               disabled={contacts.length === 1}
-              aria-label="Remove emergency contact"
+              aria-label={`Remove contact: ${contact.name || `Contact ${index + 1}`}`}
               className="shrink-0 rounded-md border border-zinc-300 px-3 text-zinc-600 transition-colors hover:bg-zinc-100 disabled:opacity-40 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:focus:ring-zinc-600"
             >
               &times;
