@@ -32,8 +32,14 @@
         "largest-contentful-paint": ["error", { "maxNumericValue": 2500 }],
         "total-blocking-time": ["error", { "maxNumericValue": 200 }],
         "cumulative-layout-shift": ["error", { "maxNumericValue": 0.1 }],
-        "resource-summary:script:size": ["error", { "maxNumericValue": 200000 }],
-        "resource-summary:document:size": ["error", { "maxNumericValue": 50000 }],
+        "resource-summary:script:size": [
+          "error",
+          { "maxNumericValue": 200000 }
+        ],
+        "resource-summary:document:size": [
+          "error",
+          { "maxNumericValue": 50000 }
+        ],
         "resource-summary:total:size": ["error", { "maxNumericValue": 300000 }]
       }
     }

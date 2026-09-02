@@ -59,6 +59,27 @@ export async function getSecretByUserId(
 }
 
 /**
+ * Returns whether a secret exists for this user without fetching the
+ * secret value itself. Used by repairProfileSecret for the idempotent
+ * fast-path check so the raw secret is never fetched unnecessarily.
+ */
+export async function secretExistsByUserId(userId: string): Promise<boolean> {
+  const admin = createAdminClient();
+
+  const { data, error } = await admin
+    .from("profile_secrets")
+    .select("user_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error || !data) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Ensures a profile_secrets row exists for this user, generating a new
  * random 256-bit secret if none does. Called from upsertProfile right
  * after a profile is created — never regenerates an existing secret (that

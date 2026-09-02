@@ -1,5 +1,29 @@
 import * as Sentry from "@sentry/nextjs";
 
+export type LogLevel = "debug" | "info" | "warn" | "error";
+
+// Log level hierarchy: debug < info < warn < error
+const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
+};
+
+let currentLogLevel: LogLevel = (process.env.NODE_ENV === "production" ? "warn" : "debug") as LogLevel;
+
+export function setLogLevel(level: LogLevel): void {
+  currentLogLevel = level;
+}
+
+export function getLogLevel(): LogLevel {
+  return currentLogLevel;
+}
+
+function shouldLog(level: LogLevel): boolean {
+  return LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[currentLogLevel];
+}
+
 /**
  * Hard Rule: Patient health-data fields and authentication credentials
  * must NEVER be logged.
@@ -160,12 +184,19 @@ export function redactSensitiveData(
 /**
  * Logs an error to console.error as structured JSON and captures it in Sentry.
  * Recursively redacts all sensitive fields and email patterns.
+ *
+ * Sentry errors are caught and never allowed to propagate — a logging failure
+ * must not crash whatever code was trying to log something.
  */
 export function logError(
   message: string,
   error?: unknown,
   context?: Record<string, unknown>,
 ): void {
+  if (!shouldLog("error")) {
+    return;
+  }
+
   const timestamp = new Date().toISOString();
   const redactedError =
     error !== undefined ? redactSensitiveData(error) : undefined;
@@ -184,28 +215,37 @@ export function logError(
 
   console.error(JSON.stringify(logPayload));
 
-  if (error instanceof Error) {
-    Sentry.withScope((scope) => {
-      if (redactedContext) {
-        scope.setExtras(redactedContext);
-      }
-      // Never send the original error to telemetry. Database/provider error
-      // messages may interpolate identifiers which are not safe to retain.
-      Sentry.captureException(new Error(redactString(error.message)));
-    });
-  } else if (error) {
-    Sentry.captureMessage(redactString(message), {
-      level: "error",
-      extra: {
-        error: redactedError,
-        ...redactedContext,
-      },
-    });
-  } else {
-    Sentry.captureMessage(redactString(message), {
-      level: "error",
-      extra: redactedContext,
-    });
+  try {
+    if (error instanceof Error) {
+      Sentry.withScope((scope) => {
+        if (redactedContext) {
+          scope.setExtras(redactedContext);
+        }
+        // Never send the original error to telemetry. Database/provider error
+        // messages may interpolate identifiers which are not safe to retain.
+        Sentry.captureException(new Error(redactString(error.message)));
+      });
+    } else if (error) {
+      Sentry.captureMessage(redactString(message), {
+        level: "error",
+        extra: {
+          error: redactedError,
+          ...redactedContext,
+        },
+      });
+    } else {
+      Sentry.captureMessage(redactString(message), {
+        level: "error",
+        extra: redactedContext,
+      });
+    }
+  } catch (sentryError) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn(
+        "[logger] logError: Sentry sink threw — logging is degraded.",
+        sentryError,
+      );
+    }
   }
 }
 
@@ -217,6 +257,10 @@ export function logInfo(
   message: string,
   context?: Record<string, unknown>,
 ): void {
+  if (!shouldLog("info")) {
+    return;
+  }
+
   const timestamp = new Date().toISOString();
   const redactedContext =
     context !== undefined
@@ -225,6 +269,63 @@ export function logInfo(
 
   const logPayload = {
     level: "info",
+    message: redactString(message),
+    timestamp,
+    context: redactedContext,
+  };
+
+  console.log(JSON.stringify(logPayload));
+}
+
+/**
+ * Logs a warning to console.warn as structured JSON.
+ * Recursively redacts all sensitive fields and email patterns.
+ */
+export function logWarn(
+  message: string,
+  context?: Record<string, unknown>,
+): void {
+  if (!shouldLog("warn")) {
+    return;
+  }
+
+  const timestamp = new Date().toISOString();
+  const redactedContext =
+    context !== undefined
+      ? (redactSensitiveData(context) as Record<string, unknown>)
+      : undefined;
+
+  const logPayload = {
+    level: "warn",
+    message: redactString(message),
+    timestamp,
+    context: redactedContext,
+  };
+
+  console.warn(JSON.stringify(logPayload));
+}
+
+/**
+ * Logs debug information to console.log as structured JSON.
+ * Only output in development; suppressed in production by default.
+ * Recursively redacts all sensitive fields and email patterns.
+ */
+export function logDebug(
+  message: string,
+  context?: Record<string, unknown>,
+): void {
+  if (!shouldLog("debug")) {
+    return;
+  }
+
+  const timestamp = new Date().toISOString();
+  const redactedContext =
+    context !== undefined
+      ? (redactSensitiveData(context) as Record<string, unknown>)
+      : undefined;
+
+  const logPayload = {
+    level: "debug",
     message: redactString(message),
     timestamp,
     context: redactedContext,

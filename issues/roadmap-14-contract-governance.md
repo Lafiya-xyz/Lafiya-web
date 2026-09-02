@@ -66,4 +66,3 @@ Critical
 ## Suggested Labels
 
 `spike`, `soroban`, `security`, `governance`, `cross-repository`
-

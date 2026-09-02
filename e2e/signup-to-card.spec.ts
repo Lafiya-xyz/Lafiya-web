@@ -66,7 +66,7 @@ test.describe("Golden path: signup → profile edit → QR scan → public card"
     await page.fill("#email", email);
     await page.fill("#password", password);
     await page.check("#consent");
-    await page.click('button[type="submit"]');
+    await page.getByTestId("signup-submit").click();
 
     // Handle both cases: immediate session, or email confirmation required.
     const infoMessage = page.getByText(/check your email/i);
@@ -79,7 +79,7 @@ test.describe("Golden path: signup → profile edit → QR scan → public card"
       await page.goto("/signin");
       await page.fill("#email", email);
       await page.fill("#password", password);
-      await page.click('button[type="submit"]');
+      await page.getByTestId("signin-submit").click();
     }
 
     // --- 2. Should now be on the profile page ---
@@ -92,19 +92,22 @@ test.describe("Golden path: signup → profile edit → QR scan → public card"
     await page.selectOption("#bloodGroup", "O+");
     await page.selectOption("#genotype", "AA");
 
-    await page.click('button:has-text("Save")');
-    await expect(page.getByText("Saved.")).toBeVisible({ timeout: 10000 });
+    await page.getByTestId("profile-save").click();
+    await expect(page.getByTestId("profile-save-status")).toBeVisible({
+      timeout: 10000,
+    });
 
     // Public disclosure is purpose-specific and never implied by account
     // signup. Affirm it explicitly before sharing the card.
-    const publicConsent = page.locator("form", {
-      hasText: "Public emergency card",
-    });
-    await publicConsent.getByRole("button", { name: "Allow" }).click();
-    await expect(publicConsent.getByText("allowed")).toBeVisible();
+    await page
+      .getByTestId("consent-toggle-emergency_public_disclosure")
+      .click();
+    await expect(
+      page.getByTestId("consent-status-emergency_public_disclosure"),
+    ).toContainText("allowed");
 
     // --- 4. Grab the public card URL from the QR display ---
-    const cardUrlText = page.locator("p.break-all");
+    const cardUrlText = page.getByTestId("card-url");
     await expect(cardUrlText).toBeVisible({ timeout: 10000 });
     const cardUrl = (await cardUrlText.textContent())?.trim();
     expect(cardUrl).toBeTruthy();
@@ -115,11 +118,13 @@ test.describe("Golden path: signup → profile edit → QR scan → public card"
     const visitorPage: Page = await visitorContext.newPage();
     await visitorPage.goto(cardUrl!);
 
-    await expect(
-      visitorPage.getByRole("heading", { name: "E2E Test Patient" }),
-    ).toBeVisible();
-    await expect(visitorPage.getByText("O+")).toBeVisible();
-    await expect(visitorPage.getByText("AA")).toBeVisible();
+    await expect(visitorPage.getByTestId("card-identity-name")).toHaveText(
+      "E2E Test Patient",
+    );
+    await expect(visitorPage.getByTestId("card-blood-group")).toHaveText(
+      "O+",
+    );
+    await expect(visitorPage.getByTestId("card-genotype")).toHaveText("AA");
 
     await visitorContext.close();
   });

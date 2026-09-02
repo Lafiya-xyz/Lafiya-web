@@ -16,6 +16,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { ProfileRow } from "@/lib/supabase/types";
 import type { ConsentPurpose, DisclosurePolicy } from "@/lib/supabase/types";
 import { profileFormSchema } from "@/lib/validation/profile";
+import { formatZodError } from "@/lib/validation/zod";
 import {
   computeRevisionCommitment,
   DEFAULT_DISCLOSURE_POLICY,
@@ -133,9 +134,16 @@ export async function exportMyProfileData(): Promise<
     return { error: "Not authenticated" };
   }
 
+  // Explicit column list rather than `select("*")`: `last_attested_hash` is
+  // an internal reconciliation field that must never be exposed to the
+  // patient (see the ProfileRow comment in lib/supabase/types.ts and
+  // profiles-column-contract.test.ts) and `select("*")` would silently pick
+  // up any future internal/admin-only column added to `profiles`.
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("*")
+    .select(
+      "user_id,card_public_id,name,date_of_birth,photo_url,language,blood_group,genotype,allergies,medications,chronic_conditions,emergency_contacts,last_verified_at,created_at,updated_at,current_revision_id,disclosure_policy,legacy_card_sunset_at",
+    )
     .eq("user_id", user.id)
     .single();
 
@@ -410,17 +418,7 @@ export async function upsertProfile(
   });
 
   if (!parsed.success) {
-    const fieldErrors: Record<string, string> = {};
-    parsed.error.issues.forEach((issue) => {
-      const field = issue.path[0];
-      if (typeof field === "string" && !fieldErrors[field]) {
-        fieldErrors[field] = issue.message;
-      }
-    });
-    return {
-      error: parsed.error.issues[0]?.message ?? "Invalid input",
-      errors: fieldErrors,
-    };
+    return formatZodError(parsed.error);
   }
 
   const emergencyData = normalizeEmergencyRecord({
@@ -586,4 +584,74 @@ export async function requestReattestation(
 
   revalidatePath("/profile");
   return { success: true };
+}
+
+// --- Profile secret repair (Issue #149) ---
+
+export type RepairSecretResult =
+  | { status: "already_ok" }
+  | { status: "repaired" }
+  | { status: "not_found" }
+  | { status: "unauthorized" }
+  | { status: "error"; error: string };
+
+/**
+ * Repairs a profile whose record secret was not provisioned (e.g.
+ * ensureRecordSecret failed transiently after the profile save
+ * succeeded). Idempotent: if the secret already exists the result is
+ * "already_ok". Safe under concurrency: the underlying
+ * ensureRecordSecret uses upsert with ignoreDuplicates so a race
+ * between two concurrent repair requests cannot create duplicate rows
+ * or rotate an existing secret.
+ *
+ * Never returns the raw secret — the result is purely a status
+ * descriptor so it can safely be sent to the client.
+ */
+export async function repairProfileSecret(): Promise<RepairSecretResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: "unauthorized" };
+  }
+
+  // Resolve the authenticated user's profile. RLS (eq(user_id)) ensures
+  // a user can never reference another user's profile.
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (profileError || !profile) {
+    return { status: "not_found" };
+  }
+
+  // Check whether a secret already exists — idempotent fast path.
+  const exists = await secretExistsByUserId(user.id);
+  if (exists) {
+    return { status: "already_ok" };
+  }
+
+  // Secret is missing — provision it via the existing admin-only helper.
+  // ensureRecordSecret uses upsert with ignoreDuplicates so a concurrent
+  // request that created the secret between our check and this write will
+  // be safely absorbed.
+  try {
+    await ensureRecordSecret(user.id);
+  } catch (err) {
+    logError("Failed to repair profile secret", err, {
+      route: "/profile (action: repairProfileSecret)",
+      userId: user.id,
+    });
+    return {
+      status: "error",
+      error: "Could not provision verification secret. Please try again later.",
+    };
+  }
+
+  revalidatePath("/profile");
+  return { status: "repaired" };
 }

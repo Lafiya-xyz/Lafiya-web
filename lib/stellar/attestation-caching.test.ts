@@ -1,28 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// This mock now models TTL/`revalidate` behavior, not just "cache forever
+import { mockUnstableCache } from "@/tests/fixtures/next-cache";
+
+// The shared mock models TTL/`revalidate` behavior, not just "cache forever
 // keyed by args" — a cache mock that never expires can't exercise expiry
-// behavior at all, which is exactly the gap this file previously had.
-vi.mock("next/cache", () => ({
-  unstable_cache: (
-    fn: (...args: unknown[]) => unknown,
-    _keyParts?: string[],
-    options?: { revalidate?: number },
-  ) => {
-    const cacheStore = new Map<string, { value: unknown; cachedAt: number }>();
-    const ttlMs = (options?.revalidate ?? Infinity) * 1000;
-    return async (...args: unknown[]) => {
-      const key = JSON.stringify(args);
-      const entry = cacheStore.get(key);
-      if (entry && Date.now() - entry.cachedAt < ttlMs) {
-        return entry.value;
-      }
-      const result = await fn(...args);
-      cacheStore.set(key, { value: result, cachedAt: Date.now() });
-      return result;
-    };
-  },
-}));
+// behavior at all, which is exactly the gap this file's TTL tests below
+// close.
+void mockUnstableCache;
 
 import {
   ATTESTATION_CACHE_TTL_SECONDS,
