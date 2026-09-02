@@ -59,4 +59,3 @@ Critical — protects correctness of the verified indicator and CHW payout ledge
 ## Suggested Labels
 
 `advanced`, `stellar`, `indexer`, `reliability`, `data-integrity`
-

@@ -60,4 +60,3 @@ Critical — unblocks the primary verification and incentive product loop.
 ## Suggested Labels
 
 `advanced`, `stellar`, `soroban`, `security`, `cross-repository`
-

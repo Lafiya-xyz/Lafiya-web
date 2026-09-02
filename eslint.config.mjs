@@ -5,6 +5,24 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  {
+    // Issue #370: genuine logging needs go through lib/logging/logger.ts,
+    // not a raw console call — a stray console.log/debug left over from a
+    // debugging session won't be captured by whatever log
+    // aggregation/monitoring the logger is wired up to. console.warn/error
+    // are still allowed for legitimate low-level/startup diagnostics that
+    // run before the logger itself is available.
+    rules: {
+      "no-console": ["error", { allow: ["warn", "error"] }],
+    },
+  },
+  {
+    // The logger's own console.log call is the intended sink, not a leftover.
+    files: ["lib/logging/logger.ts"],
+    rules: {
+      "no-console": "off",
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

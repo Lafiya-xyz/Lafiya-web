@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { exportMyProfileData } from "../actions";
 
+// Schema documentation: docs/data-export-schema.md — update that file whenever
+// the shape returned by exportMyProfileData() changes.
 export async function GET() {
   const result = await exportMyProfileData();
 

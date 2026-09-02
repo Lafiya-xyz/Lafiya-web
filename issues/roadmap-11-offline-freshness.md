@@ -58,4 +58,3 @@ Critical
 ## Suggested Labels
 
 `spike`, `offline`, `privacy`, `security`, `safety`
-

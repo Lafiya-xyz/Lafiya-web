@@ -58,4 +58,3 @@ High
 ## Suggested Labels
 
 `spike`, `indexer`, `scalability`, `stellar`, `operations`
-

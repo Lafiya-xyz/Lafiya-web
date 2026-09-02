@@ -74,11 +74,11 @@ BASE_URL=http://localhost:3000 \
 
 ### Environment variables
 
-| Variable      | Default | Description                               |
-| ------------- | ------- | ----------------------------------------- |
-| `BASE_URL`    | —       | Origin of the running Next.js app         |
-| `CONCURRENCY` | `50`    | Target VUs per scenario                   |
-| `DURATION`    | `1m`    | Steady-state duration per scenario        |
+| Variable      | Default | Description                        |
+| ------------- | ------- | ---------------------------------- |
+| `BASE_URL`    | —       | Origin of the running Next.js app  |
+| `CONCURRENCY` | `50`    | Target VUs per scenario            |
+| `DURATION`    | `1m`    | Steady-state duration per scenario |
 
 ## SLO Targets (Concurrency / Latency)
 
@@ -88,21 +88,21 @@ responder even when multiple responders are scanning cards simultaneously.
 
 ### Cache-hit scenario (ISR-served)
 
-| Metric | Target       | Rationale                                              |
-| ------ | ------------ | ------------------------------------------------------ |
-| p50    | < 200 ms     | Cached HTML should be near-instant from localhost       |
-| p95    | < 500 ms     | Allows for occasional GC pauses / ISR revalidation     |
-| p99    | < 800 ms     | Hard ceiling — anything above indicates contention      |
-| Errors | < 1 %        | No functional errors when serving cached content       |
+| Metric | Target   | Rationale                                          |
+| ------ | -------- | -------------------------------------------------- |
+| p50    | < 200 ms | Cached HTML should be near-instant from localhost  |
+| p95    | < 500 ms | Allows for occasional GC pauses / ISR revalidation |
+| p99    | < 800 ms | Hard ceiling — anything above indicates contention |
+| Errors | < 1 %    | No functional errors when serving cached content   |
 
 ### Cache-miss scenario (DB-bound)
 
-| Metric | Target       | Rationale                                              |
-| ------ | ------------ | ------------------------------------------------------ |
-| p50    | < 500 ms     | Supabase RPC + SSR for a single-row lookup             |
-| p95    | < 1500 ms    | Matches the perf-budget's 5 s EDGE target minus network|
-| p99    | < 2500 ms    | Hard ceiling for server-side processing time           |
-| Errors | < 1 %        | DB query failures should be extremely rare locally     |
+| Metric | Target    | Rationale                                               |
+| ------ | --------- | ------------------------------------------------------- |
+| p50    | < 500 ms  | Supabase RPC + SSR for a single-row lookup              |
+| p95    | < 1500 ms | Matches the perf-budget's 5 s EDGE target minus network |
+| p99    | < 2500 ms | Hard ceiling for server-side processing time            |
+| Errors | < 1 %     | DB query failures should be extremely rare locally      |
 
 ### Target concurrency
 
@@ -130,9 +130,11 @@ ordinary run-to-run variance.
    - `σ` = standard deviation of the N p95 values
 
 3. **Regression threshold**: a new run's p95 is flagged as a regression if:
+
    ```
    p95_new > μ + 3σ
    ```
+
    With N ≥ 5 and a 3σ threshold, the false-positive rate is < 1 % under
    a normal distribution — conservative enough for CI.
 
@@ -225,17 +227,17 @@ latency and overstate cache-hit latency.
 
 ## Decision Log
 
-| Decision                 | Value / Rationale                                          |
-| ------------------------ | ---------------------------------------------------------- |
-| **Target concurrency**   | 50 VUs per scenario — conservative estimate for a single health district pilot (see rationale above) |
-| **Cache-hit p95 SLO**    | < 500 ms — ISR-cached HTML should be near-instant          |
-| **Cache-miss p95 SLO**   | < 1500 ms — allows for Supabase RPC round-trip under load  |
-| **Error rate SLO**       | < 1 % — functional errors should be near-zero              |
-| **Seed row count**       | 500 profiles — large enough to overwhelm ISR cache         |
-| **Regression method**    | 3σ above baseline mean (N ≥ 5 runs); absolute thresholds as safety net |
-| **Run frequency (CI)**   | Weekly (Sunday 04:00 UTC) + manual dispatch                |
-| **Tool**                 | k6 — already established in the project; excellent threshold and custom metric support |
-| **Connection pool tuning** | Not required at 50 VUs; revisit at > 100 VUs             |
+| Decision                   | Value / Rationale                                                                                    |
+| -------------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Target concurrency**     | 50 VUs per scenario — conservative estimate for a single health district pilot (see rationale above) |
+| **Cache-hit p95 SLO**      | < 500 ms — ISR-cached HTML should be near-instant                                                    |
+| **Cache-miss p95 SLO**     | < 1500 ms — allows for Supabase RPC round-trip under load                                            |
+| **Error rate SLO**         | < 1 % — functional errors should be near-zero                                                        |
+| **Seed row count**         | 500 profiles — large enough to overwhelm ISR cache                                                   |
+| **Regression method**      | 3σ above baseline mean (N ≥ 5 runs); absolute thresholds as safety net                               |
+| **Run frequency (CI)**     | Weekly (Sunday 04:00 UTC) + manual dispatch                                                          |
+| **Tool**                   | k6 — already established in the project; excellent threshold and custom metric support               |
+| **Connection pool tuning** | Not required at 50 VUs; revisit at > 100 VUs                                                         |
 
 ## Out of Scope
 

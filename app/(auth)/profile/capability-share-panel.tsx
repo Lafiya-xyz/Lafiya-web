@@ -4,15 +4,9 @@ import QRCode from "qrcode";
 import { useActionState, useEffect, useState } from "react";
 import Image from "next/image";
 
+import { formatDate } from "@/lib/format/datetime";
 import { createEmergencyCapability } from "./actions";
 import { CopyLinkButton } from "./copy-link-button";
-
-function formatDate(value: string | undefined): string {
-  if (!value) return "";
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    new Date(value),
-  );
-}
 
 export function CapabilitySharePanel() {
   const [state, action, isPending] = useActionState(

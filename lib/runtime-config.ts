@@ -82,10 +82,22 @@ export type RuntimeConfig = {
   sentry: { enabled: boolean };
 };
 
-/** An intentionally value-free error suitable for startup logs. */
+/**
+ * Value-free by default -- suitable for startup logs without ever leaking a
+ * secret. `details` may add extra human-readable context (e.g. which
+ * variable *names*, never their values, are missing) so a contributor can
+ * fix their local .env without having to read this file.
+ */
 export class RuntimeConfigError extends Error {
-  constructor(readonly code: string) {
-    super(`INVALID_RUNTIME_CONFIGURATION:${code}`);
+  constructor(
+    readonly code: string,
+    details?: string,
+  ) {
+    super(
+      details
+        ? `INVALID_RUNTIME_CONFIGURATION:${code} -- ${details}`
+        : `INVALID_RUNTIME_CONFIGURATION:${code}`,
+    );
     this.name = "RuntimeConfigError";
   }
 }
@@ -155,7 +167,16 @@ export function getRuntimeConfig(
     LAFIYA_BUILD_REVISION: env.LAFIYA_BUILD_REVISION,
     LAFIYA_SCHEMA_COMPATIBILITY: env.LAFIYA_SCHEMA_COMPATIBILITY,
   });
-  if (!parsed.success) throw new RuntimeConfigError("MALFORMED_VALUE");
+  if (!parsed.success) {
+    const missingOrInvalid = [
+      ...new Set(parsed.error.issues.map((issue) => String(issue.path[0]))),
+    ];
+    throw new RuntimeConfigError(
+      "MALFORMED_VALUE",
+      `missing or invalid required environment variable(s): ${missingOrInvalid.join(", ")}. ` +
+        "Set them in your .env (see .env.example) and restart.",
+    );
+  }
 
   const config = parsed.data;
   const deployment = inferDeployment(env);

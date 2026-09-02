@@ -69,7 +69,9 @@ describe("load-test harness validation", () => {
     });
 
     it("imports Rate from k6/metrics", () => {
-      expect(k6Script).toMatch(/import\s*\{[^}]*Rate[^}]*\}\s*from\s*["']k6\/metrics["']/);
+      expect(k6Script).toMatch(
+        /import\s*\{[^}]*Rate[^}]*\}\s*from\s*["']k6\/metrics["']/,
+      );
     });
 
     it("defines separate cache_hit and cache_miss scenarios", () => {

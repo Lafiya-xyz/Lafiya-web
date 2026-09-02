@@ -47,4 +47,84 @@ describe("record canonicalization v1", () => {
       ).not.toBe(vectors.vectors[0].commitment);
     }
   });
+
+  it("produces identical output for Unicode-equivalent but differently-encoded representations (NFC vs NFD)", () => {
+    const base = vectors.vectors[0].input;
+    
+    // "café" in NFC form (precomposed)
+    const nfcName = "café";
+    // "café" in NFD form (decomposed)
+    const nfdName = "cafe\u0301";
+    
+    expect(nfcName).not.toBe(nfdName); // Verify they're different byte sequences
+    expect(nfcName).toBe(nfdName.normalize("NFC")); // But equivalent
+    
+    const recordWithNFC = { ...base, name: nfcName } as never;
+    const recordWithNFD = { ...base, name: nfdName } as never;
+    
+    // Both should produce identical canonicalization
+    expect(canonicalizeEmergencyRecord(recordWithNFC)).toBe(
+      canonicalizeEmergencyRecord(recordWithNFD),
+    );
+    
+    // And identical commitments
+    expect(computeRevisionCommitment(recordWithNFC, vectors.vectors[0].secretHex)).toBe(
+      computeRevisionCommitment(recordWithNFD, vectors.vectors[0].secretHex),
+    );
+  });
+
+  it("handles accented characters in emergency contact relationship field", () => {
+    const base = vectors.vectors[0].input;
+    
+    // Create two variants with accented relationship values
+    // "mère" (mother in French) in NFC vs NFD
+    const nfcRelationship = "mère";
+    const nfdRelationship = "mere\u0300";
+    
+    const contactWithNFC = {
+      name: "John Doe",
+      phone: "+234801234567",
+      relationship: nfcRelationship,
+    };
+    
+    const contactWithNFD = {
+      name: "John Doe",
+      phone: "+234801234567",
+      relationship: nfdRelationship,
+    };
+    
+    const recordWithNFC = {
+      ...base,
+      emergency_contacts: [contactWithNFC],
+    } as never;
+    
+    const recordWithNFD = {
+      ...base,
+      emergency_contacts: [contactWithNFD],
+    } as never;
+    
+    // Both should produce identical canonicalization
+    expect(canonicalizeEmergencyRecord(recordWithNFC)).toBe(
+      canonicalizeEmergencyRecord(recordWithNFD),
+    );
+    
+    // And identical commitments
+    expect(computeRevisionCommitment(recordWithNFC, vectors.vectors[0].secretHex)).toBe(
+      computeRevisionCommitment(recordWithNFD, vectors.vectors[0].secretHex),
+    );
+  });
+
+  it("handles emoji and other complex Unicode in patient names", () => {
+    const base = vectors.vectors[0].input;
+    
+    // Test with emoji in name
+    const nameWithEmoji = "John Doe 👨‍⚕️";
+    
+    const recordWithEmoji = { ...base, name: nameWithEmoji } as never;
+    
+    // Should normalize emoji sequences correctly
+    const canonical = canonicalizeEmergencyRecord(recordWithEmoji);
+    expect(canonical).toBeDefined();
+    expect(canonical).toContain("John Doe");
+  });
 });

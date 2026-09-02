@@ -22,17 +22,17 @@ drug allergies. Every kilobyte that isn't "blood group" is waste.
 
 ## Budget targets
 
-These are *per-navigation* transfer sizes for a cold (uncached) load:
+These are _per-navigation_ transfer sizes for a cold (uncached) load:
 
 | Asset category          | Budget       | Notes                                                    |
-|-------------------------|-------------|----------------------------------------------------------|
-| HTML document           | ≤ 5 kB      | Server-rendered; inline CSS vars; no client JS required  |
-| CSS (all chunks)        | ≤ 15 kB     | Tailwind purged + print.css; gzip/brotli in production   |
-| JavaScript (all chunks) | ≤ 50 kB     | React + Next.js runtime; no heavy client components here |
-| Fonts                   | **0 kB**    | System fonts only on this route (layout.tsx override)    |
-| Patient photo           | ≤ 40 kB     | Supabase Storage upload-time resize target (see below)   |
-| **Total (no photo)**    | **≤ 70 kB** | The critical path without user-uploaded content          |
-| **Total (with photo)**  | **≤ 110 kB**| Worst-case including a reasonably sized avatar           |
+| ----------------------- | ------------ | -------------------------------------------------------- |
+| HTML document           | ≤ 5 kB       | Server-rendered; inline CSS vars; no client JS required  |
+| CSS (all chunks)        | ≤ 15 kB      | Tailwind purged + print.css; gzip/brotli in production   |
+| JavaScript (all chunks) | ≤ 50 kB      | React + Next.js runtime; no heavy client components here |
+| Fonts                   | **0 kB**     | System fonts only on this route (layout.tsx override)    |
+| Patient photo           | ≤ 40 kB      | Supabase Storage upload-time resize target (see below)   |
+| **Total (no photo)**    | **≤ 70 kB**  | The critical path without user-uploaded content          |
+| **Total (with photo)**  | **≤ 110 kB** | Worst-case including a reasonably sized avatar           |
 
 On a 2G EDGE connection (250 kbps) 110 kB = ~3.5 seconds to transfer.
 Combined with a ~400 ms RTT for the first HTML byte, the page should be
@@ -44,12 +44,14 @@ information-only page.
 ## What each line means
 
 ### HTML
+
 The page is fully server-rendered (`export const dynamic = "force-dynamic"`).
 No skeleton + data fetch: the patient's name, blood group, genotype, allergies,
 medications, and contacts are all in the first HTML response. This is the right
 tradeoff for emergency data.
 
 ### CSS
+
 Tailwind v4 purges unused utilities at build time. `print.css` is ~3 kB
 uncompressed; it is gzip/brotli compressed in production and only downloaded
 when the browser indicates a print intent (the `@media print` block is inert
@@ -57,12 +59,14 @@ during normal screen rendering). The route-scoped CSS chunk should stay well
 under 15 kB compressed.
 
 ### JavaScript
+
 The page has no client-side components (no `"use client"` directive). React
 and Next.js runtime chunks are shared across routes and cached after the first
 navigation. First-visit cost is ~40–50 kB (React + Next.js minimal runtime);
 subsequent navigations pay nothing for JS.
 
 ### Fonts — 0 kB (target)
+
 `app/(public)/card/[id]/layout.tsx` resets `--font-sans` and `--font-mono` to
 system-font stacks before any paint. The root layout's `next/font` Geist
 declaration still runs at the HTML level and `font-display: swap` is in effect,
@@ -79,6 +83,7 @@ fetched for this route.
 > sufficient.
 
 ### Patient photo
+
 The photo `<img>` renders at 80×80 CSS pixels (160×160 px at 2×). The
 Supabase Storage upload pipeline should resize-on-upload and cap avatars at
 200×200 px / JPEG 85% quality — this is a **code-adjacent convention**, not
@@ -117,13 +122,13 @@ Run Lighthouse against the seeded demo card
 (`/card/11111111-1111-1111-1111-111111111111`) with the "Slow 4G" throttle
 preset. Targets:
 
-| Metric                    | Target  |
-|---------------------------|---------|
-| First Contentful Paint    | ≤ 2.5 s |
-| Largest Contentful Paint  | ≤ 3.5 s |
-| Total Blocking Time       | ≤ 200 ms |
-| Total transfer size       | ≤ 110 kB |
-| Performance score         | ≥ 90    |
+| Metric                   | Target   |
+| ------------------------ | -------- |
+| First Contentful Paint   | ≤ 2.5 s  |
+| Largest Contentful Paint | ≤ 3.5 s  |
+| Total Blocking Time      | ≤ 200 ms |
+| Total transfer size      | ≤ 110 kB |
+| Performance score        | ≥ 90     |
 
 ---
 
