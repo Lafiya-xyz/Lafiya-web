@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 import { logError } from "@/lib/logging/logger";
 import { CURRENT_POLICY_VERSION } from "@/lib/consent";
+import { formatZodError } from "@/lib/validation/zod";
 
 const signUpSchema = z.object({
   email: z.email("Enter a valid email address"),
@@ -34,7 +35,7 @@ export async function signUp(
   });
 
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+    return { error: formatZodError(parsed.error).error };
   }
 
   const supabase = await createClient();

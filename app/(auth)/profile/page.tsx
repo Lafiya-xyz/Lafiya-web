@@ -14,6 +14,7 @@ import { AttestationStatusBanner } from "./attestation-status-banner";
 import { AccessSummary } from "./access-summary";
 import { CapabilitySharePanel } from "./capability-share-panel";
 import { DeleteAccountButton } from "./delete-account-button";
+import { MissingSecretBanner } from "./missing-secret-banner";
 import { ProfileForm } from "./profile-form";
 import { PrivacyControls } from "./privacy-controls";
 import { QrCardDisplay } from "./qr-card-display";
@@ -33,11 +34,15 @@ export const metadata: Metadata = {
 async function checkAttestationStaleness(
   supabase: Awaited<ReturnType<typeof createClient>>,
   profile: ProfileRow,
-): Promise<{ stale: boolean; pendingRequestExists: boolean }> {
+): Promise<{
+  stale: boolean;
+  pendingRequestExists: boolean;
+  secretMissing: boolean;
+}> {
   try {
     const secret = await getSecretByUserId(profile.user_id);
     if (!secret) {
-      return { stale: false, pendingRequestExists: false };
+      return { stale: false, pendingRequestExists: false, secretMissing: true };
     }
 
     const currentHash = computeRecordHash(profile, secret);
@@ -65,7 +70,11 @@ async function checkAttestationStaleness(
           .eq("record_hash", currentHash)
           .eq("status", "pending");
       }
-      return { stale: false, pendingRequestExists: false };
+      return {
+        stale: false,
+        pendingRequestExists: false,
+        secretMissing: false,
+      };
     }
 
     if (
@@ -83,12 +92,16 @@ async function checkAttestationStaleness(
       .eq("status", "pending")
       .maybeSingle();
 
-    return { stale: true, pendingRequestExists: pending !== null };
+    return {
+      stale: true,
+      pendingRequestExists: pending !== null,
+      secretMissing: false,
+    };
   } catch (err) {
     logError("Failed to check attestation status", err, {
       route: "/profile",
     });
-    return { stale: false, pendingRequestExists: false };
+    return { stale: false, pendingRequestExists: false, secretMissing: false };
   }
 }
 
@@ -111,7 +124,7 @@ export default async function ProfilePage() {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const { stale, pendingRequestExists } = profile
+  const { stale, pendingRequestExists, secretMissing } = profile
     ? await checkAttestationStaleness(supabase, profile)
     : { stale: false, pendingRequestExists: false };
   const { data: consentEvents } = await supabase

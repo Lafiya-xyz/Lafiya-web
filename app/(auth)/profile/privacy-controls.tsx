@@ -1,3 +1,4 @@
+import { formatDateTime } from "@/lib/format/datetime";
 import type { ConsentEventRow, DisclosurePolicy } from "@/lib/supabase/types";
 
 import { recordConsentChoice, updateDisclosureChoices } from "./actions";
@@ -55,6 +56,7 @@ export function PrivacyControls({
             <form
               action={recordConsentChoice}
               key={purpose}
+              data-testid={`consent-form-${purpose}`}
               className="flex items-center justify-between gap-4"
             >
               <input type="hidden" name="purpose" value={purpose} />
@@ -65,11 +67,18 @@ export function PrivacyControls({
               />
               <span>
                 {label}{" "}
-                <span className="text-xs text-zinc-500">
+                <span
+                  data-testid={`consent-status-${purpose}`}
+                  className="text-xs text-zinc-500"
+                >
                   ({active ? "allowed" : "withdrawn"})
                 </span>
               </span>
-              <button className="rounded-full border px-4 py-2" type="submit">
+              <button
+                type="submit"
+                data-testid={`consent-toggle-${purpose}`}
+                className="rounded-full border px-4 py-2"
+              >
                 {active ? "Withdraw" : "Allow"}
               </button>
             </form>
@@ -109,7 +118,7 @@ export function PrivacyControls({
             <li key={event.id}>
               {event.purpose.replaceAll("_", " ")} — {event.action} —{" "}
               <time dateTime={event.occurred_at}>
-                {new Date(event.occurred_at).toLocaleString()}
+                {formatDateTime(event.occurred_at)}
               </time>
             </li>
           ))}

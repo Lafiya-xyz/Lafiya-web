@@ -1,19 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-vi.mock("next/cache", () => ({
-  unstable_cache: (fn: (...args: unknown[]) => unknown) => {
-    const cacheStore = new Map<string, unknown>();
-    return async (...args: unknown[]) => {
-      const key = JSON.stringify(args);
-      if (cacheStore.has(key)) {
-        return cacheStore.get(key);
-      }
-      const result = await fn(...args);
-      cacheStore.set(key, result);
-      return result;
-    };
-  },
-}));
+import { mockUnstableCache } from "@/tests/fixtures/next-cache";
+
+void mockUnstableCache;
 
 import { DEMO_VERIFIED_RECORD_HASH, getAttestation } from "./attestation";
 

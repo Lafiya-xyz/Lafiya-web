@@ -1,3 +1,5 @@
+import { formatDateTime } from "@/lib/format/datetime";
+
 export function AccessSummary({
   viewsLast30Days,
   lastViewedAt,
@@ -20,11 +22,7 @@ export function AccessSummary({
       </p>
       {lastViewedAt ? (
         <p className="mt-2 text-xs text-zinc-500">
-          Most recent successful view:{" "}
-          {new Intl.DateTimeFormat(undefined, {
-            dateStyle: "medium",
-            timeStyle: "short",
-          }).format(new Date(lastViewedAt))}
+          Most recent successful view: {formatDateTime(lastViewedAt)}
         </p>
       ) : null}
       <p className="mt-2 text-xs text-zinc-500">

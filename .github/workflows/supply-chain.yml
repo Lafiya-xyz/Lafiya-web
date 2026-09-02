@@ -25,12 +25,12 @@ jobs:
       - run: npm ci
       - run: npm run ci:check-action-pins
       - run: npm audit --omit=dev --audit-level=high
-      - uses: trufflesecurity/trufflehog@bcfcf73aaf4759d4dadc2783177c245a02792318 # v3.97.0
+      - uses: trufflesecurity/trufflehog@20652fbbdefffcdaa493a5bf57ab2ac6b1db715b # v3.97.1
         with:
           path: ./
           extra_args: --only-verified
       - run: npm run sbom
-      - uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         with:
           subject-path: artifacts/lafiya-web.sbom.cdx.json

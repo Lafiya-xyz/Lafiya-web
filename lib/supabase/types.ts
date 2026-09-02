@@ -328,7 +328,7 @@ export type EmergencyCardRow = {
 };
 
 export type CapabilityEmergencyCardRow = EmergencyCardRow & {
-  access_state: "active" | "inactive";
+  access_state: "active" | "revoked" | "expired" | "exhausted" | "not_found";
   capability_id: string | null;
 };
 
