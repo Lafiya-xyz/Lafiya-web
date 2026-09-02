@@ -65,7 +65,8 @@ export default function SignUpPage() {
               htmlFor="consent"
               className="text-sm text-zinc-600 dark:text-zinc-400"
             >
-              I consent to the collection and processing of my health data in accordance with the{" "}
+              I consent to the collection and processing of my health data in
+              accordance with the{" "}
               <Link
                 href="/privacy"
                 className="font-medium text-zinc-950 underline focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none rounded px-1 dark:text-zinc-50 dark:focus:ring-zinc-600"
@@ -89,6 +90,7 @@ export default function SignUpPage() {
 
           <button
             type="submit"
+            data-testid="signup-submit"
             disabled={isPending}
             className="mt-2 flex h-11 items-center justify-center rounded-full bg-zinc-950 px-6 text-base font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:focus:ring-zinc-600"
           >
@@ -104,6 +106,12 @@ export default function SignUpPage() {
           >
             Sign in
           </Link>
+        </p>
+
+        <p role="note" className="mt-6 text-xs text-zinc-500 dark:text-zinc-500">
+          Lafiya is pre-alpha software on the Stellar testnet, not yet
+          audited, and not a medical device. Not a substitute for
+          professional medical judgment.
         </p>
       </div>
     </div>

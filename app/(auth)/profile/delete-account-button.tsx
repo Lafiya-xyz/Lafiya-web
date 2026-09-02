@@ -27,9 +27,9 @@ export function DeleteAccountButton() {
     <form action={formAction} className="flex flex-col gap-4">
       <div className="rounded-lg border border-red-300 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950">
         <p className="text-sm font-medium text-red-800 dark:text-red-200">
-          This will permanently delete your Lafiya card and all your data.
-          Your emergency card URL will stop working immediately. This action
-          cannot be undone.
+          This will permanently delete your Lafiya card and all your data. Your
+          emergency card URL will stop working immediately. This action cannot
+          be undone.
         </p>
       </div>
 
@@ -38,7 +38,11 @@ export function DeleteAccountButton() {
           htmlFor="confirm"
           className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
         >
-          Type <kbd className="rounded border border-zinc-300 px-1.5 py-0.5 font-mono text-xs dark:border-zinc-600">DELETE</kbd> to confirm
+          Type{" "}
+          <kbd className="rounded border border-zinc-300 px-1.5 py-0.5 font-mono text-xs dark:border-zinc-600">
+            DELETE
+          </kbd>{" "}
+          to confirm
         </label>
         <input
           id="confirm"

@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import type { EmergencyContact } from "@/lib/supabase/types";
+import { RELATIONSHIP_TYPES } from "@/lib/validation/profile";
 
 const MAX_CONTACTS = 3;
 const EMPTY_CONTACT: EmergencyContact = {
@@ -26,6 +27,8 @@ export function EmergencyContactsField({
   const [contacts, setContacts] = useState(
     initialValues.length > 0 ? initialValues : [EMPTY_CONTACT],
   );
+  const [openDropdown, setOpenDropdown] = useState<number | null>(null);
+  const [relationshipFilter, setRelationshipFilter] = useState<Record<number, string>>({});
 
   function updateContact(
     index: number,
@@ -36,6 +39,24 @@ export function EmergencyContactsField({
       i === index ? { ...contact, [field]: value } : contact,
     );
     setContacts(next);
+  }
+
+  function handleRelationshipChange(index: number, value: string) {
+    updateContact(index, "relationship", value);
+    setOpenDropdown(null);
+    setRelationshipFilter((prev) => {
+      const { [index]: _, ...rest } = prev;
+      return rest;
+    });
+  }
+
+  function getFilteredRelationships(index: number): typeof RELATIONSHIP_TYPES {
+    const filter = relationshipFilter[index] || "";
+    if (!filter) return RELATIONSHIP_TYPES;
+    
+    return RELATIONSHIP_TYPES.filter((rel) =>
+      rel.toLowerCase().includes(filter.toLowerCase()),
+    );
   }
 
   return (
@@ -85,21 +106,63 @@ export function EmergencyContactsField({
               aria-describedby={error ? "emergencyContacts-error" : undefined}
               className="w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-zinc-600"
             />
-            <label htmlFor={`contact-relationship-${index}`} className="sr-only">
-              Emergency contact {index + 1} relationship
-            </label>
-            <input
-              id={`contact-relationship-${index}`}
-              type="text"
-              placeholder="Relationship"
-              value={contact.relationship}
-              onChange={(event) =>
-                updateContact(index, "relationship", event.target.value)
-              }
-              aria-invalid={error ? "true" : undefined}
-              aria-describedby={error ? "emergencyContacts-error" : undefined}
-              className="w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-zinc-600"
-            />
+            <div className="relative w-full">
+              <label
+                htmlFor={`contact-relationship-${index}`}
+                className="sr-only"
+              >
+                Emergency contact {index + 1} relationship
+              </label>
+              <input
+                id={`contact-relationship-${index}`}
+                type="text"
+                placeholder="Relationship"
+                value={
+                  openDropdown === index
+                    ? relationshipFilter[index] || ""
+                    : contact.relationship
+                }
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (openDropdown !== index) {
+                    setOpenDropdown(index);
+                  }
+                  setRelationshipFilter((prev) => ({
+                    ...prev,
+                    [index]: value,
+                  }));
+                }}
+                onFocus={() => setOpenDropdown(index)}
+                onBlur={() => {
+                  // Delay closing to allow click on dropdown
+                  setTimeout(() => setOpenDropdown(null), 200);
+                }}
+                aria-invalid={error ? "true" : undefined}
+                aria-describedby={error ? "emergencyContacts-error" : undefined}
+                aria-autocomplete="list"
+                className="w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-zinc-600"
+                list={`relationship-options-${index}`}
+              />
+              {openDropdown === index && (
+                <div className="absolute top-full left-0 right-0 z-10 mt-1 max-h-48 overflow-y-auto rounded-md border border-zinc-300 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+                  {getFilteredRelationships(index).map((relationship) => (
+                    <button
+                      key={relationship}
+                      type="button"
+                      onClick={() => handleRelationshipChange(index, relationship)}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-950 dark:text-zinc-50"
+                    >
+                      {relationship}
+                    </button>
+                  ))}
+                  {getFilteredRelationships(index).length === 0 && (
+                    <div className="px-3 py-2 text-sm text-zinc-600 dark:text-zinc-400">
+                      No matching relationships
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             <button
               type="button"
               onClick={() =>
@@ -123,7 +186,10 @@ export function EmergencyContactsField({
         + Add contact
       </button>
       {error ? (
-        <p id="emergencyContacts-error" className="mt-1 text-sm text-red-600 dark:text-red-400">
+        <p
+          id="emergencyContacts-error"
+          className="mt-1 text-sm text-red-600 dark:text-red-400"
+        >
           {error}
         </p>
       ) : null}

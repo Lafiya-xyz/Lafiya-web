@@ -31,8 +31,8 @@ export function AttestationStatusBanner({
       <p className="font-medium">Profile edited since last verification</p>
       <p className="mt-1">
         Your card&apos;s emergency details have changed since a health worker
-        last verified it. Responders scanning your QR code will see
-        &quot;not verified&quot; until it&apos;s re-verified.
+        last verified it. Responders scanning your QR code will see &quot;not
+        verified&quot; until it&apos;s re-verified.
       </p>
 
       {state?.error ? (

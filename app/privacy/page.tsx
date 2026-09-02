@@ -26,9 +26,9 @@ export default function PrivacyPage() {
             What we collect
           </h2>
           <p>
-            Lafiya collects only the emergency-relevant subset of a patient&apos;s
-            profile needed for first responders to make safe treatment decisions.
-            This is:
+            Lafiya collects only the emergency-relevant subset of a
+            patient&apos;s profile needed for first responders to make safe
+            treatment decisions. This is:
           </p>
           <ul className="list-disc pl-5">
             <li>Name and age</li>
@@ -64,9 +64,10 @@ export default function PrivacyPage() {
           </h2>
           <p>
             Your data is stored in an encrypted Supabase Postgres database with
-            Row-Level Security (RLS). Access is strictly controlled: patients can
-            read and write only their own records, and the public emergency page
-            exposes only the emergency subset via a dedicated read-only function.
+            Row-Level Security (RLS). Access is strictly controlled: patients
+            can read and write only their own records, and the public emergency
+            page exposes only the emergency subset via a dedicated read-only
+            function.
           </p>
         </section>
 

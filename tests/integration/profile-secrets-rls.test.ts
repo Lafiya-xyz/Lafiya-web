@@ -92,8 +92,9 @@ describe("profile_secrets RLS", () => {
   });
 
   it("cascades away when the owning profiles row is deleted", async () => {
-    const { error: deleteError } = await adminClient
-      .auth.admin.deleteUser(user.id);
+    const { error: deleteError } = await adminClient.auth.admin.deleteUser(
+      user.id,
+    );
     expect(deleteError).toBeNull();
 
     const { data } = await adminClient
