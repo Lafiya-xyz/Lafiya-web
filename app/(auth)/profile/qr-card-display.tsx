@@ -27,7 +27,10 @@ export async function QrCardDisplay({
         unoptimized
         className="rounded-md"
       />
-      <p className="max-w-xs text-xs break-all text-zinc-500 dark:text-zinc-500">
+      <p
+        data-testid="card-url"
+        className="max-w-xs text-xs break-all text-zinc-500 dark:text-zinc-500"
+      >
         {cardUrl}
       </p>
       <p className="max-w-xs text-xs text-amber-700 dark:text-amber-300">

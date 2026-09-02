@@ -87,6 +87,7 @@ export function EmergencyCardContent({
           <div>
             <h1
               id="identity-heading"
+              data-testid="card-identity-name"
               className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50"
             >
               {card.name ?? "Name withheld"}
@@ -111,7 +112,10 @@ export function EmergencyCardContent({
               <dt className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
                 Blood group
               </dt>
-              <dd className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
+              <dd
+                data-testid="card-blood-group"
+                className="text-lg font-semibold text-zinc-950 dark:text-zinc-50"
+              >
                 {card.blood_group ?? "Withheld"}
               </dd>
             </div>
@@ -119,7 +123,10 @@ export function EmergencyCardContent({
               <dt className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
                 Genotype
               </dt>
-              <dd className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
+              <dd
+                data-testid="card-genotype"
+                className="text-lg font-semibold text-zinc-950 dark:text-zinc-50"
+              >
                 {card.genotype ?? "Withheld"}
               </dd>
             </div>
