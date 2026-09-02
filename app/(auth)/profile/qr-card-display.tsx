@@ -13,7 +13,19 @@ export async function QrCardDisplay({
   cardUrl: string;
   legacySunsetAt: string;
 }) {
-  const qrDataUrl = await generateQrDataUrl(cardUrl);
+  let qrDataUrl: string | null = null;
+  let qrError: string | null = null;
+
+  try {
+    qrDataUrl = await generateQrDataUrl(cardUrl);
+  } catch (error) {
+    if (error instanceof QrCapacityError) {
+      qrError =
+        "This card URL is too long to display as a QR code. Copy the link below to share it manually.";
+    } else {
+      qrError = "Could not generate QR code. Copy the link below to share it.";
+    }
+  }
 
   return (
     <div className="flex flex-col items-center gap-4 rounded-lg border border-zinc-300 p-6 text-center dark:border-zinc-700">

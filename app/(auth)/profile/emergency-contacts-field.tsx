@@ -16,6 +16,10 @@ const EMPTY_CONTACT: EmergencyContact = {
  * Up to 3 emergency contacts. Submitted as a single JSON hidden input
  * (rather than indexed field names) so the server action can read the
  * whole structured list back with one formData.get() + JSON.parse.
+ *
+ * The limit is enforced both here (client-side, immediate feedback) and by
+ * the server-side Zod schema in lib/validation/profile.ts, so a crafted
+ * request that bypasses the UI cannot exceed the maximum either.
  */
 export function EmergencyContactsField({
   initialValues,
@@ -29,6 +33,8 @@ export function EmergencyContactsField({
   );
   const [openDropdown, setOpenDropdown] = useState<number | null>(null);
   const [relationshipFilter, setRelationshipFilter] = useState<Record<number, string>>({});
+
+  const atLimit = contacts.length >= MAX_CONTACTS;
 
   function updateContact(
     index: number,
@@ -185,6 +191,15 @@ export function EmergencyContactsField({
       >
         + Add contact
       </button>
+      {atLimit ? (
+        <p
+          id="contacts-limit-message"
+          className="mt-1 text-sm text-zinc-500 dark:text-zinc-400"
+        >
+          Maximum of {MAX_CONTACTS} emergency contacts reached. Remove one to
+          add another.
+        </p>
+      ) : null}
       {error ? (
         <p
           id="emergencyContacts-error"
