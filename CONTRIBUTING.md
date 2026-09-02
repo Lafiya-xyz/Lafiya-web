@@ -16,10 +16,11 @@ By contributing to this repository, you agree that your contributions will be li
 
 Before you start writing code, please set up your local development environment:
 
-1. **Install Dependencies**: Run `npm install`.
-2. **Local Supabase & Configuration**: Follow the **Quick Start** instructions in the [README.md](README.md#quick-start) to start the local database and populate your environment variables.
-3. **Run Dev Server**: Start the local server using `npm run dev`.
-4. **Install the pre-commit hook** (one-time per clone): Run `npm run hooks:install`. This wires `scripts/scan-secrets.mjs` into git so secret patterns are caught before they reach the remote.
+1. **Node.js 24+**: This project requires **Node.js 24 or later** (`engines: { "node": ">=24.0.0" }`). npm will warn if you run it with an older version. We recommend using the pinned version in `.nvmrc` (`nvm use`). CI runs `node-version: 24`.
+2. **Install Dependencies**: Run `npm install`.
+3. **Local Supabase & Configuration**: Follow the **Quick Start** instructions in the [README.md](README.md#quick-start) to start the local database and populate your environment variables.
+4. **Run Dev Server**: Start the local server using `npm run dev`.
+5. **Install the pre-commit hook** (one-time per clone): Run `npm run hooks:install`. This wires `scripts/scan-secrets.mjs` into git so secret patterns are caught before they reach the remote.
 
 ---
 
@@ -336,6 +337,52 @@ Nothing in `lib/stellar/` is deployed to the network; it only reads from and con
 
 ---
 
+## Documentation Link Checker
+
+Internal relative links in `docs/*.md` and `README.md` are verified by:
+
+```bash
+npm run check:links
+```
+
+This runs `scripts/check-doc-links.mjs`, which scans every relative markdown link
+(`[text](./path)` or `[text](path)` — not `http://…` URLs) and confirms the
+target file exists on disk. The script exits non-zero and prints each broken link
+and the file it was found in.
+
+Run this before submitting a PR that adds or moves documentation files.
+
+---
+
+## Architecture Decision Records (ADRs)
+
+ADRs live in `docs/adr-NNN-slug.md`. Every ADR **must** contain the following
+sections (case-insensitive heading match):
+
+| Required section    | Notes                                                    |
+| ------------------- | -------------------------------------------------------- |
+| `Status`            | `accepted`, `proposed`, `deprecated`, or `superseded`   |
+| `Decision`          | The decision and its core rationale                      |
+| `Consequences`      | Trade-offs, limitations, and downstream effects          |
+
+Verify all ADRs conform before merging:
+
+```bash
+npm run check:adrs
+```
+
+`scripts/check-adr-template.mjs` checks every `docs/adr-*.md` file and exits
+non-zero if any required section is absent, printing which sections are missing
+from which files.
+
+When writing a new ADR:
+1. Use the next sequential number (`adr-004-...`).
+2. Include at minimum: `Status`, `Decision`, and `Consequences` headings.
+3. Add any context-specific sections (`Privacy boundary`, `State transitions`,
+   `Migration and recovery`, etc.) as needed by the decision.
+
+---
+
 ## Pull Request Expectations & Checklist
 
 Every Pull Request must be verified before merging. Please ensure the following checklist is completed:
@@ -405,3 +452,5 @@ Before hitting submit on your PR:
 - [ ] `npm run types:verify` passes (types are consistent with migrations).
 - [ ] `npm run secrets:scan-all` passes (no secret patterns found in tracked files).
 - [ ] You have declared whether this PR impacts a shared cross-repo contract.
+- [ ] Documentation links are intact (`npm run check:links` exits 0).
+- [ ] All ADRs conform to the template (`npm run check:adrs` exits 0).

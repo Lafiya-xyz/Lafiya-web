@@ -14,6 +14,10 @@ Consent is append-only and purpose/version-specific. Current consent is the most
 
 Historical revisions are retained only while the account exists. Auth deletion cascades relational history and secrets; avatar deletion occurs before auth deletion. An immutable Stellar commitment cannot be erased, but contains only a keyed one-way commitment—not health data or an application identifier. Production deletion orchestration must retain no patient identifier in an external job payload.
 
+## Consequences
+
+Revision history is immutable and append-only; there is no in-place edit path. Concurrent tab saves are safe via optimistic locking (`STALE_REVISION`), but clients must handle the conflict response and retry with fresh state. All HMAC commitments depend on the per-record secret: losing the secret makes historical commitments unverifiable, so secret rotation is forward-only and old commitments are archived rather than deleted. Consent is append-only; withdrawal is immediate for disclosure but cannot erase committed Stellar hashes. The compatibility INSERT trigger must be removed once old clients are retired.
+
 ## Migration and recovery
 
 The migration is forward-only. It backfills exactly one revision for each existing profile and preserves `last_attested_hash` as the commitment when present. Unattested rows receive an opaque, unverified placeholder until their first governed save. Rehearse with `npx supabase db reset`; query `record_revision_reconciliation` as service role and require `current_matches = 1`. Roll forward by fixing data/function behavior in a later migration; do not drop revisions or restore mutable writes.

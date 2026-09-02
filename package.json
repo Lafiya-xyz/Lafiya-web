@@ -4,8 +4,8 @@
   "private": true,
   "license": "MIT",
   "engines": {
-    "node": "24.14.0",
-    "npm": "11.9.0"
+    "node": ">=24.0.0",
+    "npm": ">=11.0.0"
   },
   "packageManager": "npm@11.9.0",
   "scripts": {
@@ -22,6 +22,8 @@
     "test:watch": "vitest",
     "test:integration": "vitest run -c vitest.integration.config.ts",
     "test:e2e": "playwright test",
+    "check:links": "node scripts/check-doc-links.mjs",
+    "check:adrs": "node scripts/check-adr-template.mjs",
     "bundle:check": "node scripts/check-bundle-size.mjs",
     "migration:lint": "node scripts/lint-migrations.mjs",
     "types:verify": "node scripts/verify-supabase-types.mjs",

@@ -1,0 +1,111 @@
+name: Bundle size
+
+# Posts a bundle-size report as a PR comment so reviewers can spot
+# regressions before merging. Runs on every pull_request against main.
+#
+# The workflow:
+#  1. builds the app (same env as the `test` job in ci.yml)
+#  2. runs scripts/check-bundle-size.mjs and captures its output
+#  3. finds or creates a sticky PR comment with the result
+#
+# The comment is idempotent: on re-runs it is updated in place rather than
+# duplicated, so the PR timeline stays clean.
+
+on:
+  pull_request:
+    branches: [main]
+
+# Required for github-script to create/update PR comments.
+permissions:
+  pull-requests: write
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key-for-build-only
+  SUPABASE_SERVICE_ROLE_KEY: dummy-service-role-key-for-build-only
+  STELLAR_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
+  SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
+  LAFIYA_DEPLOYMENT_ENV: ci
+  ATTESTATION_MODE: mock
+
+jobs:
+  bundle-size:
+    name: Bundle size report
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run bundle size check
+        id: bundle
+        # Capture both stdout+stderr; do NOT fail the step on non-zero exit so
+        # we can still post the over-budget result as a PR comment.
+        run: |
+          set +e
+          OUTPUT=$(node scripts/check-bundle-size.mjs 2>&1)
+          EXIT_CODE=$?
+          echo "output<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$OUTPUT" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Post PR comment
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        with:
+          script: |
+            const output = `${{ steps.bundle.outputs.output }}`;
+            const exitCode = parseInt('${{ steps.bundle.outputs.exit_code }}', 10);
+            const status = exitCode === 0 ? '✅ within budget' : '❌ budget exceeded';
+            const body = [
+              '## Bundle size report',
+              '',
+              `**Status:** ${status}`,
+              '',
+              '```',
+              output,
+              '```',
+              '',
+              '_Budgets: JS ≤ 60 kB · CSS ≤ 20 kB (targets in [docs/perf-budget.md](docs/perf-budget.md))_',
+            ].join('\n');
+
+            const marker = '<!-- lafiya-bundle-size-report -->';
+
+            // Find an existing comment to update
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: marker + '\n' + body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: marker + '\n' + body,
+              });
+            }
+
+      # Fail the job after posting the comment if the budget was exceeded
+      - name: Fail if budget exceeded
+        if: steps.bundle.outputs.exit_code != '0'
+        run: |
+          echo "Bundle size budget exceeded. See PR comment for details."
+          exit 1

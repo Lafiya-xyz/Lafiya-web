@@ -36,6 +36,8 @@ jobs:
       - run: npm run types:verify
       - run: npm run secrets:scan-all
       - run: npm run ci:check-action-pins
+      - run: npm run check:links
+      - run: npm run check:adrs
       - run: npm test
       - run: npm run build
       - run: npm run ci:check-clean-worktree

@@ -12,13 +12,10 @@
 
 # testing
 /coverage
-/test-results
-/playwright-report
-**/__snapshots__
-
 # test snapshots (Vitest / Jest)
 **/__snapshots__/
 *.snap
+.nyc_output/
 
 # playwright
 /playwright-report/
