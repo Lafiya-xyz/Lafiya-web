@@ -1,5 +1,6 @@
 import Image from "next/image";
 
+import { formatDate } from "@/lib/format/datetime";
 import { generateQrDataUrl } from "@/lib/qr/generateQrDataUrl";
 
 import { CopyLinkButton } from "./copy-link-button";
@@ -27,7 +28,10 @@ export async function QrCardDisplay({
         unoptimized
         className="rounded-md"
       />
-      <p className="max-w-xs text-xs break-all text-zinc-500 dark:text-zinc-500">
+      <p
+        data-testid="card-url"
+        className="max-w-xs text-xs break-all text-zinc-500 dark:text-zinc-500"
+      >
         {cardUrl}
       </p>
       <div className="flex flex-col items-center gap-1">
@@ -49,11 +53,8 @@ export async function QrCardDisplay({
         </a>
       </div>
       <p className="max-w-xs text-xs text-amber-700 dark:text-amber-300">
-        This legacy QR will stop working on{" "}
-        {new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-          new Date(legacySunsetAt),
-        )}
-        . Create a current emergency QR below.
+        This legacy QR will stop working on {formatDate(legacySunsetAt)}.
+        Create a current emergency QR below.
       </p>
       <div className="flex gap-3">
         <CopyLinkButton text={cardUrl} />

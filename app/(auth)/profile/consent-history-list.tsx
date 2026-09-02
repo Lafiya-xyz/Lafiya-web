@@ -2,14 +2,13 @@
 
 import { useState } from 'react';
 
+import { formatDateTime } from '@/lib/format/datetime';
 import type { ConsentHistoryEntry } from './consent/actions';
 
 const PAGE_SIZE = 5;
 
 function formatAcceptedAt(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString();
+  return formatDateTime(iso, iso);
 }
 
 export function ConsentHistoryList({

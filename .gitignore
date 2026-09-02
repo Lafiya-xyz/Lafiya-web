@@ -51,20 +51,19 @@ next-env.d.ts
 **/__snapshots__/
 *.snap
 
-# playwright
-/test-results/
-/playwright-report/
-/playwright/.cache/
-
 # local dev / editor
 *.local
+
+# editor directories and files
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
 
 # OS
 Thumbs.db
+ehthumbs.db
 
 # lighthouse CI
 .lighthouseci/
@@ -72,3 +71,11 @@ Thumbs.db
 # load test results
 /loadtest/results/
 /bench/rpc-provider-benchmark/results/
+
+# Playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
+# Sentry
+.sentryclirc

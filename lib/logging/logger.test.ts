@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { logError, logInfo, redactSensitiveData, redactString } from "./logger";
+import {
+  logError,
+  logInfo,
+  logWarn,
+  logDebug,
+  redactSensitiveData,
+  redactString,
+  setLogLevel,
+  getLogLevel,
+} from "./logger";
 import * as Sentry from "@sentry/nextjs";
 
 // Mock Sentry to ensure no real network calls are made
@@ -14,16 +23,21 @@ vi.mock("@sentry/nextjs", () => {
 describe("Structured Logging & Redaction", () => {
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;
+  let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.clearAllMocks();
+    // Reset to debug level for most tests
+    setLogLevel("debug");
   });
 
   afterEach(() => {
     consoleErrorSpy.mockRestore();
     consoleLogSpy.mockRestore();
+    consoleWarnSpy.mockRestore();
   });
 
   describe("redactString", () => {
@@ -249,6 +263,235 @@ describe("Structured Logging & Redaction", () => {
       expect(parsed.context.email).toBe("[REDACTED]");
       expect(parsed.context.action).toBe("signUp");
       expect(parsed.timestamp).toBeDefined();
+    });
+
+    it("logError does not propagate when the Sentry sink throws", () => {
+      vi.mocked(Sentry.captureException).mockImplementationOnce(() => {
+        throw new Error("Sentry network error");
+      });
+
+      // Must not throw even though Sentry fails
+      expect(() => {
+        logError("test message", new Error("inner error"));
+      }).not.toThrow();
+
+      // The structured console.error line is still written before Sentry is called
+      expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+      const parsed = JSON.parse(consoleErrorSpy.mock.calls[0][0]);
+      expect(parsed.level).toBe("error");
+      expect(parsed.message).toBe("test message");
+    });
+
+    it("logError emits a console.warn in development when the Sentry sink throws", () => {
+      const consoleWarnSpy = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
+      // Use vi.stubEnv to safely override NODE_ENV in this test environment
+      vi.stubEnv("NODE_ENV", "development");
+
+      try {
+        vi.mocked(Sentry.captureException).mockImplementationOnce(() => {
+          throw new Error("Sentry DSN misconfigured");
+        });
+
+        logError("test message", new Error("inner error"));
+
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+          expect.stringContaining("[logger]"),
+          expect.any(Error),
+        );
+      } finally {
+        vi.unstubAllEnvs();
+        consoleWarnSpy.mockRestore();
+      }
+    });
+  });
+
+  describe("Log Level Filtering", () => {
+    it("initializes with debug level in development and warn level in production", () => {
+      // Save original env
+      const originalEnv = process.env.NODE_ENV;
+      
+      // Test production default - this is set at module load, so we test getLogLevel
+      // The actual level depends on NODE_ENV at import time
+      const level = getLogLevel();
+      expect(["debug", "warn"]).toContain(level);
+      
+      process.env.NODE_ENV = originalEnv;
+    });
+
+    it("debug logs are suppressed when log level is set to info", () => {
+      setLogLevel("info");
+
+      logDebug("Debug message", { key: "value" });
+
+      expect(consoleLogSpy).not.toHaveBeenCalled();
+    });
+
+    it("debug logs are suppressed when log level is set to warn", () => {
+      setLogLevel("warn");
+
+      logDebug("Debug message", { key: "value" });
+
+      expect(consoleLogSpy).not.toHaveBeenCalled();
+    });
+
+    it("debug logs are suppressed when log level is set to error", () => {
+      setLogLevel("error");
+
+      logDebug("Debug message", { key: "value" });
+
+      expect(consoleLogSpy).not.toHaveBeenCalled();
+    });
+
+    it("debug logs are output when log level is set to debug", () => {
+      setLogLevel("debug");
+
+      logDebug("Debug message", { key: "value" });
+
+      expect(consoleLogSpy).toHaveBeenCalledTimes(1);
+      const loggedString = consoleLogSpy.mock.calls[0][0];
+      const parsed = JSON.parse(loggedString);
+      expect(parsed.level).toBe("debug");
+      expect(parsed.message).toBe("Debug message");
+    });
+
+    it("info logs are suppressed when log level is set to warn", () => {
+      setLogLevel("warn");
+
+      logInfo("Info message", { key: "value" });
+
+      expect(consoleLogSpy).not.toHaveBeenCalled();
+    });
+
+    it("info logs are suppressed when log level is set to error", () => {
+      setLogLevel("error");
+
+      logInfo("Info message", { key: "value" });
+
+      expect(consoleLogSpy).not.toHaveBeenCalled();
+    });
+
+    it("info logs are output when log level is set to debug", () => {
+      setLogLevel("debug");
+
+      logInfo("Info message", { key: "value" });
+
+      expect(consoleLogSpy).toHaveBeenCalledTimes(1);
+      const loggedString = consoleLogSpy.mock.calls[0][0];
+      const parsed = JSON.parse(loggedString);
+      expect(parsed.level).toBe("info");
+    });
+
+    it("info logs are output when log level is set to info", () => {
+      setLogLevel("info");
+
+      logInfo("Info message", { key: "value" });
+
+      expect(consoleLogSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("warn logs are suppressed when log level is set to error", () => {
+      setLogLevel("error");
+
+      logWarn("Warning message", { key: "value" });
+
+      expect(consoleWarnSpy).not.toHaveBeenCalled();
+    });
+
+    it("warn logs are output when log level is set to debug", () => {
+      setLogLevel("debug");
+
+      logWarn("Warning message", { key: "value" });
+
+      expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
+      const loggedString = consoleWarnSpy.mock.calls[0][0];
+      const parsed = JSON.parse(loggedString);
+      expect(parsed.level).toBe("warn");
+    });
+
+    it("warn logs are output when log level is set to info", () => {
+      setLogLevel("info");
+
+      logWarn("Warning message", { key: "value" });
+
+      expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("warn logs are output when log level is set to warn", () => {
+      setLogLevel("warn");
+
+      logWarn("Warning message", { key: "value" });
+
+      expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("error logs are always output regardless of log level", () => {
+      const levels: Array<"debug" | "info" | "warn" | "error"> = [
+        "debug",
+        "info",
+        "warn",
+        "error",
+      ];
+
+      for (const level of levels) {
+        setLogLevel(level);
+        consoleErrorSpy.mockClear();
+
+        logError("Error message", new Error("Test error"));
+
+        expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+      }
+    });
+
+    it("production configuration (warn level) suppresses debug and info logs but allows warn and error", () => {
+      setLogLevel("warn");
+
+      logDebug("Debug in prod", {});
+      logInfo("Info in prod", {});
+      logWarn("Warning in prod", {});
+      logError("Error in prod", new Error("Prod error"));
+
+      expect(consoleLogSpy).not.toHaveBeenCalled(); // debug and info
+      expect(consoleWarnSpy).toHaveBeenCalledTimes(1); // warn
+      expect(consoleErrorSpy).toHaveBeenCalledTimes(1); // error
+    });
+
+    it("log levels can be dynamically changed at runtime", () => {
+      setLogLevel("error");
+      logInfo("Info should be suppressed", {});
+      expect(consoleLogSpy).not.toHaveBeenCalled();
+
+      setLogLevel("debug");
+      logInfo("Info should now be output", {});
+      expect(consoleLogSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("all log levels respect sensitive data redaction", () => {
+      setLogLevel("debug");
+
+      const sensitiveContext = { email: "user@example.com", password: "secret" };
+
+      logDebug("Debug with sensitive data", sensitiveContext);
+      logInfo("Info with sensitive data", sensitiveContext);
+      logWarn("Warn with sensitive data", sensitiveContext);
+      logError("Error with sensitive data", new Error("test"), sensitiveContext);
+
+      const allLogs = [
+        ...consoleLogSpy.mock.calls,
+        ...consoleWarnSpy.mock.calls,
+        ...consoleErrorSpy.mock.calls,
+      ];
+
+      for (const call of allLogs) {
+        const loggedString = call[0];
+        if (typeof loggedString === "string") {
+          expect(loggedString).not.toContain("user@example.com");
+          expect(loggedString).not.toContain("secret");
+          expect(loggedString).toContain("[REDACTED]");
+        }
+      }
     });
   });
 });

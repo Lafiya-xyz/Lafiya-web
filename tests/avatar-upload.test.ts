@@ -64,7 +64,11 @@ vi.mock("@/lib/supabase/admin", () => ({
           : Math.ceil((record.windowStart + windowMs - now) / 1000);
 
         return {
-          data: { allowed, count: record.count, retry_after_seconds: retryAfterSeconds },
+          data: {
+            allowed,
+            count: record.count,
+            retry_after_seconds: retryAfterSeconds,
+          },
           error: null,
         };
       },
@@ -79,7 +83,9 @@ function fixture(name: string): Buffer {
 function mockAuthedSupabase(userId: string) {
   const mockUpload = vi.fn().mockResolvedValue({ error: null });
   const mockGetPublicUrl = vi.fn().mockReturnValue({
-    data: { publicUrl: `https://supabase.example.com/avatars/${userId}/photo.jpg` },
+    data: {
+      publicUrl: `https://supabase.example.com/avatars/${userId}/photo.jpg`,
+    },
   });
 
   const mockSupabase = {
@@ -101,9 +107,17 @@ function mockAuthedSupabase(userId: string) {
   return { mockUpload, mockGetPublicUrl };
 }
 
-function uploadRequest(buffer: Buffer, type: string, filename: string): Request {
+function uploadRequest(
+  buffer: Buffer,
+  type: string,
+  filename: string,
+): Request {
   const formData = new FormData();
-  formData.append("file", new Blob([new Uint8Array(buffer)], { type }), filename);
+  formData.append(
+    "file",
+    new Blob([new Uint8Array(buffer)], { type }),
+    filename,
+  );
   return new Request("http://localhost/api/profile/photo", {
     method: "POST",
     body: formData,
@@ -153,7 +167,11 @@ describe("Avatar Upload Route Handler", () => {
     const { mockUpload } = mockAuthedSupabase("test-user-123");
 
     // 3. Perform upload request
-    const request = uploadRequest(fixtureBuffer, "image/jpeg", "gps-tagged.jpg");
+    const request = uploadRequest(
+      fixtureBuffer,
+      "image/jpeg",
+      "gps-tagged.jpg",
+    );
 
     const response = await POST(request);
     expect(response.status).toBe(200);

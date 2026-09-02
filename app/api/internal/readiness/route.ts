@@ -1,34 +1,52 @@
+import { rpc } from "@stellar/stellar-sdk";
 import { NextResponse } from "next/server";
 
+import { serverEnv } from "@/lib/env-server";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type ReadinessComponent = "ready" | "unavailable";
+type DependencyStatus = "ok" | "unreachable";
 
-/**
- * Non-sensitive deployment readiness for platform probes. This endpoint never
- * returns a connection string, contract/address, key, record identifier, or
- * patient-derived state. It is deliberately distinct from liveness: a
- * process can be alive while its database is not safe to receive traffic.
- */
-export async function GET() {
-  const config = getRuntimeConfig();
-  let database: ReadinessComponent = "ready";
-
+async function checkSupabase(): Promise<DependencyStatus> {
   try {
     const { error } = await createAdminClient()
       .from("profiles")
       .select("user_id", { head: true, count: "exact" })
       .limit(1);
-    if (error) database = "unavailable";
+    return error ? "unreachable" : "ok";
   } catch {
-    database = "unavailable";
+    return "unreachable";
   }
+}
 
-  const ready = database === "ready";
+async function checkStellar(): Promise<DependencyStatus> {
+  try {
+    await new rpc.Server(serverEnv.SOROBAN_RPC_URL).getHealth();
+    return "ok";
+  } catch {
+    return "unreachable";
+  }
+}
+
+/**
+ * Non-sensitive deployment readiness for platform probes. This endpoint never
+ * returns a connection string, contract/address, key, record identifier, or
+ * patient-derived state. It is deliberately distinct from liveness: a
+ * process can be alive while a dependency it needs is not safe/able to
+ * receive traffic. The per-dependency breakdown lets on-call go straight to
+ * the failing system instead of debugging from zero.
+ */
+export async function GET() {
+  const config = getRuntimeConfig();
+  const [supabase, stellar] = await Promise.all([
+    checkSupabase(),
+    checkStellar(),
+  ]);
+
+  const ready = supabase === "ok" && stellar === "ok";
   return NextResponse.json(
     {
       status: ready ? "ready" : "not_ready",
@@ -38,7 +56,8 @@ export async function GET() {
       },
       environment: config.deployment,
       components: {
-        database,
+        supabase,
+        stellar,
         attestation: config.attestation.mode,
         payoutIndexer: config.payoutIndexer.enabled ? "enabled" : "disabled",
         sentry: config.sentry.enabled ? "enabled" : "disabled",
