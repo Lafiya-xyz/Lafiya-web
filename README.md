@@ -1,5 +1,6 @@
 # Lafiya
 
+[![CI Status](https://github.com/Lafiya-xyz/Lafiya-web/actions/workflows/ci.yml/badge.svg)](https://github.com/Lafiya-xyz/Lafiya-web/actions/workflows/ci.yml)
 [![Built on Stellar](https://img.shields.io/badge/Built%20on-Stellar-blue?logo=stellar)](https://stellar.org)
 [![Soroban Smart Contracts](https://img.shields.io/badge/Smart%20Contracts-Soroban-purple)](https://soroban.stellar.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](#license)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { profileFormSchema } from "./profile";
+import { profileFormSchema, RELATIONSHIP_TYPES } from "./profile";
 
 const validProfile = {
   name: "Amina Yusuf",
@@ -63,10 +63,10 @@ describe("profileFormSchema", () => {
     const result = profileFormSchema.safeParse({
       ...validProfile,
       emergencyContacts: [
-        { name: "A", phone: "1", relationship: "x" },
-        { name: "B", phone: "2", relationship: "x" },
-        { name: "C", phone: "3", relationship: "x" },
-        { name: "D", phone: "4", relationship: "x" },
+        { name: "A", phone: "+2348012345601", relationship: "Parent" },
+        { name: "B", phone: "+2348012345602", relationship: "Parent" },
+        { name: "C", phone: "+2348012345603", relationship: "Parent" },
+        { name: "D", phone: "+2348012345604", relationship: "Parent" },
       ],
     });
     expect(result.success).toBe(false);
@@ -117,5 +117,113 @@ describe("profileFormSchema", () => {
         );
       }
     }
+  });
+
+  describe("relationship field validation", () => {
+    it("accepts all predefined relationship types", () => {
+      for (const relationship of RELATIONSHIP_TYPES) {
+        const result = profileFormSchema.safeParse({
+          ...validProfile,
+          emergencyContacts: [
+            { name: "John Doe", phone: "+2348012345678", relationship },
+          ],
+        });
+        expect(result.success).toBe(true);
+      }
+    });
+
+    it("accepts custom/free-text relationship values not in the predefined list", () => {
+      const customRelationships = [
+        "Neighbor",
+        "Employer",
+        "Ex-spouse",
+        "Foster parent",
+        "God parent",
+      ];
+      for (const relationship of customRelationships) {
+        const result = profileFormSchema.safeParse({
+          ...validProfile,
+          emergencyContacts: [
+            { name: "John Doe", phone: "+2348012345678", relationship },
+          ],
+        });
+        expect(result.success).toBe(true);
+      }
+    });
+
+    it("rejects empty relationship field", () => {
+      const result = profileFormSchema.safeParse({
+        ...validProfile,
+        emergencyContacts: [
+          { name: "John Doe", phone: "+2348012345678", relationship: "" },
+        ],
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const error = result.error.issues.find((e) => e.path.includes("relationship"));
+        expect(error?.message).toBe("Relationship is required");
+      }
+    });
+
+    it("rejects relationship field exceeding max length", () => {
+      const result = profileFormSchema.safeParse({
+        ...validProfile,
+        emergencyContacts: [
+          {
+            name: "John Doe",
+            phone: "+2348012345678",
+            relationship: "a".repeat(51),
+          },
+        ],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("trims whitespace from relationship field", () => {
+      const result = profileFormSchema.safeParse({
+        ...validProfile,
+        emergencyContacts: [
+          {
+            name: "John Doe",
+            phone: "+2348012345678",
+            relationship: "  Parent  ",
+          },
+        ],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.emergencyContacts[0].relationship).toBe("Parent");
+      }
+    });
+
+    it("preserves existing free-text values that are not in the predefined list (backward compatibility)", () => {
+      const existingFreeTextValue = "Medical Doctor";
+      const result = profileFormSchema.safeParse({
+        ...validProfile,
+        emergencyContacts: [
+          {
+            name: "John Doe",
+            phone: "+2348012345678",
+            relationship: existingFreeTextValue,
+          },
+        ],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.emergencyContacts[0].relationship).toBe(
+          existingFreeTextValue,
+        );
+      }
+    });
+
+    it("accepts 'Other' option which suggests free text input for non-standard relationships", () => {
+      const result = profileFormSchema.safeParse({
+        ...validProfile,
+        emergencyContacts: [
+          { name: "John Doe", phone: "+2348012345678", relationship: "Other" },
+        ],
+      });
+      expect(result.success).toBe(true);
+    });
   });
 });
