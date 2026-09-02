@@ -42,13 +42,17 @@ describe("EmergencyCardContent last updated", () => {
     expect(text).toMatch(/Just now|\d+ second[s]? ago/);
   });
 
-  it("renders date for older updates", () => {
-    const oldDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+  it("renders an absolute date, not a relative one, for updates 7+ days old", () => {
+    const oldDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
     const { container } = render(
-      <EmergencyCardContent card={{ ...baseCard, record_updated_at: oldDate }} authorizationKind="legacy" />
+      <EmergencyCardContent card={{ ...baseCard, record_updated_at: oldDate.toISOString() }} authorizationKind="legacy" />
     );
     const text = container.innerHTML;
+    const expectedDate = new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+    }).format(oldDate);
     expect(text).toContain("Last updated");
-    expect(text).toContain("10 days ago");
+    expect(text).toContain(expectedDate);
+    expect(text).not.toContain("days ago");
   });
 });

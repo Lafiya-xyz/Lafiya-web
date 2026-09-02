@@ -15,6 +15,7 @@ import { AccessSummary } from "./access-summary";
 import { CapabilitySharePanel } from "./capability-share-panel";
 import { DeleteAccountButton } from "./delete-account-button";
 import { MissingSecretBanner } from "./missing-secret-banner";
+import { LastChangeNotice, type RevisionSnapshot } from "./last-change-notice";
 import { ProfileForm } from "./profile-form";
 import { PrivacyControls } from "./privacy-controls";
 import { QrCardDisplay } from "./qr-card-display";
@@ -131,6 +132,27 @@ export default async function ProfilePage() {
   const { data: accessSummary } = await supabase.rpc(
     "get_my_card_access_summary",
   );
+  const { data: recentRevisions } = profile
+    ? await supabase
+        .from("record_revisions")
+        .select("created_at, emergency_data")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(2)
+    : { data: null };
+  const [latestRevision, previousRevision] = (recentRevisions ??
+    []) as unknown as RevisionSnapshot[];
+  const { data: activeCapabilities } = profile
+    ? await supabase
+        .from("emergency_capabilities")
+        .select(
+          "id, purpose, field_allowlist, issued_at, expires_at, max_views, used_views",
+        )
+        .eq("user_id", user.id)
+        .is("revoked_at", null)
+        .gt("expires_at", new Date().toISOString())
+        .order("issued_at", { ascending: false })
+    : { data: null };
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-6 py-16">
@@ -179,7 +201,9 @@ export default async function ProfilePage() {
         </>
       ) : null}
 
-      {profile ? <CapabilitySharePanel /> : null}
+      {profile ? (
+        <CapabilitySharePanel activeCapabilities={activeCapabilities ?? []} />
+      ) : null}
 
       <AccessSummary
         viewsLast30Days={accessSummary?.[0]?.views_last_30_days ?? 0}
@@ -188,6 +212,13 @@ export default async function ProfilePage() {
 
       {stale ? (
         <AttestationStatusBanner pendingRequestExists={pendingRequestExists} />
+      ) : null}
+
+      {latestRevision ? (
+        <LastChangeNotice
+          latest={latestRevision}
+          previous={previousRevision ?? null}
+        />
       ) : null}
 
       <ProfileForm profile={profile} userId={user.id} />

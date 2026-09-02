@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 
 import { formatDateTime } from "@/lib/format/datetime";
 import { OfflineEnvelopeSource } from "@/lib/emergency/offline-source";
@@ -43,9 +44,15 @@ function phoneHref(phone: string): string | null {
 export function EmergencyCardContent({
   card,
   authorizationKind,
+  isOwner = false,
 }: {
   card: EmergencyCardRow;
   authorizationKind: "legacy" | "capability";
+  /** Issue #383: true only when the signed-in viewer's own profile owns
+   * this card — determined by the page without ever exposing the card's
+   * user_id to the client (get_emergency_card deliberately never returns
+   * it). Never trust this from anywhere but a server-side check. */
+  isOwner?: boolean;
 }) {
   const status: VerificationStatus =
     card.trust_state === "unverified"
@@ -64,6 +71,14 @@ export function EmergencyCardContent({
         id="main-content"
         className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6 sm:py-16"
       >
+        {isOwner ? (
+          <Link
+            href="/profile"
+            className="self-start rounded-full border border-zinc-300 px-4 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            ✎ Edit my card
+          </Link>
+        ) : null}
         <section
           aria-label="Record trust and freshness"
           className="flex flex-col gap-3"

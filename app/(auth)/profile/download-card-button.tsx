@@ -62,15 +62,15 @@ export function DownloadCardButton({
   </div>
   <div class="section">
     <div class="label">Allergies</div>
-    <div class="value">${(card.allergies ?? []).length > 0 ? card.allergies.join(", ") : "None recorded"}</div>
+    <div class="value">${(card.allergies ?? []).length > 0 ? (card.allergies ?? []).join(", ") : "None recorded"}</div>
   </div>
   <div class="section">
     <div class="label">Current medications</div>
-    <div class="value">${(card.medications ?? []).length > 0 ? card.medications.join(", ") : "None recorded"}</div>
+    <div class="value">${(card.medications ?? []).length > 0 ? (card.medications ?? []).join(", ") : "None recorded"}</div>
   </div>
   <div class="section">
     <div class="label">Chronic conditions / implants</div>
-    <div class="value">${(card.chronic_conditions ?? []).length > 0 ? card.chronic_conditions.join(", ") : "None recorded"}</div>
+    <div class="value">${(card.chronic_conditions ?? []).length > 0 ? (card.chronic_conditions ?? []).join(", ") : "None recorded"}</div>
   </div>
   ${card.emergency_contacts && card.emergency_contacts.length > 0 ? `
   <div class="section">
