@@ -78,7 +78,7 @@ export default function SignInPage() {
             type="submit"
             data-testid="signin-submit"
             disabled={isPending}
-            className="mt-2 flex h-11 items-center justify-center rounded-full bg-zinc-950 px-6 text-base font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:focus:ring-zinc-600"
+            className="mt-2 flex h-11 items-center justify-center rounded-full bg-zinc-950 px-6 text-base font-medium text-white transition-colors hover:bg-zinc-800 active:bg-zinc-700 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-zinc-950 disabled:opacity-50 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:active:bg-zinc-300 dark:disabled:bg-zinc-50 dark:focus:ring-zinc-600"
           >
             {isPending ? "Signing in…" : "Sign in"}
           </button>

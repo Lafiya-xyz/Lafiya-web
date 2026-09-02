@@ -174,7 +174,7 @@ export async function exportMyProfileData(): Promise<
   } = await supabase.auth.getUser();
 
   if (authError || !user) {
-    return { error: "Not authenticated" };
+    return { error: "You must be signed in to export your data." };
   }
 
   // Explicit column list rather than `select("*")`: `last_attested_hash` is
@@ -191,7 +191,7 @@ export async function exportMyProfileData(): Promise<
     .single();
 
   if (profileError || !profile) {
-    return { error: "Could not load profile data" };
+    return { error: "Could not load your profile data. Please try again." };
   }
 
   const [revisions, consents, requests, avatars] = await Promise.all([
@@ -213,7 +213,9 @@ export async function exportMyProfileData(): Promise<
     supabase.storage.from("avatars").list(user.id, { limit: 100 }),
   ]);
   if (revisions.error || consents.error || requests.error || avatars.error)
-    return { error: "Could not assemble complete profile export" };
+    return {
+      error: "Could not assemble your complete profile export. Please try again.",
+    };
   const payload = {
     profile,
     recordRevisions: revisions.data,
@@ -304,7 +306,10 @@ export async function regenerateCardId(
     .eq("user_id", user.id);
 
   if (error) {
-    return { error: error.message };
+    logError("Failed to regenerate card id", error, {
+      route: "/profile (action: regenerateCardId)",
+    });
+    return { error: "Could not regenerate your QR code. Please try again." };
   }
 
   revalidatePath("/profile");
@@ -559,7 +564,7 @@ export async function deleteAccount(
     });
     return {
       error:
-        error instanceof Error ? error.message : "Failed to delete account.",
+        "Could not delete your account. Please try again or contact support if this continues.",
     };
   }
 
@@ -600,11 +605,13 @@ export async function requestReattestation(
     .maybeSingle();
 
   if (!profile) {
-    return { error: "No profile found." };
+    return { error: "Complete your profile before requesting verification." };
   }
 
   if (!profile.current_revision_id)
-    return { error: "No current revision found." };
+    return {
+      error: "Save your profile before requesting verification.",
+    };
   const { error } = await supabase.rpc("request_revision_verification", {
     p_expected_revision_id: profile.current_revision_id,
   });
