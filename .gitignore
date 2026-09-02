@@ -49,3 +49,26 @@ next-env.d.ts
 # codespace / local environment
 /.config
 /.npm
+
+# test snapshots
+**/__snapshots__/
+*.snap
+
+# editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+Thumbs.db
+ehthumbs.db
+
+# Playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
+# Sentry
+.sentryclirc

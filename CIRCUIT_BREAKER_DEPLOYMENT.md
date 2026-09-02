@@ -20,6 +20,7 @@ Vercel's serverless execution model has the following characteristics relevant t
 ## Why Per-Instance is Sufficient
 
 ### 1. Meaningful Latency Protection
+
 The primary goal of the circuit breaker is to **protect page render latency**, not to provide perfect coordination across all instances. A per-instance breaker achieves this:
 
 - **Fast-fail behavior**: Each instance independently trips after 3 failures, preventing any single request from hanging on a degraded RPC endpoint.
@@ -27,6 +28,7 @@ The primary goal of the circuit breaker is to **protect page render latency**, n
 - **Cooldown protection**: The 30-second cooldown prevents instances from hammering a degraded endpoint during recovery.
 
 ### 2. Statistical Protection During Outages
+
 During a widespread RPC outage:
 
 - **Independent tripping**: Each instance will independently trip after 3 failed requests. With concurrent traffic, multiple instances will trip in parallel.
@@ -34,6 +36,7 @@ During a widespread RPC outage:
 - **Self-healing**: Each instance independently attempts recovery after the cooldown period, allowing gradual service restoration.
 
 ### 3. Vercel's Instance Reuse Provides Coordination
+
 Vercel's warm instance reuse provides **de facto coordination**:
 
 - **Concurrent requests**: A warm instance handles multiple concurrent requests, so the breaker protects all those requests simultaneously.
@@ -41,6 +44,7 @@ Vercel's warm instance reuse provides **de facto coordination**:
 - **Instance lifetime**: Warm instances persist for minutes to hours, so the breaker state has meaningful duration.
 
 ### 4. Infrastructure Complexity Trade-off
+
 Adding a distributed circuit breaker would require:
 
 - **Redis or similar**: Introducing Redis adds infrastructure complexity, operational overhead, and cost.
@@ -51,6 +55,7 @@ Adding a distributed circuit breaker would require:
 For a **read-only, cache-backed operation** like attestation lookup, this complexity is not justified.
 
 ### 5. Cache Layer Provides Additional Protection
+
 The attestation layer already has multiple resilience layers:
 
 - **Next.js unstable_cache**: Results are cached for 120s, reducing RPC call frequency.

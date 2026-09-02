@@ -63,4 +63,3 @@ High
 ## Suggested Labels
 
 `spike`, `stellar`, `performance`, `reliability`
-
