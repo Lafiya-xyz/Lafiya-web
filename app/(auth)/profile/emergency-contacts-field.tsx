@@ -33,6 +33,7 @@ export function EmergencyContactsField({
   );
   const [openDropdown, setOpenDropdown] = useState<number | null>(null);
   const [relationshipFilter, setRelationshipFilter] = useState<Record<number, string>>({});
+  const [confirmingRemoveAll, setConfirmingRemoveAll] = useState(false);
 
   const atLimit = contacts.length >= MAX_CONTACTS;
 
@@ -59,10 +60,15 @@ export function EmergencyContactsField({
   function getFilteredRelationships(index: number): typeof RELATIONSHIP_TYPES {
     const filter = relationshipFilter[index] || "";
     if (!filter) return RELATIONSHIP_TYPES;
-    
+
     return RELATIONSHIP_TYPES.filter((rel) =>
       rel.toLowerCase().includes(filter.toLowerCase()),
     );
+  }
+
+  function handleRemoveAll() {
+    setContacts([EMPTY_CONTACT]);
+    setConfirmingRemoveAll(false);
   }
 
   return (
@@ -103,7 +109,7 @@ export function EmergencyContactsField({
             <input
               id={`contact-phone-${index}`}
               type="tel"
-              placeholder="Phone"
+              placeholder="Phone (e.g. +2348012345678)"
               value={contact.phone}
               onChange={(event) =>
                 updateContact(index, "phone", event.target.value)
@@ -183,14 +189,25 @@ export function EmergencyContactsField({
           </div>
         ))}
       </div>
-      <button
-        type="button"
-        onClick={() => setContacts([...contacts, EMPTY_CONTACT])}
-        disabled={contacts.length >= MAX_CONTACTS}
-        className="mt-2 text-sm font-medium text-zinc-950 underline disabled:opacity-40 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none rounded px-1 dark:text-zinc-50 dark:focus:ring-zinc-600"
-      >
-        + Add contact
-      </button>
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setContacts([...contacts, EMPTY_CONTACT])}
+          disabled={contacts.length >= MAX_CONTACTS}
+          className="text-sm font-medium text-zinc-950 underline disabled:opacity-40 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none rounded px-1 dark:text-zinc-50 dark:focus:ring-zinc-600"
+        >
+          + Add contact
+        </button>
+        {contacts.length >= 2 && !confirmingRemoveAll && (
+          <button
+            type="button"
+            onClick={() => setConfirmingRemoveAll(true)}
+            className="text-sm font-medium text-red-600 underline dark:text-red-400"
+          >
+            Remove all
+          </button>
+        )}
+      </div>
       {atLimit ? (
         <p
           id="contacts-limit-message"
@@ -200,6 +217,29 @@ export function EmergencyContactsField({
           add another.
         </p>
       ) : null}
+      {confirmingRemoveAll && (
+        <div className="mt-2 flex flex-col gap-2 rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/40">
+          <p className="text-sm text-red-800 dark:text-red-200">
+            Are you sure? This will remove all contacts.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleRemoveAll}
+              className="rounded-md bg-red-600 px-3 py-1 text-sm font-medium text-white hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600"
+            >
+              Yes, remove all
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingRemoveAll(false)}
+              className="rounded-md border border-zinc-300 px-3 py-1 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
       {error ? (
         <p
           id="emergencyContacts-error"

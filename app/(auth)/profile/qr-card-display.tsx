@@ -46,6 +46,24 @@ export async function QrCardDisplay({
       >
         {cardUrl}
       </p>
+      <div className="flex flex-col items-center gap-1">
+        <p className="max-w-xs text-xs font-medium text-zinc-600 dark:text-zinc-400">
+          Test your QR code
+        </p>
+        <p className="max-w-xs text-xs text-zinc-500 dark:text-zinc-500">
+          Point your phone&apos;s camera at the QR code above, or open the link
+          below on another device to confirm it works before relying on it in an
+          emergency.
+        </p>
+        <a
+          href={cardUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs font-medium text-zinc-700 underline dark:text-zinc-300"
+        >
+          Open card link
+        </a>
+      </div>
       <p className="max-w-xs text-xs text-amber-700 dark:text-amber-300">
         This legacy QR will stop working on {formatDate(legacySunsetAt)}.
         Create a current emergency QR below.
