@@ -11,6 +11,8 @@ import { getBaseUrl } from "@/lib/url/getBaseUrl";
 
 import { PreviewCardButton } from "./preview-card-button";
 import { DownloadCardButton } from "./download-card-button";
+import { ProfileCompleteness } from "./profile-completeness";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { SignOutButton } from "../signout/sign-out-button";
 import { AttestationStatusBanner } from "./attestation-status-banner";
 import { AccessSummary } from "./access-summary";
@@ -171,7 +173,10 @@ export default async function ProfilePage() {
             {user.email}
           </p>
         </div>
-        <SignOutButton />
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <SignOutButton />
+        </div>
       </div>
 
       {profile ? (
@@ -204,6 +209,7 @@ export default async function ProfilePage() {
               }}
             />
           </div>
+          <ProfileCompleteness profile={profile} />
         </>
       ) : null}
 

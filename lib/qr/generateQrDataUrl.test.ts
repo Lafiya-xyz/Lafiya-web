@@ -41,4 +41,14 @@ describe("generateQrDataUrl", () => {
     expect(caught).toBeInstanceOf(QrCapacityError);
     expect((caught as QrCapacityError).name).toBe("QrCapacityError");
   });
+
+  it("generates a QR code suitable for print (Issue #379)", async () => {
+    const url = await generateQrDataUrl(
+      "https://lafiya.example/card/11111111-1111-1111-1111-111111111111",
+    );
+
+    const base64 = url.replace(/^data:image\/png;base64,/, "");
+    const buffer = Buffer.from(base64, "base64");
+    expect(buffer.length).toBeGreaterThan(2000);
+  });
 });
