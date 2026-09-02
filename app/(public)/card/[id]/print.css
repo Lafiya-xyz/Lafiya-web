@@ -32,9 +32,7 @@
   body {
     width: 100%;
     font-family:
-      Georgia,
-      "Times New Roman",
-      serif; /* high-legibility serif for print */
+      Georgia, "Times New Roman", serif; /* high-legibility serif for print */
     font-size: 12pt;
     line-height: 1.4;
   }

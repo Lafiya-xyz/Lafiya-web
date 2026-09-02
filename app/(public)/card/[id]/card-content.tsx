@@ -1,5 +1,6 @@
 import Image from "next/image";
 
+import { formatDateTime } from "@/lib/format/datetime";
 import { OfflineEnvelopeSource } from "@/lib/emergency/offline-source";
 import type { EmergencyCardRow } from "@/lib/supabase/types";
 
@@ -11,13 +12,7 @@ function formatList(values: string[] | null): string {
 }
 
 function formatTime(value: string | null): string {
-  if (!value) return "Unavailable";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unavailable";
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  return formatDateTime(value);
 }
 
 function formatRelativeTime(value: string | null): string {
@@ -111,6 +106,7 @@ export function EmergencyCardContent({
           <div>
             <h1
               id="identity-heading"
+              data-testid="card-identity-name"
               className="text-2xl font-semibold text-zinc-950 dark:text-zinc-50"
             >
               {card.name ?? "Name withheld"}
@@ -135,7 +131,10 @@ export function EmergencyCardContent({
               <dt className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
                 Blood group
               </dt>
-              <dd className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
+              <dd
+                data-testid="card-blood-group"
+                className="text-lg font-semibold text-zinc-950 dark:text-zinc-50"
+              >
                 {card.blood_group ?? "Withheld"}
               </dd>
             </div>
@@ -143,7 +142,10 @@ export function EmergencyCardContent({
               <dt className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
                 Genotype
               </dt>
-              <dd className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">
+              <dd
+                data-testid="card-genotype"
+                className="text-lg font-semibold text-zinc-950 dark:text-zinc-50"
+              >
                 {card.genotype ?? "Withheld"}
               </dd>
             </div>
@@ -214,9 +216,13 @@ export function EmergencyCardContent({
         {card.language ? (
           <CardField label="Language spoken" value={card.language} />
         ) : null}
-        <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-500">
-          Not a medical device. Not a substitute for professional medical
-          judgment.
+        <p
+          role="note"
+          className="mt-4 text-xs text-zinc-500 dark:text-zinc-500"
+        >
+          Lafiya is pre-alpha software on the Stellar testnet, not yet
+          audited, and not a medical device. Not a substitute for
+          professional medical judgment.
         </p>
       </main>
       <OfflineEnvelopeSource

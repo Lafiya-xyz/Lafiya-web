@@ -160,4 +160,68 @@ describe("PayoutIndexer", () => {
       payoutTxHash: "payout-tx",
     });
   });
+
+  it("indexes events into the correct final state even when a page delivers them out of chronological order", async () => {
+    // Simulate a retry / multi-RPC-provider scenario where a later-ledger
+    // attestation is delivered before an earlier-ledger one, and a
+    // higher-pagingToken payout arrives before a lower-pagingToken payout.
+    const older = attestation; // ledger 100
+    const newer: AttestationEvent = {
+      ...attestation,
+      recordHash: "ef".repeat(32),
+      ledger: 105,
+      transactionHash: "attestation-tx-newer",
+    };
+    const earlierPayout = payout; // pagingToken "200-1"
+    const laterPayout: PayoutEvent = {
+      ...payout,
+      recordHash: newer.recordHash,
+      pagingToken: "199-1",
+      transactionHash: "payout-tx-newer",
+    };
+
+    const store = new MemoryStore();
+    // Deliver out of order: newer attestation before older, later-pagingToken
+    // payout before the earlier one.
+    await indexer(
+      store,
+      [newer, older],
+      [laterPayout, earlierPayout],
+    ).runOnce();
+
+    expect(store.rows.get(older.recordHash)).toEqual({
+      status: "paid",
+      payoutTxHash: earlierPayout.transactionHash,
+    });
+    expect(store.rows.get(newer.recordHash)).toEqual({
+      status: "paid",
+      payoutTxHash: laterPayout.transactionHash,
+    });
+    expect(store.observations.size).toBe(0);
+  });
+
+  it("does not create a duplicate payout record when the same payout event is delivered more than once", async () => {
+    const store = new MemoryStore();
+    // Attestation lands first so the row exists when the (duplicated) payout
+    // events arrive.
+    await indexer(store, [attestation], []).runOnce();
+
+    // Same event delivered twice within one page, as can happen with
+    // at-least-once delivery / RPC retries.
+    await indexer(store, [], [payout, payout]).runOnce();
+
+    expect([...store.rows.entries()]).toEqual([
+      [HASH, { status: "paid", payoutTxHash: "payout-tx" }],
+    ]);
+    expect(store.rows.size).toBe(1);
+
+    // Redelivering the identical event again in a later run must remain a
+    // no-op on the final state (idempotent), not append another record.
+    await indexer(store, [], [payout]).runOnce();
+    expect(store.rows.size).toBe(1);
+    expect(store.rows.get(HASH)).toEqual({
+      status: "paid",
+      payoutTxHash: "payout-tx",
+    });
+  });
 });

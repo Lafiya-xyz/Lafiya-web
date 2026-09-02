@@ -10,6 +10,7 @@ import {
   recordSuccess,
   getClientIp,
 } from "@/lib/rate-limit";
+import { formatZodError } from "@/lib/validation/zod";
 
 const signInSchema = z.object({
   email: z.email("Enter a valid email address"),
@@ -56,7 +57,7 @@ export async function signIn(
   });
 
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+    return { error: formatZodError(parsed.error).error };
   }
 
   // Normalize email and resolve client IP to form the unique rate limit key

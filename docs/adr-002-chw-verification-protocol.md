@@ -1,5 +1,9 @@
 # ADR 002: CHW verification, finality, and incentive protocol
 
+> **Code map:** For a file-by-file mapping of every concept in this ADR to the
+> TypeScript export that implements it, see
+> [docs/chw-protocol-code-map.md](chw-protocol-code-map.md).
+
 - Status: accepted for the Lafiya web boundary
 - Issue: #172
 - Date: 2026-08-21

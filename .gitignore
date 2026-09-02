@@ -55,6 +55,21 @@ next-env.d.ts
 # playwright
 playwright-report/
 test-results/
+/playwright/.cache/
 
 # vitest
 .vitest/
+
+# editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+Thumbs.db
+ehthumbs.db
+
+# Sentry
+.sentryclirc

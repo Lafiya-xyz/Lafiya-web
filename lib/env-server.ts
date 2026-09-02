@@ -1,4 +1,6 @@
 import "server-only";
+
+export { formatZodError } from "./validation/zod";
 import { getRuntimeConfig, serverEnvSchema } from "./runtime-config";
 
 export { serverEnvSchema } from "./runtime-config";
