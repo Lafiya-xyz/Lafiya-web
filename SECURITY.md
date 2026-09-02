@@ -14,10 +14,12 @@ Please report security issues **privately** via one of the following methods:
 ## Scope
 
 **In‑scope**:
+
 - Security vulnerabilities in the web application code, including authentication, RLS, and attestation handling.
 - Disclosure of any private data handling or cryptographic implementations.
 
 **Out‑of‑scope**:
+
 - Issues related to third‑party services (Supabase, Stellar network) unless they directly affect the repository.
 
 ## Expected Response Time
@@ -30,4 +32,4 @@ We request that you do not publicly disclose details of the vulnerability until 
 
 ---
 
-*This policy is aligned with the Digital Public Goods standards and the Nigeria Data Protection Act.*
+_This policy is aligned with the Digital Public Goods standards and the Nigeria Data Protection Act._

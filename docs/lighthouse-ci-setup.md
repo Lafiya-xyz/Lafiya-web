@@ -29,12 +29,14 @@ http://localhost:3000/card/11111111-1111-1111-1111-111111111111
 ```
 
 Audit settings:
+
 - Categories: `performance` + `accessibility`
 - Form factor: mobile
 - 3 runs per job (median score)
 - Mobile Slow 4G throttling
 
 Budgets (deliberately tight for this route and audience):
+
 - Performance score: ≥ 0.85
 - Accessibility score: ≥ 0.9
 - LCP: ≤ 2500ms
@@ -47,6 +49,7 @@ Budgets (deliberately tight for this route and audience):
 ### 3. CI job (`.github/workflows/ci.yml`)
 
 The new `performance` job:
+
 - Depends on `test` (build already validated)
 - Boots a local Supabase stack via `supabase/setup-cli@v1`
 - Runs `supabase db reset` to apply migrations + `supabase/seed.sql` (the seeded demo patient)

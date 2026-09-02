@@ -1,5 +1,31 @@
 # CHW payout indexer
 
+## Payout amount policy
+
+There is no fixed per-registration amount and no tiering logic anywhere in
+this codebase. `chw_payouts.amount_usdc` is **not computed** by
+`app/api/chw/payouts/route.ts` — that route only reads and serializes the
+already-stored value (`serializePayout` in
+`app/api/chw/payouts/route.ts:57-77`) for display to the CHW.
+
+The actual amount is set once, at index time, from the real on-chain
+transfer:
+
+1. `lib/stellar/payout-indexer/sources.ts` reads each Horizon payment
+   operation for `CHW_INCENTIVE_POOL_ADDRESS` and takes `operation.amount`
+   (the literal USDC amount that was sent on-chain) as `amountUsdc`
+   (`sources.ts:166`).
+2. `lib/stellar/payout-indexer/store.ts` passes that value straight through
+   to the `apply_chw_payout` SQL function as `p_amount_usdc`
+   (`store.ts:57-65`), which persists it into `chw_payouts.amount_usdc`.
+
+In other words: **the payout amount is whatever the incentive-pool operator
+actually paid out on-chain for that attestation's `record_hash`**, not a
+platform-calculated figure. The indexer is a passive recorder/reconciler of
+that external payment, not a source of payout policy. Anyone changing "how
+much a CHW gets paid" needs to change the amount sent from
+`CHW_INCENTIVE_POOL_ADDRESS`, not any code in this repository.
+
 ## Event-source decision
 
 `lafiya-web` and its documented `lafiya-contracts` interface define

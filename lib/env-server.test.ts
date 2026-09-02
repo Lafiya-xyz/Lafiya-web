@@ -44,4 +44,27 @@ describe("environment schemas", () => {
       expect(parsed.data.PAYOUT_INDEXER_START_LEDGER).toBe(123);
     }
   });
+
+  it("names the exact missing variable when a required server variable is absent at startup", async () => {
+    vi.stubEnv("SOROBAN_RPC_URL", "");
+
+    await expect(import("./env-server")).rejects.toThrow(
+      /missing or invalid required environment variable\(s\): SOROBAN_RPC_URL/,
+    );
+  });
+
+  it("produces a human-readable, non-generic message that points at .env setup", async () => {
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
+
+    try {
+      await import("./env-server");
+      expect.unreachable("expected env-server import to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      const message = (error as Error).message;
+      expect(message).toContain("SUPABASE_SERVICE_ROLE_KEY");
+      expect(message).toContain(".env.example");
+      expect(message).not.toBe("INVALID_RUNTIME_CONFIGURATION:MALFORMED_VALUE");
+    }
+  });
 });

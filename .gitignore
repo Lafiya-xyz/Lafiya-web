@@ -64,3 +64,20 @@ bench/rpc-provider-benchmark/results/*.json
 
 # sbom output
 sbom.json
+
+# editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+Thumbs.db
+ehthumbs.db
+
+# Playwright
+/playwright/.cache/
+
+# Sentry
+.sentryclirc

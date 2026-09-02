@@ -58,4 +58,3 @@ Medium — improves responder context on the core product surface.
 ## Suggested Labels
 
 `good-first-issue`, `emergency-card`, `accessibility`
-

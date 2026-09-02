@@ -59,4 +59,3 @@ High — improves privacy control while expanding safe emergency sharing.
 ## Suggested Labels
 
 `advanced`, `security`, `privacy`, `offline`, `product`
-
