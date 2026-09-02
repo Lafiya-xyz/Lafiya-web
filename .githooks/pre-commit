@@ -1,0 +1,11 @@
+#!/bin/sh
+# Pre-commit hook: scan staged files for secret patterns.
+#
+# Install once per clone:
+#   git config core.hooksPath .githooks
+#
+# Or copy into .git/hooks/pre-commit and make it executable:
+#   cp .githooks/pre-commit .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+
+node scripts/scan-secrets.mjs
