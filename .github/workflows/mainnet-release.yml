@@ -7,9 +7,15 @@ on:
         description: "Repository path to the approved, non-sensitive release evidence JSON"
         required: true
         type: string
+      artifact_digest:
+        description: "sha256 digest of the release artefact to verify provenance for"
+        required: true
+        type: string
 
 permissions:
   contents: read
+  id-token: write
+  attestations: read
 
 jobs:
   verify-gate:
@@ -25,5 +31,17 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node scripts/verify-release-gate.mjs "${{ inputs.evidence_path }}"
+      # Verify the signed SLSA build provenance for the artefact before any
+      # promotion. A missing or mismatched attestation fails the gate.
+      - name: Verify build provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh attestation verify "${{ inputs.evidence_path }}" \
+            --repo "${{ github.repository }}" \
+            --signer-workflow "${{ github.repository }}/.github/workflows/release.yml" \
+            --source-digest "${{ github.sha }}" \
+            --predicate-type "https://slsa.dev/provenance/v1"
+          echo "${{ inputs.artifact_digest }}" | grep -Eq '^sha256:[0-9a-f]{64}$'
       # A deployment step is intentionally absent until operators configure the
       # protected environment, managed credentials, and approved promotion target.
