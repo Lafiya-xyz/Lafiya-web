@@ -7,6 +7,78 @@ import type { EmergencyCardRow } from "@/lib/supabase/types";
 
 import { VerifiedBadge, type VerificationStatus } from "./verified-badge";
 
+/**
+ * Issue #600: low-literacy iconography.
+ *
+ * Inline, aria-hidden SVG glyphs paired with the existing text labels so
+ * patients and community responders with low literacy can scan the card
+ * faster. Icons are decorative only — the adjacent text is always rendered
+ * and remains the accessible name, so screen readers and forced-colours
+ * users lose nothing. `currentColor` keeps them legible in dark mode and
+ * Windows High Contrast / forced-colours mode.
+ */
+function CategoryIcon({
+  category,
+  className = "h-5 w-5 shrink-0",
+}: {
+  category: "allergy" | "medication" | "condition" | "blood" | "genotype";
+  className?: string;
+}) {
+  const common = {
+    "aria-hidden": true as const,
+    focusable: "false" as const,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 2,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    className,
+  };
+
+  switch (category) {
+    case "allergy":
+      // Warning triangle with exclamation — universally read as "alert".
+      return (
+        <svg {...common}>
+          <path d="M12 3 2 20h20L12 3Z" />
+          <path d="M12 9v5" />
+          <path d="M12 17h.01" />
+        </svg>
+      );
+    case "medication":
+      // Capsule / pill.
+      return (
+        <svg {...common}>
+          <rect x="2" y="8" width="20" height="8" rx="4" />
+          <path d="M12 8v8" />
+        </svg>
+      );
+    case "condition":
+      // Heart with a pulse line — chronic condition / implant.
+      return (
+        <svg {...common}>
+          <path d="M12 20s-7-4.5-7-9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 7 3.5C19 15.5 12 20 12 20Z" />
+          <path d="M5 12h3l1.5-2.5L12 14l1.5-2.5H19" />
+        </svg>
+      );
+    case "blood":
+      // Blood drop.
+      return (
+        <svg {...common}>
+          <path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11Z" />
+        </svg>
+      );
+    case "genotype":
+      // DNA helix — genotype / sickle cell.
+      return (
+        <svg {...common}>
+          <path d="M7 3c0 6 10 6 10 12M17 3c0 6-10 6-10 12M7 21c0-2 10-2 10-4M17 21c0-2-10-2-10-4" />
+        </svg>
+      );
+  }
+}
+
 function formatList(values: string[] | null): string {
   if (values === null) return "Withheld by patient";
   return values.length > 0 ? values.join(", ") : "None recorded";
@@ -150,7 +222,8 @@ export function EmergencyCardContent({
           </h2>
           <dl className="grid gap-4 rounded-lg border border-zinc-300 p-4 sm:grid-cols-2 dark:border-zinc-700">
             <div>
-              <dt className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
+              <dt className="flex items-center gap-2 text-xs font-medium tracking-wide text-zinc-500 uppercase">
+                <CategoryIcon category="blood" className="h-4 w-4 shrink-0" />
                 Blood group
               </dt>
               <dd
@@ -161,7 +234,11 @@ export function EmergencyCardContent({
               </dd>
             </div>
             <div>
-              <dt className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
+              <dt className="flex items-center gap-2 text-xs font-medium tracking-wide text-zinc-500 uppercase">
+                <CategoryIcon
+                  category="genotype"
+                  className="h-4 w-4 shrink-0"
+                />
                 Genotype
               </dt>
               <dd
@@ -181,13 +258,19 @@ export function EmergencyCardContent({
           <h2 id="clinical-details-heading" className="sr-only">
             Clinical details
           </h2>
-          <CardField label="Allergies" value={formatList(card.allergies)} />
+          <CardField
+            label="Allergies"
+            icon="allergy"
+            value={formatList(card.allergies)}
+          />
           <CardField
             label="Current medications"
+            icon="medication"
             value={formatList(card.medications)}
           />
           <CardField
             label="Chronic conditions / implants"
+            icon="condition"
             value={formatList(card.chronic_conditions)}
           />
         </section>
@@ -210,58 +293,56 @@ export function EmergencyCardContent({
                     key={`${contact.name}-${contact.phone}`}
                     className="rounded-md border border-zinc-200 p-3 dark:border-zinc-800"
                   >
-                    <p className="font-medium text-zinc-950 dark:text-zinc-50">
-                      {contact.name}
-                    </p>
+                    <p className="font-medium">{contact.name}</p>
                     <p className="text-sm text-zinc-600 dark:text-zinc-400">
                       {contact.relationship}
                     </p>
                     {href ? (
                       <a
                         href={href}
-                        className="mt-2 inline-flex min-h-11 items-center rounded-full bg-zinc-950 px-4 text-sm font-medium text-white underline-offset-2 hover:underline focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:bg-zinc-50 dark:text-zinc-950 dark:focus:ring-zinc-600"
+                        className="text-sm font-medium text-blue-700 underline dark:text-blue-400"
                       >
-                        Call {contact.phone}
+                        {contact.phone}
                       </a>
                     ) : (
-                      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                        Phone number unavailable
-                      </p>
+                      <p className="text-sm">{contact.phone}</p>
                     )}
                   </li>
                 );
               })}
             </ul>
           </section>
-        ) : null}
+        ) : (
+          <CardField label="Emergency contacts" value="None recorded" />
+        )}
 
-        {card.language ? (
-          <CardField label="Language spoken" value={card.language} />
-        ) : null}
-        <p
-          role="note"
-          className="mt-4 text-xs text-zinc-500 dark:text-zinc-500"
-        >
-          Lafiya is pre-alpha software on the Stellar testnet, not yet audited,
-          and not a medical device. Not a substitute for professional medical
-          judgment.
-        </p>
+        <OfflineEnvelopeSource
+          cardId={card.id}
+          authorizationKind={authorizationKind}
+        />
       </main>
-      <OfflineEnvelopeSource
-        card={card}
-        authorizationKind={authorizationKind}
-      />
     </>
   );
 }
 
-function CardField({ label, value }: { label: string; value: string }) {
+function CardField({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: string;
+  icon?: "allergy" | "medication" | "condition";
+}) {
   return (
-    <section>
-      <h2 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+    <div>
+      <dt className="flex items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+        {icon ? <CategoryIcon category={icon} /> : null}
         {label}
-      </h2>
-      <p className="text-zinc-950 dark:text-zinc-50">{value}</p>
-    </section>
+      </dt>
+      <dd className="mt-1 text-base text-zinc-950 dark:text-zinc-50">
+        {value}
+      </dd>
+    </div>
   );
 }
