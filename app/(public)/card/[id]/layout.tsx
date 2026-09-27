@@ -17,6 +17,14 @@
  * 2. PRINT CSS — print.css is scoped here so it doesn't add any payload to
  *    the rest of the app. Next.js CSS imports in layout/page components are
  *    bundled into the route's own CSS chunk.
+ *
+ * 3. ZERO-CLIENT-COMPONENT POLICY — This route is intentionally a pure
+ *    server-rendered page. No "use client" components may be rendered from
+ *    this layout or its descendants, apart from an explicitly allowlisted set
+ *    of islands (currently: none — service worker registration lives outside
+ *    the card route). The policy is enforced at build time by
+ *    scripts/check-client-bundles.js, which fails CI when the card route's
+ *    client JS exceeds its byte budget. See CONTRIBUTING.md for details.
  */
 
 import "./print.css";
