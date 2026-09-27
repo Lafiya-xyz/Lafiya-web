@@ -44,6 +44,30 @@ jobs:
       - name: Verify no client bundle leaks
         run: node scripts/check-client-bundles.js
 
+  storybook:
+    name: Storybook build, a11y & interaction tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build-storybook
+      - name: Serve static Storybook
+        run: |
+          npx http-server storybook-static --port 6006 --silent > /tmp/storybook.log 2>&1 &
+          npx wait-on --timeout 60000 http://127.0.0.1:6006
+      - name: Run Storybook test runner (axe a11y + interaction tests)
+        run: npm run test-storybook -- --url http://127.0.0.1:6006
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: storybook-static
+          path: storybook-static/
+          retention-days: 7
+
   integration:
     name: Integration tests (local Supabase)
     runs-on: ubuntu-latest
