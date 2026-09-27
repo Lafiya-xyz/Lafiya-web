@@ -1,6 +1,7 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import reactCompiler from "eslint-plugin-react-compiler";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -21,6 +22,18 @@ const eslintConfig = defineConfig([
     files: ["lib/logging/logger.ts"],
     rules: {
       "no-console": "off",
+    },
+  },
+  {
+    // Issue #588: the React Compiler is enabled in next.config.ts, so surface
+    // rule-of-React violations (e.g. mutating props/state during render) as
+    // lint errors instead of letting the compiler silently bail out of
+    // optimizing the affected component.
+    plugins: {
+      "react-compiler": reactCompiler,
+    },
+    rules: {
+      "react-compiler/react-compiler": "error",
     },
   },
   // Override default ignores of eslint-config-next.
