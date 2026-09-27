@@ -85,6 +85,88 @@ function formatList(values: string[] | null): string {
   return values.length > 0 ? values.join(", ") : "None recorded";
 }
 
+/**
+ * Issue #602: structured allergy entries.
+ *
+ * Allergies are no longer plain tag strings. Each entry carries a coded
+ * substance (with a free-text fallback), a reaction, a severity and a
+ * criticality. The card sorts by criticality so life-threatening allergies
+ * (e.g. anaphylaxis to penicillin) surface first, and shows a banner when
+ * any high-criticality allergy is present.
+ */
+type AllergyCriticality = "low" | "high" | "unable-to-assess";
+
+type AllergyEntry = {
+  substance_text: string;
+  coded: { system: string; code: string; display: string } | null;
+  reaction: string | null;
+  severity: "mild" | "moderate" | "severe" | null;
+  criticality: AllergyCriticality;
+};
+
+const CRITICALITY_ORDER: Record<AllergyCriticality, number> = {
+  high: 0,
+  "unable-to-assess": 1,
+  low: 2,
+};
+
+function isAllergyEntry(value: unknown): value is AllergyEntry {
+  if (typeof value !== "object" || value === null) return false;
+  const entry = value as Record<string, unknown>;
+  return typeof entry.substance_text === "string";
+}
+
+/**
+ * Normalises the stored allergies value. New rows are structured entries;
+ * legacy rows may still be plain strings (pre-migration) and are treated as
+ * `{substance_text, coded: null}` so nothing is lost on the card.
+ */
+function normaliseAllergies(value: unknown): AllergyEntry[] | null {
+  if (value === null || value === undefined) return null;
+  if (!Array.isArray(value)) return null;
+  return value.map((item) => {
+    if (typeof item === "string") {
+      return {
+        substance_text: item,
+        coded: null,
+        reaction: null,
+        severity: null,
+        criticality: "unable-to-assess" as const,
+      };
+    }
+    if (isAllergyEntry(item)) {
+      return {
+        substance_text: item.substance_text,
+        coded: item.coded ?? null,
+        reaction: item.reaction ?? null,
+        severity: item.severity ?? null,
+        criticality: item.criticality ?? "unable-to-assess",
+      };
+    }
+    return {
+      substance_text: String(item),
+      coded: null,
+      reaction: null,
+      severity: null,
+      criticality: "unable-to-assess" as const,
+    };
+  });
+}
+
+function sortByCriticality(entries: AllergyEntry[]): AllergyEntry[] {
+  return [...entries].sort(
+    (a, b) =>
+      CRITICALITY_ORDER[a.criticality] - CRITICALITY_ORDER[b.criticality],
+  );
+}
+
+function formatAllergy(entry: AllergyEntry): string {
+  const parts = [entry.substance_text];
+  if (entry.reaction) parts.push(entry.reaction);
+  if (entry.severity) parts.push(entry.severity);
+  return parts.join(" — ");
+}
+
 function formatTime(value: string | null): string {
   return formatDateTime(value);
 }
@@ -110,6 +192,12 @@ export function EmergencyCardContent({
     card.trust_state === "unverified"
       ? "not_verified"
       : (card.trust_state ?? "unavailable");
+
+  const allergies = normaliseAllergies(card.allergies);
+  const sortedAllergies =
+    allergies === null ? null : sortByCriticality(allergies);
+  const hasHighCriticality =
+    sortedAllergies?.some((entry) => entry.criticality === "high") ?? false;
 
   return (
     <>
@@ -191,6 +279,17 @@ export function EmergencyCardContent({
           </div>
         </section>
 
+        {hasHighCriticality ? (
+          <p
+            role="alert"
+            data-testid="card-allergy-critical-banner"
+            className="rounded-lg border border-red-600 bg-red-50 p-3 text-sm font-semibold text-red-800 dark:border-red-500 dark:bg-red-950 dark:text-red-200"
+          >
+            ⚠ Life-threatening allergy on record — check before giving any
+            medication.
+          </p>
+        ) : null}
+
         <section aria-labelledby="critical-facts-heading">
           <h2
             id="critical-facts-heading"
@@ -204,7 +303,31 @@ export function EmergencyCardContent({
                 <CategoryIcon category="allergy" />
                 Allergies
               </dt>
-              <dd className="mt-1 text-sm">{formatList(card.allergies)}</dd>
+              <dd className="mt-1 text-sm">
+                {sortedAllergies === null ? (
+                  "Withheld by patient"
+                ) : sortedAllergies.length === 0 ? (
+                  "None recorded"
+                ) : (
+                  <ul className="flex flex-col gap-1">
+                    {sortedAllergies.map((entry, index) => (
+                      <li
+                        key={`${entry.substance_text}-${index}`}
+                        className={
+                          entry.criticality === "high"
+                            ? "font-semibold text-red-700 dark:text-red-300"
+                            : undefined
+                        }
+                      >
+                        {formatAllergy(entry)}
+                        {entry.criticality === "high" ? (
+                          <span className="sr-only"> (life-threatening)</span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </dd>
             </div>
             <div>
               <dt className="flex items-center gap-2 text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
@@ -223,10 +346,10 @@ export function EmergencyCardContent({
             <div>
               <dt className="flex items-center gap-2 text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
                 <CategoryIcon category="blood" />
-                Blood type
+                Blood group
               </dt>
               <dd className="mt-1 text-sm">
-                {card.blood_type ?? "Not recorded"}
+                {card.blood_group ?? "Not recorded"}
               </dd>
             </div>
             <div>
@@ -241,43 +364,32 @@ export function EmergencyCardContent({
           </dl>
         </section>
 
-        {card.emergency_contacts && card.emergency_contacts.length > 0 ? (
-          <section aria-labelledby="contacts-heading">
-            <h2 id="contacts-heading" className="mb-3 text-lg font-semibold">
-              Emergency contacts
-            </h2>
-            <ul className="grid gap-3">
-              {card.emergency_contacts.map((contact, index) => {
-                const href = phoneHref(contact.phone);
-                return (
-                  <li
-                    key={`${contact.phone}-${index}`}
-                    className="rounded-lg border border-zinc-300 p-3 text-sm dark:border-zinc-700"
+        <section aria-labelledby="contact-heading">
+          <h2 id="contact-heading" className="mb-3 text-lg font-semibold">
+            Emergency contact
+          </h2>
+          <dl className="grid gap-2 rounded-lg border border-zinc-300 p-4 text-sm dark:border-zinc-700">
+            <div className="flex flex-wrap justify-between gap-x-4 gap-y-1">
+              <dt className="font-medium">Name</dt>
+              <dd>{card.emergency_contact_name ?? "Not recorded"}</dd>
+            </div>
+            <div className="flex flex-wrap justify-between gap-x-4 gap-y-1">
+              <dt className="font-medium">Phone</dt>
+              <dd>
+                {card.emergency_contact_phone ? (
+                  <a
+                    href={phoneHref(card.emergency_contact_phone)}
+                    className="underline underline-offset-2"
                   >
-                    <p className="font-medium">{contact.name}</p>
-                    {contact.relationship ? (
-                      <p className="text-zinc-600 dark:text-zinc-400">
-                        {contact.relationship}
-                      </p>
-                    ) : null}
-                    {href ? (
-                      <a
-                        href={href}
-                        className="mt-1 inline-block underline"
-                      >
-                        {formatPhoneDisplay(contact.phone)}
-                      </a>
-                    ) : (
-                      <p className="mt-1">
-                        {formatPhoneDisplay(contact.phone)}
-                      </p>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ) : null}
+                    {formatPhoneDisplay(card.emergency_contact_phone)}
+                  </a>
+                ) : (
+                  "Not recorded"
+                )}
+              </dd>
+            </div>
+          </dl>
+        </section>
 
         <OfflineEnvelopeSource
           cardId={card.id}

@@ -35,6 +35,51 @@ export const RELATIONSHIP_TYPES = [
   "Other",
 ] as const;
 
+// Structured allergy taxonomy. Severity and criticality are distinct: severity
+// describes the reaction intensity, criticality the risk to life if re-exposed.
+// Ordering here is the canonical sort order used by the emergency card.
+export const ALLERGY_SEVERITIES = [
+  "mild",
+  "moderate",
+  "severe",
+  "life-threatening",
+] as const;
+
+export const ALLERGY_CRITICALITIES = [
+  "low",
+  "high",
+  "unable-to-assess",
+] as const;
+
+export const ALLERGY_REACTIONS = [
+  "anaphylaxis",
+  "angioedema",
+  "urticaria",
+  "rash",
+  "bronchospasm",
+  "gastrointestinal",
+  "other",
+] as const;
+
+export const allergySchema = z.object({
+  // Coded substance (SNOMED CT / RxNorm) when a terminology match exists.
+  coded: z
+    .object({
+      system: z.string().trim().min(1).max(200),
+      code: z.string().trim().min(1).max(100),
+      display: z.string().trim().min(1).max(200),
+    })
+    .nullable()
+    .default(null),
+  // Free-text fallback; required when no code is present so nothing is lost.
+  substanceText: z.string().trim().min(1).max(200),
+  reaction: z.enum(ALLERGY_REACTIONS).nullable().default(null),
+  severity: z.enum(ALLERGY_SEVERITIES).nullable().default(null),
+  criticality: z.enum(ALLERGY_CRITICALITIES).default("unable-to-assess"),
+});
+
+export type Allergy = z.infer<typeof allergySchema>;
+
 export const emergencyContactSchema = z.object({
   name: z.string().trim().min(1, "Contact name is required").max(100),
   phone: z
@@ -81,7 +126,7 @@ export const profileFormSchema = z.object({
   genotype: z.enum(GENOTYPES, {
     error: `Genotype must be one of: ${GENOTYPES.join(", ")}`,
   }),
-  allergies: z.array(z.string().trim().min(1).max(200)).max(20),
+  allergies: z.array(allergySchema).max(20),
   medications: z.array(z.string().trim().min(1).max(200)).max(20),
   chronicConditions: z.array(z.string().trim().min(1).max(200)).max(20),
   emergencyContacts: z
