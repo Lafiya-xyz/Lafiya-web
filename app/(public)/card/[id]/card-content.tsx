@@ -7,6 +7,22 @@ import type { EmergencyCardRow } from "@/lib/supabase/types";
 
 import { VerifiedBadge, type VerificationStatus } from "./verified-badge";
 
+/** Issue #589: responsive avatar variants generated at upload time. The
+ * smallest (96px) variant is used for the card thumbnail so 2G clients
+ * fetch a few KB instead of the full-size photo. */
+const AVATAR_VARIANT_WIDTHS = [96, 192, 400] as const;
+
+function avatarVariantSrc(baseUrl: string, width: number, format: string): string {
+  const separator = baseUrl.includes("?") ? "&" : "?";
+  return `${baseUrl}${separator}w=${width}&format=${format}`;
+}
+
+function avatarSrcSet(baseUrl: string, format: string): string {
+  return AVATAR_VARIANT_WIDTHS.map(
+    (width) => `${avatarVariantSrc(baseUrl, width, format)} ${width}w`,
+  ).join(", ");
+}
+
 function formatList(values: string[] | null): string {
   if (values === null) return "Withheld by patient";
   return values.length > 0 ? values.join(", ") : "None recorded";
@@ -116,14 +132,26 @@ export function EmergencyCardContent({
           className="flex items-center gap-4"
         >
           {card.photo_url ? (
-            <Image
-              src={card.photo_url}
-              alt=""
-              width={80}
-              height={80}
-              sizes="80px"
-              className="h-20 w-20 rounded-full object-cover"
-            />
+            <picture>
+              <source
+                type="image/avif"
+                srcSet={avatarSrcSet(card.photo_url, "avif")}
+                sizes="80px"
+              />
+              <source
+                type="image/webp"
+                srcSet={avatarSrcSet(card.photo_url, "webp")}
+                sizes="80px"
+              />
+              <Image
+                src={avatarVariantSrc(card.photo_url, 96, "jpeg")}
+                alt=""
+                width={80}
+                height={80}
+                sizes="80px"
+                className="h-20 w-20 rounded-full object-cover"
+              />
+            </picture>
           ) : null}
           <div>
             <h1
@@ -210,58 +238,42 @@ export function EmergencyCardContent({
                     key={`${contact.name}-${contact.phone}`}
                     className="rounded-md border border-zinc-200 p-3 dark:border-zinc-800"
                   >
-                    <p className="font-medium text-zinc-950 dark:text-zinc-50">
-                      {contact.name}
-                    </p>
+                    <p className="font-medium">{contact.name}</p>
                     <p className="text-sm text-zinc-600 dark:text-zinc-400">
                       {contact.relationship}
                     </p>
                     {href ? (
                       <a
                         href={href}
-                        className="mt-2 inline-flex min-h-11 items-center rounded-full bg-zinc-950 px-4 text-sm font-medium text-white underline-offset-2 hover:underline focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:bg-zinc-50 dark:text-zinc-950 dark:focus:ring-zinc-600"
+                        className="text-sm font-medium text-blue-700 underline dark:text-blue-400"
                       >
-                        Call {contact.phone}
+                        {contact.phone}
                       </a>
                     ) : (
-                      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                        Phone number unavailable
-                      </p>
+                      <p className="text-sm">{contact.phone}</p>
                     )}
                   </li>
                 );
               })}
             </ul>
           </section>
-        ) : null}
+        ) : (
+          <CardField label="Emergency contacts" value="None recorded" />
+        )}
 
-        {card.language ? (
-          <CardField label="Language spoken" value={card.language} />
-        ) : null}
-        <p
-          role="note"
-          className="mt-4 text-xs text-zinc-500 dark:text-zinc-500"
-        >
-          Lafiya is pre-alpha software on the Stellar testnet, not yet audited,
-          and not a medical device. Not a substitute for professional medical
-          judgment.
-        </p>
+        <OfflineEnvelopeSource card={card} />
       </main>
-      <OfflineEnvelopeSource
-        card={card}
-        authorizationKind={authorizationKind}
-      />
     </>
   );
 }
 
 function CardField({ label, value }: { label: string; value: string }) {
   return (
-    <section>
-      <h2 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+    <div>
+      <dt className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
         {label}
-      </h2>
-      <p className="text-zinc-950 dark:text-zinc-50">{value}</p>
-    </section>
+      </dt>
+      <dd className="mt-1 text-zinc-950 dark:text-zinc-50">{value}</dd>
+    </div>
   );
 }

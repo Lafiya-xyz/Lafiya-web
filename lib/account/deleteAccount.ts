@@ -52,6 +52,11 @@ export async function deleteAccountAndData(
 
   // 2. Remove avatar storage objects. Supabase Storage does not cascade on
   //    auth user deletion, so this must be explicit.
+  //
+  //    Responsive variants (AVIF/WebP/JPEG at 96/192/400 px) are stored as
+  //    sibling objects under the same `userId/` prefix, so listing the prefix
+  //    and removing every object covers both the original upload and all
+  //    generated variants without leaving orphans behind.
   while (true) {
     const { data: objects, error: listError } = await admin.storage
       .from("avatars")
