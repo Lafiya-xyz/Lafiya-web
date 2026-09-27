@@ -32,6 +32,11 @@ export function isDuplicateTag(values: string[], index: number): boolean {
  * A dynamic, add/remove list of plain-text values (allergies, medications,
  * chronic conditions). Renders one input per item, all sharing `name`, so
  * the server action can read the full list back via `formData.getAll(name)`.
+ *
+ * Progressive enhancement: the inputs are uncontrolled so the form still
+ * submits through a native POST when JS is unavailable. The add/remove
+ * buttons are client-only enhancements; without JS the user can still edit
+ * the server-rendered inputs and submit the form.
  */
 export function TagListField({
   name,
@@ -82,14 +87,9 @@ export function TagListField({
               id={`${name}-${index}`}
               name={name}
               type="text"
-              value={value}
+              defaultValue={value}
               placeholder={placeholder}
               maxLength={MAX_TAG_LENGTH}
-              onChange={(event) => {
-                const next = [...values];
-                next[index] = event.target.value;
-                setValues(next);
-              }}
               onBlur={(event) => {
                 const trimmed = normalizeTagValue(event.target.value);
                 if (trimmed === values[index]) return;

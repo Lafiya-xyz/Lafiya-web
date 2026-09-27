@@ -262,40 +262,50 @@ export function ProfileForm({
       <TagListField
         name="allergies"
         label="Allergies"
-        placeholder="e.g. Penicillin"
-        initialValues={profile?.allergies ?? []}
+        initialTags={profile?.allergies ?? []}
         error={state?.errors?.allergies}
       />
 
-      <TagListField
-        name="medications"
-        label="Current medications"
-        placeholder="e.g. Insulin"
-        initialValues={profile?.medications ?? []}
-        error={state?.errors?.medications}
-      />
-
-      <TagListField
-        name="chronicConditions"
-        label="Chronic conditions / implants"
-        placeholder="e.g. Asthma"
-        initialValues={profile?.chronic_conditions ?? []}
-        error={state?.errors?.chronicConditions}
-      />
-
       <EmergencyContactsField
-        initialValues={profile?.emergency_contacts ?? []}
+        initialContacts={profile?.emergency_contacts ?? []}
         error={state?.errors?.emergencyContacts}
       />
 
-      <button
-        type="submit"
-        data-testid="profile-save"
-        disabled={isPending}
-        className="flex h-11 items-center justify-center rounded-full bg-zinc-950 px-6 text-base font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 dark:focus:ring-zinc-600"
-      >
-        {isPending ? "Saving…" : "Save"}
-      </button>
+      <div>
+        <label
+          htmlFor="notes"
+          className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+        >
+          Notes
+        </label>
+        <textarea
+          id="notes"
+          name="notes"
+          rows={4}
+          defaultValue={profile?.notes ?? ""}
+          aria-invalid={state?.errors?.notes ? "true" : undefined}
+          aria-describedby={state?.errors?.notes ? "notes-error" : undefined}
+          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-zinc-600"
+        />
+        {state?.errors?.notes ? (
+          <p
+            id="notes-error"
+            className="mt-1 text-sm text-red-600 dark:text-red-400"
+          >
+            {state.errors.notes}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={isPending}
+          className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+        >
+          {isPending ? "Saving…" : "Save profile"}
+        </button>
+      </div>
     </form>
   );
 }
