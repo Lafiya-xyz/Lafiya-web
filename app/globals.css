@@ -27,7 +27,24 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Nigerian-language glyph coverage (Hausa, Yoruba, Igbo).
+   The primary font is loaded via next/font with `adjustFontFallback`,
+   which generates a metric-matched fallback to keep CLS low. These
+   unicode-ranges document the required coverage so the primary font is
+   used for ɓ ɗ ƙ ƴ, ẹ ọ ṣ, and tonal diacritics (à á ì í) instead of
+   falling back to a mismatched system font. */
+@font-face {
+  font-family: "Geist Sans";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: local("Geist Sans");
+  unicode-range: U+0000-00FF, U+0100-024F, U+0250-02AF, U+0300-036F,
+    U+1E00-1EFF, U+2000-206F, U+2070-209F, U+20A0-20CF, U+2100-214F,
+    U+2190-21FF, U+2200-22FF, U+2C60-2C7F, U+A720-A7FF;
 }
 
 /* All animation/transition usage in the app today is `transition-colors`
