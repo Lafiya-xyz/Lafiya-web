@@ -4,6 +4,7 @@ import "./globals.css";
 
 import { ServiceWorkerRegister } from "./offline-register";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { VitalsReporter } from "./vitals-reporter";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -61,6 +62,7 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col">
         {children}
         <ServiceWorkerRegister />
+        <VitalsReporter />
       </body>
     </html>
   );
