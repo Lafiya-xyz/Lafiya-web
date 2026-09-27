@@ -1,6 +1,7 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import noWildcardPhiSelect from "./eslint-rules/no-wildcard-phi-select.js";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -21,6 +22,27 @@ const eslintConfig = defineConfig([
     files: ["lib/logging/logger.ts"],
     rules: {
       "no-console": "off",
+    },
+  },
+  {
+    // Issue #612: forbid wildcard selects on PHI-bearing Supabase tables.
+    // The PHI table list is configurable and should be kept in sync with the
+    // RoPA annotations.
+    files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
+    plugins: {
+      local: {
+        rules: {
+          "no-wildcard-phi-select": noWildcardPhiSelect,
+        },
+      },
+    },
+    rules: {
+      "local/no-wildcard-phi-select": [
+        "error",
+        {
+          phiTables: ["profiles", "record_revisions", "profile_secrets"],
+        },
+      ],
     },
   },
   // Override default ignores of eslint-config-next.
