@@ -1,7 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 
-import { formatDateTime } from "@/lib/format/datetime";
+import { formatDateTime, formatRelativeTime } from "@/lib/format/datetime";
+import { formatPhoneDisplay, phoneHref } from "@/lib/format/phone";
 import { OfflineEnvelopeSource } from "@/lib/emergency/offline-source";
 import type { EmergencyCardRow } from "@/lib/supabase/types";
 
@@ -88,31 +89,8 @@ function formatTime(value: string | null): string {
   return formatDateTime(value);
 }
 
-function formatRelativeTime(value: string | null): string {
-  if (!value) return "Unavailable";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unavailable";
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSeconds = Math.floor(diffMs / 1000);
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  const diffHours = Math.floor(diffMinutes / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffSeconds < 60) return "Just now";
-  if (diffMinutes < 60)
-    return `${diffMinutes} minute${diffMinutes === 1 ? "" : "s"} ago`;
-  if (diffHours < 24)
-    return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
-  if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-  }).format(date);
-}
-
-function phoneHref(phone: string): string | null {
-  const normalized = phone.replace(/[\s().-]/g, "");
-  return /^\+?[1-9]\d{6,14}$/.test(normalized) ? `tel:${normalized}` : null;
+function formatRelative(value: string | null): string {
+  return formatRelativeTime(value);
 }
 
 export function EmergencyCardContent({
@@ -170,7 +148,7 @@ export function EmergencyCardContent({
             </div>
             <div className="flex flex-wrap justify-between gap-x-4 gap-y-1">
               <dt className="font-medium">Last updated</dt>
-              <dd>{formatRelativeTime(card.record_updated_at)}</dd>
+              <dd>{formatRelative(card.record_updated_at)}</dd>
             </div>
             <div className="flex flex-wrap justify-between gap-x-4 gap-y-1">
               <dt className="font-medium">Authorization valid until</dt>
@@ -222,99 +200,84 @@ export function EmergencyCardContent({
           </h2>
           <dl className="grid gap-4 rounded-lg border border-zinc-300 p-4 sm:grid-cols-2 dark:border-zinc-700">
             <div>
-              <dt className="flex items-center gap-2 text-xs font-medium tracking-wide text-zinc-500 uppercase">
-                <CategoryIcon category="blood" className="h-4 w-4 shrink-0" />
-                Blood group
+              <dt className="flex items-center gap-2 text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
+                <CategoryIcon category="allergy" />
+                Allergies
               </dt>
-              <dd
-                data-testid="card-blood-group"
-                className="text-lg font-semibold text-zinc-950 dark:text-zinc-50"
-              >
-                {card.blood_group ?? "Withheld"}
+              <dd className="mt-1 text-sm">{formatList(card.allergies)}</dd>
+            </div>
+            <div>
+              <dt className="flex items-center gap-2 text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
+                <CategoryIcon category="medication" />
+                Medications
+              </dt>
+              <dd className="mt-1 text-sm">{formatList(card.medications)}</dd>
+            </div>
+            <div>
+              <dt className="flex items-center gap-2 text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
+                <CategoryIcon category="condition" />
+                Conditions
+              </dt>
+              <dd className="mt-1 text-sm">{formatList(card.conditions)}</dd>
+            </div>
+            <div>
+              <dt className="flex items-center gap-2 text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
+                <CategoryIcon category="blood" />
+                Blood type
+              </dt>
+              <dd className="mt-1 text-sm">
+                {card.blood_type ?? "Not recorded"}
               </dd>
             </div>
             <div>
-              <dt className="flex items-center gap-2 text-xs font-medium tracking-wide text-zinc-500 uppercase">
-                <CategoryIcon
-                  category="genotype"
-                  className="h-4 w-4 shrink-0"
-                />
+              <dt className="flex items-center gap-2 text-xs font-medium tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
+                <CategoryIcon category="genotype" />
                 Genotype
               </dt>
-              <dd
-                data-testid="card-genotype"
-                className="text-lg font-semibold text-zinc-950 dark:text-zinc-50"
-              >
-                {card.genotype ?? "Withheld"}
+              <dd className="mt-1 text-sm">
+                {card.genotype ?? "Not recorded"}
               </dd>
             </div>
           </dl>
         </section>
 
-        <section
-          aria-labelledby="clinical-details-heading"
-          className="flex flex-col gap-5"
-        >
-          <h2 id="clinical-details-heading" className="sr-only">
-            Clinical details
-          </h2>
-          <CardField
-            label="Allergies"
-            icon="allergy"
-            value={formatList(card.allergies)}
-          />
-          <CardField
-            label="Current medications"
-            icon="medication"
-            value={formatList(card.medications)}
-          />
-          <CardField
-            label="Chronic conditions / implants"
-            icon="condition"
-            value={formatList(card.chronic_conditions)}
-          />
-        </section>
-
-        {card.emergency_contacts === null ? (
-          <CardField label="Emergency contacts" value="Withheld by patient" />
-        ) : card.emergency_contacts.length > 0 ? (
+        {card.emergency_contacts && card.emergency_contacts.length > 0 ? (
           <section aria-labelledby="contacts-heading">
-            <h2
-              id="contacts-heading"
-              className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
+            <h2 id="contacts-heading" className="mb-3 text-lg font-semibold">
               Emergency contacts
             </h2>
-            <ul role="list" className="mt-2 flex flex-col gap-3">
-              {card.emergency_contacts.map((contact) => {
+            <ul className="grid gap-3">
+              {card.emergency_contacts.map((contact, index) => {
                 const href = phoneHref(contact.phone);
                 return (
                   <li
-                    key={`${contact.name}-${contact.phone}`}
-                    className="rounded-md border border-zinc-200 p-3 dark:border-zinc-800"
+                    key={`${contact.phone}-${index}`}
+                    className="rounded-lg border border-zinc-300 p-3 text-sm dark:border-zinc-700"
                   >
                     <p className="font-medium">{contact.name}</p>
-                    <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                      {contact.relationship}
-                    </p>
+                    {contact.relationship ? (
+                      <p className="text-zinc-600 dark:text-zinc-400">
+                        {contact.relationship}
+                      </p>
+                    ) : null}
                     {href ? (
                       <a
                         href={href}
-                        className="text-sm font-medium text-blue-700 underline dark:text-blue-400"
+                        className="mt-1 inline-block underline"
                       >
-                        {contact.phone}
+                        {formatPhoneDisplay(contact.phone)}
                       </a>
                     ) : (
-                      <p className="text-sm">{contact.phone}</p>
+                      <p className="mt-1">
+                        {formatPhoneDisplay(contact.phone)}
+                      </p>
                     )}
                   </li>
                 );
               })}
             </ul>
           </section>
-        ) : (
-          <CardField label="Emergency contacts" value="None recorded" />
-        )}
+        ) : null}
 
         <OfflineEnvelopeSource
           cardId={card.id}
@@ -322,27 +285,5 @@ export function EmergencyCardContent({
         />
       </main>
     </>
-  );
-}
-
-function CardField({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: string;
-  icon?: "allergy" | "medication" | "condition";
-}) {
-  return (
-    <div>
-      <dt className="flex items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-        {icon ? <CategoryIcon category={icon} /> : null}
-        {label}
-      </dt>
-      <dd className="mt-1 text-base text-zinc-950 dark:text-zinc-50">
-        {value}
-      </dd>
-    </div>
   );
 }

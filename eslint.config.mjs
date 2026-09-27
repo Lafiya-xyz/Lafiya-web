@@ -23,6 +23,43 @@ const eslintConfig = defineConfig([
       "no-console": "off",
     },
   },
+  {
+    // Issue #601: all date/number/phone formatting must be routed through
+    // lib/format so locale fallback chains and ICU-missing handling stay in
+    // one place. Direct toLocaleString/Intl calls outside lib/format are
+    // forbidden — a US-style MM/DD date on an emergency card can be
+    // misread dangerously.
+    files: ["**/*.{ts,tsx,js,jsx,mjs,cjs}"],
+    ignores: ["lib/format/**"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "CallExpression[callee.property.name='toLocaleString']",
+          message:
+            "Use lib/format helpers instead of toLocaleString (issue #601).",
+        },
+        {
+          selector:
+            "CallExpression[callee.property.name='toLocaleDateString']",
+          message:
+            "Use lib/format helpers instead of toLocaleDateString (issue #601).",
+        },
+        {
+          selector:
+            "CallExpression[callee.property.name='toLocaleTimeString']",
+          message:
+            "Use lib/format helpers instead of toLocaleTimeString (issue #601).",
+        },
+        {
+          selector: "NewExpression[callee.name='Intl']",
+          message:
+            "Use lib/format helpers instead of direct Intl calls (issue #601).",
+        },
+      ],
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
