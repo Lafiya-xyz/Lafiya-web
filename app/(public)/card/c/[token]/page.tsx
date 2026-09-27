@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { after } from "next/server";
 
 import {
   digestCapability,
   isCapabilityToken,
 } from "@/lib/emergency/capability";
 import { logError } from "@/lib/logging/logger";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 import { EmergencyCardContent } from "../../[id]/card-content";
@@ -50,6 +48,14 @@ import { ExpiredCapabilityState } from "./expired-state";
  *
  * A capability's policy (expiry, revocation, and view budget) must be checked
  * for every live navigation. It is intentionally never ISR/CDN cached.
+ *
+ * LATENCY (issue #594):
+ * The critical path must make at most one database round trip before first byte.
+ * Capability consumption, card projection, and the access-audit insert are
+ * collapsed into a single `consume_emergency_capability` RPC that runs on the
+ * primary (consumption is a write and must never be served by a read replica).
+ * The audit event is recorded inside that same transaction, so no deferred
+ * `after()` round trip is needed on the critical path.
  */
 export const dynamic = "force-dynamic";
 
@@ -108,23 +114,7 @@ export default async function CapabilityCardPage({
     notFound();
   }
 
-  const { capability_id: capabilityId, ...card } = resolution;
-  after(async () => {
-    try {
-      const admin = createAdminClient();
-      await admin.rpc("record_card_access_event", {
-        p_capability_id: capabilityId,
-        p_access_kind: "capability",
-        p_outcome: "served",
-      });
-    } catch (accessEventError) {
-      // Deferred accountability is best-effort by design. No raw capability,
-      // identifier, patient data, or error payload reaches the logger.
-      logError("Failed to record emergency-card access", accessEventError, {
-        route: "/card/c/[token]",
-      });
-    }
-  });
+  const { capability_id: _capabilityId, ...card } = resolution;
 
   return <EmergencyCardContent card={card} authorizationKind="capability" />;
 }

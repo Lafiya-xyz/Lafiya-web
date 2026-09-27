@@ -9,6 +9,13 @@
 -- and a profile made unavailable through consent/lifecycle changes still
 -- all collapse into 'not_found', since those aren't properties of the
 -- capability itself.
+--
+-- Performance (#594): the card path previously issued several sequential
+-- round trips (capability consumption, projection, audit insert). This
+-- function now performs the whole critical path in a single statement so
+-- the card render makes at most one database round trip before first byte.
+-- The audit row is written in the same transaction as the view increment,
+-- so consumption still hits the primary and no separate insert is needed.
 create or replace function public.consume_emergency_capability(p_token_digest text)
 returns table (
   access_state text,
@@ -71,8 +78,14 @@ begin
     return;
   end if;
 
+  -- Single-statement critical path: increment the view counter and write the
+  -- audit row in the same transaction as the projection below, so the card
+  -- render needs no further round trips before first byte.
   update public.emergency_capabilities set used_views = used_views + 1,
     last_resolved_at = now() where id = v_capability.id;
+
+  insert into public.capability_access_events (capability_id, event_type, occurred_at)
+    values (v_capability.id, 'resolved', now());
 
   return query
   select 'active'::text, v_capability.id,
