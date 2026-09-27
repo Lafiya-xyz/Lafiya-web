@@ -1,5 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const pseudoLocaleEnv = {
+  NEXT_PUBLIC_PSEUDO_LOCALE: "1",
+  NEXT_PUBLIC_PSEUDO_LOCALE_EXPANSION: "0.4",
+};
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -30,5 +35,13 @@ export default defineConfig({
       ATTESTATION_MODE: "mock",
     },
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "pseudo-locale",
+      testDir: "./e2e/pseudo-locale",
+      use: { ...devices["Desktop Chrome"] },
+      metadata: { pseudoLocale: true },
+    },
+  ],
 });
