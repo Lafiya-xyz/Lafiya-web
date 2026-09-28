@@ -506,3 +506,6 @@ _Built for the Stellar ecosystem. Open source. Community owned._
 
 <!-- handsoff-issue-566 -->
 - #566: [Payouts] Detect CHW verification fraud through velocity, collusion, and anomaly scoring
+
+<!-- handsoff-issue-567 -->
+- #567: [Payouts] Publish signed, reproducible payout reports for grant funders
