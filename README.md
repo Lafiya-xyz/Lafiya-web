@@ -503,3 +503,6 @@ _Built for the Stellar ecosystem. Open source. Community owned._
 
 <!-- handsoff-issue-565 -->
 - #565: [Spike] Evaluate SEP-24/SEP-31 anchors for CHW USDC-to-NGN off-ramps
+
+<!-- handsoff-issue-566 -->
+- #566: [Payouts] Detect CHW verification fraud through velocity, collusion, and anomaly scoring
