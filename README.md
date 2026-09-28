@@ -500,3 +500,6 @@ _Built for the Stellar ecosystem. Open source. Community owned._
 
 <!-- handsoff-issue-564 -->
 - #564: [Payouts] Batch CHW payouts into multi-operation transactions with partial-failure recovery
+
+<!-- handsoff-issue-565 -->
+- #565: [Spike] Evaluate SEP-24/SEP-31 anchors for CHW USDC-to-NGN off-ramps
