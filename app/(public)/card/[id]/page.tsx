@@ -2,9 +2,13 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
 
+import { withholdPinGatedFields } from "@/lib/emergency/card-pin";
+import { getLegacyPinGatedFields } from "@/lib/emergency/card-pin-gate";
 import { logError } from "@/lib/logging/logger";
+import { isAttestationTrustDegraded } from "@/lib/stellar/verification-indexer/trust-state";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { getAvatarSignedUrl } from "@/lib/storage/avatar";
 import { EmergencyCardContent } from "./card-content";
 
 /**
@@ -87,6 +91,12 @@ export default async function PublicCardPage({
     notFound();
   }
 
+  // Issue #631: legacy links have no PIN, so PIN-gated fields never render.
+  const card = withholdPinGatedFields(
+    data[0],
+    await getLegacyPinGatedFields(id),
+  );
+
   after(async () => {
     try {
       await createAdminClient().rpc("record_legacy_card_access_event", {
@@ -117,6 +127,11 @@ export default async function PublicCardPage({
     isOwner = ownProfile?.card_public_id === id;
   }
 
+  // Issue #528: resolve a short-lived signed URL for the avatar photo
+  // server-side. Authorization is established: the card ID bearer model
+  // permits viewing the photo just as it does the rest of the card data.
+  const signedPhotoUrl = await getAvatarSignedUrl(data[0].photo_url);
+
   return (
     <>
       {/* EmergencyCardContent below renders its own full-page <main> wrapper
@@ -134,9 +149,14 @@ export default async function PublicCardPage({
         </a>
       </header>
       <EmergencyCardContent
-        card={data[0]}
+        card={
+          (await isAttestationTrustDegraded())
+            ? { ...card, trust_state: "unavailable" as const }
+            : card
+        }
         authorizationKind="legacy"
         isOwner={isOwner}
+        signedPhotoUrl={signedPhotoUrl}
       />
     </>
   );

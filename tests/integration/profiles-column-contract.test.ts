@@ -68,6 +68,10 @@ const INTENTIONALLY_PRIVATE = [
   "current_revision_id",
   "disclosure_policy",
   "legacy_card_sunset_at",
+  // Break-glass clinician-only field selections (issue #543): only ever
+  // disclosed via open_break_glass_access() to a verified clinician, never
+  // through the public/capability card paths.
+  "clinician_disclosure_policy",
 ] as const satisfies readonly (keyof ProfileRow)[];
 
 const ALL_CLASSIFIED_COLUMNS = [

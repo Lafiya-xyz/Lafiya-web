@@ -647,3 +647,128 @@ export function renderOfflineEnvelope(envelope, reason = null) {
           .join("") || "None recorded";
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lafiya — cached emergency card</title><body style="font:16px/1.5 system-ui;margin:0;background:#fff;color:#18181b"><aside role="alert" style="padding:1rem;background:#fef3c7;color:#78350f;border-bottom:1px solid #d97706"><strong>Cached emergency information.</strong> Cached on ${escapeHtml(displayTime(envelope.cachedAt))}. Current authorization and revocation cannot be checked offline. Record updated: ${escapeHtml(displayTime(envelope.recordUpdatedAt))}. Verification evidence last observed: ${escapeHtml(displayTime(envelope.trust.updatedAt))}.</aside><main style="max-width:42rem;margin:auto;padding:1.5rem"><h1>${escapeHtml(p.name ?? "Name withheld")}</h1>${p.age === null ? "" : `<p>${escapeHtml(p.age)} years old</p>`}<h2>Critical emergency information</h2><dl><dt>Blood group</dt><dd>${escapeHtml(p.bloodGroup ?? "Withheld")}</dd><dt>Genotype</dt><dd>${escapeHtml(p.genotype ?? "Withheld")}</dd></dl><h2>Allergies</h2><p>${displayList(p.allergies)}</p><h2>Current medications</h2><p>${displayList(p.medications)}</p><h2>Chronic conditions / implants</h2><p>${displayList(p.chronicConditions)}</p><h2>Emergency contacts</h2><ul>${contacts}</ul>${p.language ? `<h2>Language spoken</h2><p>${escapeHtml(p.language)}</p>` : ""}<p style="font-size:.875rem;color:#52525b">Not a medical device. Not a substitute for professional medical judgment.</p></main></body></html>`;
 }
+
+// ---------------------------------------------------------------------------
+// Encryption at rest (issue #630, ADR-004).
+//
+// Envelopes are stored AES-256-GCM encrypted under a key derived with
+// HKDF-SHA-256 from the secret segment of the card URL (the capability token
+// or legacy card ID) and a random per-envelope salt. The Cache Storage key is
+// an opaque SHA-256 of the card path, never the raw URL, so neither the
+// capability nor any PHI is readable from Cache Storage without the link.
+// ---------------------------------------------------------------------------
+
+export const OFFLINE_ENCRYPTED_ENVELOPE_VERSION = 2;
+export const OFFLINE_ENVELOPE_CACHE_PATH = "/__lafiya-offline-envelope/";
+const ENVELOPE_KDF_INFO = "lafiya-offline-envelope-v2";
+const CACHE_KEY_DOMAIN = "lafiya-offline-cache-key-v2:";
+
+function toBase64(bytes) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function fromBase64(value) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+/** The secret URL segment (capability token or card ID) of a card URL. */
+export function cardSecretFromUrl(url) {
+  const { pathname } = new URL(url, "https://lafiya.invalid");
+  const segments = pathname.split("/").filter(Boolean);
+  if (segments[0] !== "card" || segments.length < 2) return null;
+  const secret = segments[segments.length - 1];
+  return secret.length >= 16 ? secret : null;
+}
+
+/** Opaque Cache Storage key: a domain-separated SHA-256 of the card path. */
+export async function offlineCacheKey(url) {
+  const { pathname } = new URL(url, "https://lafiya.invalid");
+  const digest = await sha256(CACHE_KEY_DOMAIN + pathname);
+  return digest ? `${OFFLINE_ENVELOPE_CACHE_PATH}${digest}` : null;
+}
+
+async function deriveEnvelopeKey(secret, salt, usage) {
+  const material = await globalThis.crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    "HKDF",
+    false,
+    ["deriveKey"],
+  );
+  return globalThis.crypto.subtle.deriveKey(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt,
+      info: new TextEncoder().encode(ENVELOPE_KDF_INFO),
+    },
+    material,
+    { name: "AES-GCM", length: 256 },
+    false,
+    [usage],
+  );
+}
+
+/**
+ * Encrypt an envelope for Cache Storage. `cacheKey` is bound as AES-GCM
+ * additional data so a ciphertext cannot be replayed under another entry.
+ * Returns null when WebCrypto or the secret is unavailable (not cached).
+ */
+export async function encryptOfflineEnvelope(envelope, secret, cacheKey) {
+  if (!globalThis.crypto?.subtle || !secret || !cacheKey) return null;
+  const salt = globalThis.crypto.getRandomValues(new Uint8Array(16));
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveEnvelopeKey(secret, salt, "encrypt");
+  const ciphertext = await globalThis.crypto.subtle.encrypt(
+    { name: "AES-GCM", iv, additionalData: new TextEncoder().encode(cacheKey) },
+    key,
+    new TextEncoder().encode(JSON.stringify(envelope)),
+  );
+  return {
+    version: OFFLINE_ENCRYPTED_ENVELOPE_VERSION,
+    salt: toBase64(salt),
+    iv: toBase64(iv),
+    ciphertext: toBase64(new Uint8Array(ciphertext)),
+  };
+}
+
+/** Decrypt a stored envelope; null for a wrong secret, tampering, or v1 data. */
+export async function decryptOfflineEnvelope(record, secret, cacheKey) {
+  if (
+    !globalThis.crypto?.subtle ||
+    !secret ||
+    !cacheKey ||
+    !record ||
+    typeof record !== "object" ||
+    record.version !== OFFLINE_ENCRYPTED_ENVELOPE_VERSION ||
+    typeof record.salt !== "string" ||
+    typeof record.iv !== "string" ||
+    typeof record.ciphertext !== "string"
+  ) {
+    return null;
+  }
+  try {
+    const key = await deriveEnvelopeKey(
+      secret,
+      fromBase64(record.salt),
+      "decrypt",
+    );
+    const plaintext = await globalThis.crypto.subtle.decrypt(
+      {
+        name: "AES-GCM",
+        iv: fromBase64(record.iv),
+        additionalData: new TextEncoder().encode(cacheKey),
+      },
+      key,
+      fromBase64(record.ciphertext),
+    );
+    return JSON.parse(new TextDecoder().decode(plaintext));
+  } catch {
+    return null;
+  }
+}

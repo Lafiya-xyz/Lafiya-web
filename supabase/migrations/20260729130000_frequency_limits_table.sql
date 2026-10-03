@@ -41,7 +41,7 @@ create or replace function public.frequency_limit_check_and_increment(
 returns table (allowed boolean, count integer, retry_after_seconds integer)
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
 declare
   v_now timestamptz := now();

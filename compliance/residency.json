@@ -1,0 +1,72 @@
+{
+  "$schema": "./residency.schema.json",
+  "version": 1,
+  "description": "Data residency policy for Lafiya. Lists every processor that stores or processes Lafiya data, the approved regions per environment, and the legal basis for any cross-border transfer under the Nigeria Data Protection Act (NDPA).",
+  "processors": [
+    {
+      "id": "supabase",
+      "name": "Supabase",
+      "purpose": "Primary database, authentication, and file storage for Lafiya health data.",
+      "dataCategories": ["health", "personal", "auth"],
+      "legalBasis": "NDPA s.41 cross-border transfer with adequacy/contractual safeguards; data stored in-region.",
+      "approvedRegions": {
+        "production": ["ng", "ng-lagos-1", "af-south-1"],
+        "staging": ["ng", "ng-lagos-1", "af-south-1", "eu-central-1"],
+        "development": ["ng", "ng-lagos-1", "af-south-1", "eu-central-1", "us-east-1"]
+      },
+      "regionSource": "supabase-project-metadata"
+    },
+    {
+      "id": "vercel",
+      "name": "Vercel",
+      "purpose": "Application hosting and edge runtime for the Lafiya web app.",
+      "dataCategories": ["personal", "operational"],
+      "legalBasis": "NDPA s.41 processor contract; no persistent health data stored at the edge.",
+      "approvedRegions": {
+        "production": ["fra1", "cdg1", "lhr1"],
+        "staging": ["fra1", "cdg1", "lhr1"],
+        "development": ["fra1", "cdg1", "lhr1", "iad1", "sfo1"]
+      },
+      "regionSource": "vercel-region-env"
+    },
+    {
+      "id": "sentry",
+      "name": "Sentry",
+      "purpose": "Error and performance monitoring. PHI must be scrubbed before transmission.",
+      "dataCategories": ["operational", "diagnostic"],
+      "legalBasis": "NDPA s.41 processor contract; PHI scrubbing enforced in the Sentry SDK before send.",
+      "approvedRegions": {
+        "production": ["eu", "de"],
+        "staging": ["eu", "de"],
+        "development": ["eu", "de", "us"]
+      },
+      "regionSource": "sentry-dsn-host"
+    },
+    {
+      "id": "email",
+      "name": "Transactional email provider",
+      "purpose": "Delivery of transactional email such as appointment reminders and account notices.",
+      "dataCategories": ["personal", "contact"],
+      "legalBasis": "NDPA s.41 processor contract; message content limited to non-clinical notifications.",
+      "approvedRegions": {
+        "production": ["eu", "ng"],
+        "staging": ["eu", "ng"],
+        "development": ["eu", "ng", "us"]
+      },
+      "regionSource": "email-provider-endpoint"
+    },
+    {
+      "id": "sms",
+      "name": "Transactional SMS provider",
+      "purpose": "Delivery of transactional SMS such as appointment reminders and one-time codes.",
+      "dataCategories": ["personal", "contact"],
+      "legalBasis": "NDPA s.41 processor contract; message content limited to non-clinical notifications.",
+      "approvedRegions": {
+        "production": ["ng", "eu"],
+        "staging": ["ng", "eu"],
+        "development": ["ng", "eu", "us"]
+      },
+      "regionSource": "sms-provider-endpoint"
+    }
+  ]
+}

@@ -27,7 +27,24 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Nigerian-language glyph coverage (Hausa, Yoruba, Igbo).
+   The primary font is loaded via next/font with `adjustFontFallback`,
+   which generates a metric-matched fallback to keep CLS low. These
+   unicode-ranges document the required coverage so the primary font is
+   used for ɓ ɗ ƙ ƴ, ẹ ọ ṣ, and tonal diacritics (à á ì í) instead of
+   falling back to a mismatched system font. */
+@font-face {
+  font-family: "Geist Sans";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: local("Geist Sans");
+  unicode-range: U+0000-00FF, U+0100-024F, U+0250-02AF, U+0300-036F,
+    U+1E00-1EFF, U+2000-206F, U+2070-209F, U+20A0-20CF, U+2100-214F,
+    U+2190-21FF, U+2200-22FF, U+2C60-2C7F, U+A720-A7FF;
 }
 
 /* All animation/transition usage in the app today is `transition-colors`
@@ -44,5 +61,68 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* Windows High Contrast / forced-colors mode.
+   In forced-colors mode the OS overrides author colours, so any state that
+   was conveyed by background colour alone (verified badge, severity markers,
+   selected/active states) or by an SVG icon that inherits `currentColor`
+   would otherwise vanish. We keep the QR code black-on-white so it stays
+   scannable, and give the remaining states a visible border/outline using
+   system colour keywords. */
+@media (forced-colors: active) {
+  /* QR code must remain a high-contrast black-on-white image so scanners
+     can still decode it; opt it out of the forced palette. */
+  .qr-code,
+  .qr-code svg,
+  .qr-code canvas,
+  .qr-code img {
+    forced-color-adjust: none;
+    background: #ffffff;
+    color: #000000;
+  }
+
+  /* Verified badge: keep the check icon visible and add a border so the
+     badge is distinguishable without relying on its background colour. */
+  .verified-badge {
+    forced-color-adjust: none;
+    color: CanvasText;
+    background: Canvas;
+    border: 1px solid CanvasText;
+  }
+
+  .verified-badge svg {
+    forced-color-adjust: none;
+    color: CanvasText;
+    fill: currentColor;
+  }
+
+  /* Severity markers previously distinguished only by background colour. */
+  .severity-marker {
+    forced-color-adjust: none;
+    color: CanvasText;
+    background: Canvas;
+    border: 1px solid CanvasText;
+  }
+
+  .severity-marker[data-severity="critical"],
+  .severity-marker[data-severity="high"] {
+    border-width: 2px;
+    border-style: solid;
+  }
+
+  /* Focus indicators: ensure a visible outline in forced colours. */
+  :focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  /* Selected/active states that relied on background colour get a border. */
+  [aria-selected="true"],
+  [aria-pressed="true"],
+  [data-state="active"],
+  [data-state="selected"] {
+    border: 1px solid Highlight;
   }
 }

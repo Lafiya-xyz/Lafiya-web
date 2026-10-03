@@ -110,8 +110,8 @@ export function TagListField({
   }
 
   return (
-    <div>
-      <div className="flex items-baseline justify-between">
+    <div className="min-w-0">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
         <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
           {label}
         </span>
@@ -121,7 +121,7 @@ export function TagListField({
       </div>
       <div className="mt-1 flex flex-col gap-2">
         {values.map((value, index) => (
-          <div key={index} className="flex gap-2">
+          <div key={index} className="flex flex-wrap items-center gap-2">
             <label htmlFor={`${name}-${index}`} className="sr-only">
               {label} {index + 1}
             </label>
@@ -146,7 +146,7 @@ export function TagListField({
               }}
               aria-invalid={error ? "true" : undefined}
               aria-describedby={error ? `${name}-error` : undefined}
-              className="w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-zinc-600"
+              className="min-w-0 flex-1 basis-40 rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-zinc-600"
             />
             <button
               type="button"
@@ -158,7 +158,7 @@ export function TagListField({
               &times;
             </button>
             {isDuplicateTag(values, index) ? (
-              <span className="self-center text-xs text-amber-600 dark:text-amber-400">
+              <span className="text-xs text-amber-600 dark:text-amber-400">
                 Duplicate
               </span>
             ) : null}

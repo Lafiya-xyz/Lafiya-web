@@ -4,6 +4,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 
 import type {
+  ContractAdminEvent,
+  ContractGovernanceStore,
+  ContractTrustStatus,
   FinalizedAttestationEvent,
   VerificationEvidenceStore,
 } from "./types";
@@ -76,5 +79,87 @@ export class SupabaseVerificationEvidenceStore implements VerificationEvidenceSt
         { onConflict: "stream" },
       );
     assertNoError(error, "save protocol checkpoint");
+  }
+}
+
+/** Database adapter for the attestation-contract governance monitor. */
+export class SupabaseContractGovernanceStore implements ContractGovernanceStore {
+  constructor(
+    private readonly client: SupabaseClient<Database> = createAdminClient(),
+  ) {}
+
+  async getCursor(): Promise<string | null> {
+    const { data, error } = await this.client
+      .from("protocol_indexer_checkpoints")
+      .select("cursor")
+      .eq("stream", "contract_admin")
+      .maybeSingle();
+    assertNoError(error, "read contract admin checkpoint");
+    return data?.cursor ?? null;
+  }
+
+  async getTrustStatus(): Promise<ContractTrustStatus | null> {
+    const { data, error } = await this.client
+      .from("attestation_contract_trust_state")
+      .select("state, wasm_hash, reason_code")
+      .maybeSingle();
+    assertNoError(error, "read contract trust state");
+    return data
+      ? {
+          state: data.state,
+          wasmHash: data.wasm_hash,
+          reasonCode: data.reason_code,
+        }
+      : null;
+  }
+
+  async recordAdminEvent(event: ContractAdminEvent): Promise<void> {
+    const { error } = await this.client
+      .from("attestation_contract_admin_events")
+      .upsert(
+        {
+          event_id: event.eventId,
+          kind: event.kind,
+          contract_id: event.contractId,
+          ledger_sequence: event.ledgerSequence,
+          transaction_hash: event.transactionHash,
+          wasm_hash: event.wasmHash ?? null,
+          subject: event.subject ?? null,
+          action: event.action ?? null,
+          observed_at: event.observedAt,
+        },
+        { onConflict: "event_id", ignoreDuplicates: true },
+      );
+    assertNoError(error, "record contract admin event");
+  }
+
+  async setTrustStatus(status: ContractTrustStatus): Promise<void> {
+    const { error } = await this.client
+      .from("attestation_contract_trust_state")
+      .upsert(
+        {
+          singleton: true,
+          state: status.state,
+          wasm_hash: status.wasmHash,
+          reason_code: status.reasonCode,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "singleton" },
+      );
+    assertNoError(error, "save contract trust state");
+  }
+
+  async saveCursor(cursor: string): Promise<void> {
+    const { error } = await this.client
+      .from("protocol_indexer_checkpoints")
+      .upsert(
+        {
+          stream: "contract_admin",
+          cursor,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "stream" },
+      );
+    assertNoError(error, "save contract admin checkpoint");
   }
 }

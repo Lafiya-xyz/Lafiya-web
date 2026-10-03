@@ -3,8 +3,11 @@
 export function DownloadCardButton({
   cardUrl,
   card,
+  cardPin,
 }: {
   cardUrl: string;
+  /** Issue #631: printed on a separate panel, away from the QR code. */
+  cardPin?: string;
   card: {
     name: string | null;
     age: number | null;
@@ -38,6 +41,8 @@ export function DownloadCardButton({
     .qr { text-align: center; margin: 16px 0; }
     .qr img { width: 200px; height: 200px; }
     .contact { border: 1px solid #e5e5e5; padding: 8px; border-radius: 4px; margin-bottom: 8px; }
+    .pin-panel { margin-top: 32px; border: 2px dashed #999; padding: 16px; text-align: center; break-before: page; }
+    .pin-value { font: 700 28px/1.2 ui-monospace, monospace; letter-spacing: 0.3em; }
     @media print {
       body { padding: 0; }
       button { display: none; }
@@ -88,6 +93,13 @@ export function DownloadCardButton({
     <div class="label">Language spoken</div>
     <div class="value">${card.language ?? "Not specified"}</div>
   </div>
+  ${cardPin ? `
+  <div class="pin-panel">
+    <div class="label">Card PIN (back of card)</div>
+    <div class="pin-value">${cardPin}</div>
+    <p style="font-size: 12px; color: #666;">Print on the back or under a scratch panel, away from the QR code. Responders enter it to see protected details.</p>
+  </div>
+  ` : ""}
   <p style="font-size: 11px; color: #999; margin-top: 24px;">Not a medical device. Not a substitute for professional medical judgment.</p>
 </body>
 </html>`);

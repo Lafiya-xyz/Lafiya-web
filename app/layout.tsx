@@ -5,14 +5,28 @@ import "./globals.css";
 import { ServiceWorkerRegister } from "./offline-register";
 import { ThemeToggle } from "@/components/theme-toggle";
 
+// Nigerian-language glyph coverage (Hausa, Yoruba, Igbo):
+// ɓ ɗ ƙ ƴ (Latin Extended-B), ẹ ọ ṣ (Latin Extended Additional),
+// and tonal diacritics such as à á ì í (Latin-1 Supplement).
+// Geist ships latin + latin-ext subsets; latin-ext carries the
+// extended/additional ranges needed for these characters, so we
+// request both and let next/font emit the matching unicode-range
+// @font-face rules. adjustFontFallback keeps the fallback metrics
+// aligned to reduce CLS on the card.
 const geistSans = Geist({
   variable: "--font-geist-sans",
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
+  display: "swap",
+  adjustFontFallback: true,
+  fallback: ["system-ui", "arial", "sans-serif"],
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
+  display: "swap",
+  adjustFontFallback: true,
+  fallback: ["ui-monospace", "monospace"],
 });
 
 export const metadata: Metadata = {

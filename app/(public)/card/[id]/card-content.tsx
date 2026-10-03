@@ -1,87 +1,21 @@
+import { parsePhoneNumberFromString } from "libphonenumber-js";
 import Image from "next/image";
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import { formatDateTime, formatRelativeTime } from "@/lib/format/datetime";
 import { formatPhoneDisplay, phoneHref } from "@/lib/format/phone";
 import { OfflineEnvelopeSource } from "@/lib/emergency/offline-source";
 import type { EmergencyCardRow } from "@/lib/supabase/types";
 
+import { NotifyContactsForm } from "../c/[token]/notify-contacts-form";
 import { VerifiedBadge, type VerificationStatus } from "./verified-badge";
+import { ReadAloud } from "./read-aloud";
 
-/**
- * Issue #600: low-literacy iconography.
- *
- * Inline, aria-hidden SVG glyphs paired with the existing text labels so
- * patients and community responders with low literacy can scan the card
- * faster. Icons are decorative only — the adjacent text is always rendered
- * and remains the accessible name, so screen readers and forced-colours
- * users lose nothing. `currentColor` keeps them legible in dark mode and
- * Windows High Contrast / forced-colours mode.
- */
-function CategoryIcon({
-  category,
-  className = "h-5 w-5 shrink-0",
-}: {
-  category: "allergy" | "medication" | "condition" | "blood" | "genotype";
-  className?: string;
-}) {
-  const common = {
-    "aria-hidden": true as const,
-    focusable: "false" as const,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 2,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    className,
-  };
-
-  switch (category) {
-    case "allergy":
-      // Warning triangle with exclamation — universally read as "alert".
-      return (
-        <svg {...common}>
-          <path d="M12 3 2 20h20L12 3Z" />
-          <path d="M12 9v5" />
-          <path d="M12 17h.01" />
-        </svg>
-      );
-    case "medication":
-      // Capsule / pill.
-      return (
-        <svg {...common}>
-          <rect x="2" y="8" width="20" height="8" rx="4" />
-          <path d="M12 8v8" />
-        </svg>
-      );
-    case "condition":
-      // Heart with a pulse line — chronic condition / implant.
-      return (
-        <svg {...common}>
-          <path d="M12 20s-7-4.5-7-9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 7 3.5C19 15.5 12 20 12 20Z" />
-          <path d="M5 12h3l1.5-2.5L12 14l1.5-2.5H19" />
-        </svg>
-      );
-    case "blood":
-      // Blood drop.
-      return (
-        <svg {...common}>
-          <path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11Z" />
-        </svg>
-      );
-    case "genotype":
-      // DNA helix — genotype / sickle cell.
-      return (
-        <svg {...common}>
-          <path d="M7 3c0 6 10 6 10 12M17 3c0 6-10 6-10 12M7 21c0-2 10-2 10-4M17 21c0-2-10-2-10-4" />
-        </svg>
-      );
+function formatList(values: string[] | null, pinRequired = false): string {
+  if (values === null) {
+    return pinRequired ? "Requires the card PIN" : "Withheld by patient";
   }
-}
-
-function formatList(values: string[] | null): string {
-  if (values === null) return "Withheld by patient";
   return values.length > 0 ? values.join(", ") : "None recorded";
 }
 
@@ -160,25 +94,47 @@ function sortByCriticality(entries: AllergyEntry[]): AllergyEntry[] {
   );
 }
 
-function formatAllergy(entry: AllergyEntry): string {
-  const parts = [entry.substance_text];
-  if (entry.reaction) parts.push(entry.reaction);
-  if (entry.severity) parts.push(entry.severity);
-  return parts.join(" — ");
+type ContactLinks = {
+  tel: string;
+  sms: string;
+  whatsapp: string;
+};
+
+/**
+ * Contact numbers are already normalized to E.164 at save time (see
+ * lib/records/canonicalization.ts), but older records may predate that
+ * normalization, so this re-parses defensively (default region "NG",
+ * matching the rest of the app) rather than trusting the stored format.
+ * Returns null for anything that still can't be parsed as a valid number,
+ * which hides the one-tap actions for that contact instead of emitting a
+ * broken link.
+ */
+function contactLinks(phone: string, patientName: string): ContactLinks | null {
+  const parsed = parsePhoneNumberFromString(phone, "NG");
+  if (!parsed?.isValid()) return null;
+
+  const e164 = parsed.number;
+  const digits = e164.slice(1); // wa.me expects digits only, no leading "+"
+  const message = encodeURIComponent(
+    `I'm a responder for ${patientName}. Please call me back.`,
+  );
+
+  return {
+    tel: `tel:${e164}`,
+    sms: `sms:${e164}?&body=${message}`,
+    whatsapp: `https://wa.me/${digits}?text=${message}`,
+  };
 }
 
-function formatTime(value: string | null): string {
-  return formatDateTime(value);
-}
-
-function formatRelative(value: string | null): string {
-  return formatRelativeTime(value);
-}
+const actionButtonClassName =
+  "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-zinc-950 px-4 text-sm font-medium text-zinc-950 underline-offset-2 hover:underline focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-50 dark:text-zinc-50 dark:focus:ring-zinc-600";
 
 export function EmergencyCardContent({
   card,
   authorizationKind,
+  pinGate,
   isOwner = false,
+  signedPhotoUrl,
 }: {
   card: EmergencyCardRow;
   authorizationKind: "legacy" | "capability";
@@ -187,17 +143,20 @@ export function EmergencyCardContent({
    * user_id to the client (get_emergency_card deliberately never returns
    * it). Never trust this from anywhere but a server-side check. */
   isOwner?: boolean;
+  /** Issue #631: the PIN entry form, shown when fields are PIN-gated. */
+  pinGate?: ReactNode;
 }) {
+  const locale = labelLocale ?? negotiateLabelLocale(acceptLanguage);
+  const t = GLOSSARY[locale];
+  const patientLang = card.language ?? null;
   const status: VerificationStatus =
     card.trust_state === "unverified"
       ? "not_verified"
       : (card.trust_state ?? "unavailable");
 
-  const allergies = normaliseAllergies(card.allergies);
-  const sortedAllergies =
-    allergies === null ? null : sortByCriticality(allergies);
-  const hasHighCriticality =
-    sortedAllergies?.some((entry) => entry.criticality === "high") ?? false;
+  const medications = formatMedications(
+    (card.medications as unknown[] | null) ?? null,
+  );
 
   return (
     <>
@@ -253,13 +212,16 @@ export function EmergencyCardContent({
           aria-labelledby="identity-heading"
           className="flex items-center gap-4"
         >
-          {card.photo_url ? (
+          {signedPhotoUrl ? (
             <Image
-              src={card.photo_url}
+              src={signedPhotoUrl}
               alt=""
               width={80}
               height={80}
               sizes="80px"
+              // Issue #528: signed URLs change per-request; disable Next.js
+              // image optimization so the optimizer never caches or rewrites them.
+              unoptimized
               className="h-20 w-20 rounded-full object-cover"
             />
           ) : null}
@@ -368,28 +330,98 @@ export function EmergencyCardContent({
           <h2 id="contact-heading" className="mb-3 text-lg font-semibold">
             Emergency contact
           </h2>
-          <dl className="grid gap-2 rounded-lg border border-zinc-300 p-4 text-sm dark:border-zinc-700">
-            <div className="flex flex-wrap justify-between gap-x-4 gap-y-1">
-              <dt className="font-medium">Name</dt>
-              <dd>{card.emergency_contact_name ?? "Not recorded"}</dd>
-            </div>
-            <div className="flex flex-wrap justify-between gap-x-4 gap-y-1">
-              <dt className="font-medium">Phone</dt>
-              <dd>
-                {card.emergency_contact_phone ? (
-                  <a
-                    href={phoneHref(card.emergency_contact_phone)}
-                    className="underline underline-offset-2"
-                  >
-                    {formatPhoneDisplay(card.emergency_contact_phone)}
-                  </a>
-                ) : (
-                  "Not recorded"
-                )}
-              </dd>
-            </div>
-          </dl>
+          <CardField
+            label="Allergies"
+            value={formatList(card.allergies)}
+            changedAt={card.allergies_changed_at}
+          />
+          <CardField
+            label="Current medications"
+            value={formatList(
+              card.medications,
+              card.disclosure_states?.medications === "pin_required",
+            )}
+          />
+          <CardField
+            label="Chronic conditions / implants"
+            value={formatList(
+              card.chronic_conditions,
+              card.disclosure_states?.chronic_conditions === "pin_required",
+            )}
+          />
         </section>
+
+        {pinGate}
+
+        {card.emergency_contacts === null ? (
+          <CardField label="Emergency contacts" value="Withheld by patient" />
+        ) : card.emergency_contacts.length > 0 ? (
+          <section aria-labelledby="contacts-heading">
+            <h2
+              id="contacts-heading"
+              className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              Emergency contacts
+            </h2>
+            <ul role="list" className="mt-2 flex flex-col gap-3">
+              {card.emergency_contacts.map((contact) => {
+                const links = contactLinks(
+                  contact.phone,
+                  card.name ?? "the patient",
+                );
+                return (
+                  <li
+                    key={`${contact.name}-${contact.phone}`}
+                    className="rounded-md border border-zinc-200 p-3 dark:border-zinc-800"
+                  >
+                    <p className="font-medium">{contact.name}</p>
+                    <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                      {contact.relationship}
+                    </p>
+                    <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                      {contact.phone}
+                    </p>
+                    {links ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <a
+                          href={links.tel}
+                          aria-label={`Call ${contact.name}`}
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full bg-zinc-950 px-4 text-sm font-medium text-white underline-offset-2 hover:underline focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:bg-zinc-50 dark:text-zinc-950 dark:focus:ring-zinc-600"
+                        >
+                          Call
+                        </a>
+                        <a
+                          href={links.sms}
+                          aria-label={`Text ${contact.name}`}
+                          className={actionButtonClassName}
+                        >
+                          Text
+                        </a>
+                        <a
+                          href={links.whatsapp}
+                          aria-label={`WhatsApp ${contact.name}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={actionButtonClassName}
+                        >
+                          WhatsApp
+                        </a>
+                      </div>
+                    ) : (
+                      <p className="text-sm">{contact.phone}</p>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ) : (
+          <CardField label="Emergency contacts" value="None recorded" />
+        )}
+
+        {capabilityToken && card.emergency_contacts?.length ? (
+          <NotifyContactsForm token={capabilityToken} />
+        ) : null}
 
         <OfflineEnvelopeSource
           cardId={card.id}
@@ -397,5 +429,43 @@ export function EmergencyCardContent({
         />
       </main>
     </>
+  );
+}
+
+function CardField({
+  label,
+  value,
+  changedAt,
+}: {
+  label: string;
+  value: string;
+  /** Issue #544: server-projected revision timestamp for this field, or
+   * undefined when the field is not tracked / never changed. */
+  changedAt?: string | null;
+}) {
+  const recentlyChanged = isRecentlyChanged(changedAt);
+  return (
+    <div>
+      <dt className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+        {label}
+      </dt>
+      <dd className="mt-1 text-zinc-950 dark:text-zinc-50">
+        {value}
+        {recentlyChanged ? (
+          <span
+            data-testid={`card-recent-change-${label
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")}`}
+            className="mt-1 flex items-center gap-1 text-xs font-medium text-amber-800 dark:text-amber-300"
+          >
+            {/* Icon + text so the marker never relies on colour alone. */}
+            <span aria-hidden="true">⟳</span>
+            <span>
+              Recently updated — {formatTime(changedAt ?? null)}
+            </span>
+          </span>
+        ) : null}
+      </dd>
+    </div>
   );
 }

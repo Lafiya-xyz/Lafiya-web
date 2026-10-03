@@ -2,6 +2,9 @@
 
 import { useEffect } from "react";
 
+const STATUS_PAGE_URL =
+  process.env.NEXT_PUBLIC_STATUS_PAGE_URL ?? "https://status.lafiya.health";
+
 export default function ErrorPage({
   error,
   reset,
@@ -40,7 +43,23 @@ export default function ErrorPage({
           >
             Try again
           </button>
+          <a
+            href={STATUS_PAGE_URL}
+            className="inline-flex h-12 items-center justify-center rounded-full border border-zinc-300 px-6 text-base font-medium text-zinc-950 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-900"
+          >
+            Check system status
+          </a>
         </div>
+        <p className="mt-6 text-sm text-zinc-500 dark:text-zinc-400">
+          Live service status is published independently at{" "}
+          <a
+            href={STATUS_PAGE_URL}
+            className="font-medium text-zinc-700 underline underline-offset-4 hover:text-zinc-950 dark:text-zinc-300 dark:hover:text-zinc-50"
+          >
+            {STATUS_PAGE_URL.replace(/^https?:\/\//, "")}
+          </a>
+          .
+        </p>
       </div>
     </div>
   );

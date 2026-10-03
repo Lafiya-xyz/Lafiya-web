@@ -8,6 +8,20 @@ vi.mock("@/lib/supabase/server", () => ({
 
 import { createClient } from "@/lib/supabase/server";
 
+// No MFA factor enrolled -- nextLevel stays aal1, so needsStepUp() returns
+// false and every test below sees the same pre-Issue-#522 behavior. Tests
+// specifically covering the step-up guard live in ../actions.test.ts.
+const NO_MFA_ENROLLED = {
+  getAuthenticatorAssuranceLevel: async () => ({
+    data: {
+      currentLevel: "aal1",
+      nextLevel: "aal1",
+      currentAuthenticationMethods: [],
+    },
+    error: null,
+  }),
+};
+
 describe("exportMyProfileData", () => {
   it("returns an error when not authenticated", async () => {
     vi.mocked(createClient).mockResolvedValue({
@@ -46,6 +60,7 @@ describe("exportMyProfileData", () => {
           data: { user: { id: "user-123" } },
           error: null,
         }),
+        mfa: NO_MFA_ENROLLED,
       },
       from,
       storage: {
@@ -142,6 +157,7 @@ describe("exportMyProfileData", () => {
           data: { user: { id: "user-123" } },
           error: null,
         }),
+        mfa: NO_MFA_ENROLLED,
       },
       from,
       storage: {

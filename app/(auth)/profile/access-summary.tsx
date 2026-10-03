@@ -3,9 +3,16 @@ import { formatDateTime } from "@/lib/format/datetime";
 export function AccessSummary({
   viewsLast30Days,
   lastViewedAt,
+  pinSuccesses = 0,
+  pinFailures = 0,
+  lastPinFailureAt = null,
 }: {
   viewsLast30Days: number;
   lastViewedAt: string | null;
+  /** Issue #631: card PIN outcomes in the last 30 days. */
+  pinSuccesses?: number;
+  pinFailures?: number;
+  lastPinFailureAt?: string | null;
 }) {
   return (
     <section
@@ -23,6 +30,15 @@ export function AccessSummary({
       {lastViewedAt ? (
         <p className="mt-2 text-xs text-zinc-500">
           Most recent successful view: {formatDateTime(lastViewedAt)}
+        </p>
+      ) : null}
+      {pinSuccesses > 0 || pinFailures > 0 ? (
+        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+          Card PIN: {pinSuccesses} correct and {pinFailures} incorrect or locked
+          attempt{pinFailures === 1 ? "" : "s"} in the last 30 days.
+          {lastPinFailureAt
+            ? ` Last incorrect attempt: ${formatDateTime(lastPinFailureAt)}.`
+            : ""}
         </p>
       ) : null}
       <p className="mt-2 text-xs text-zinc-500">

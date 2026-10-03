@@ -1,0 +1,87 @@
+name: Preview Environment
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  preview:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      BRANCH_NAME: pr-${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Create ephemeral Supabase branch
+        run: |
+          supabase branches create "$BRANCH_NAME" \
+            --project-ref "$SUPABASE_PROJECT_REF" \
+            --persistent false || true
+
+      - name: Apply migrations and seed synthetic data
+        run: |
+          supabase link --project-ref "$SUPABASE_PROJECT_REF"
+          supabase db push --include-all
+          supabase db seed --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Resolve branch credentials
+        id: creds
+        run: |
+          supabase branches get "$BRANCH_NAME" --project-ref "$SUPABASE_PROJECT_REF" --output json > branch.json
+          echo "url=$(jq -r '.database.host' branch.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Inject branch credentials into Vercel preview
+        run: |
+          curl -sS -X POST "https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/env?teamId=$VERCEL_TEAM_ID" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"key\":\"NEXT_PUBLIC_SUPABASE_URL\",\"value\":\"${{ steps.creds.outputs.url }}\",\"type\":\"encrypted\",\"target\":[\"preview\"]}"
+          curl -sS -X POST "https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/env?teamId=$VERCEL_TEAM_ID" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"key\":\"LAFIYA_DEPLOYMENT_ENV\",\"value\":\"preview\",\"type\":\"plain\",\"target\":[\"preview\"]}"
+
+      - name: Comment preview URL on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `Preview environment ready for \`${process.env.BRANCH_NAME}\` with an isolated Supabase branch database.`
+            })
+
+  teardown:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      BRANCH_NAME: pr-${{ github.event.pull_request.number }}
+    steps:
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Delete ephemeral Supabase branch
+        run: supabase branches delete "$BRANCH_NAME" --project-ref "$SUPABASE_PROJECT_REF" || true

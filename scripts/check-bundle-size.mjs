@@ -2,8 +2,8 @@
 /**
  * scripts/check-bundle-size.mjs
  *
- * Checks that the JS and CSS chunks for the public emergency card route stay
- * within the budgets defined in docs/perf-budget.md.
+ * Checks that the JS, CSS, and web-font assets for the public emergency card
+ * route stay within the budgets defined in docs/perf-budget.md.
  *
  * Called from CI after `npm run build`. Exits non-zero on a budget violation
  * so the build fails fast instead of silently bloating over time.
@@ -13,14 +13,22 @@
  *  - Reads .next/build-manifest.json (always present after `next build`) to
  *    discover which chunk files belong to the card route, then sums their
  *    sizes from .next/static/.
+ *  - Font bytes are summed from .next/static/media/ (where next/font emits
+ *    its self-hosted, subsetted woff2 files) so that oversized or
+ *    un-subsetted fonts fail CI instead of silently regressing.
  *  - Thresholds are set a little above the perf-budget.md targets to avoid
  *    noise from minor framework version bumps:
  *      JS  budget: 60 kB  (target ≤ 50 kB)
  *      CSS budget: 20 kB  (target ≤ 15 kB)
+ *  - Also enforces the lite (zero-JS) card budget: the `?v=lite` rendition
+ *    must stay under 10 kB gzipped. The lite HTML is emitted by the build as
+ *    a static artifact under .next/server/app/card/c/[token]/lite.html (or a
+ *    pre-rendered .html sibling); we gzip it in-memory and assert the size.
  */
 
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { gzipSync } from "node:zlib";
 
 const ROOT = resolve(new URL(".", import.meta.url).pathname, "..");
 const NEXT_DIR = join(ROOT, ".next");
@@ -28,6 +36,7 @@ const NEXT_DIR = join(ROOT, ".next");
 // ─── Thresholds ──────────────────────────────────────────────────────────────
 const JS_BUDGET_BYTES = 60 * 1024; // 60 kB
 const CSS_BUDGET_BYTES = 20 * 1024; // 20 kB
+const LITE_BUDGET_BYTES = 10 * 1024; // 10 kB gzipped (issue #535)
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function fileSize(relativePath) {
@@ -103,7 +112,6 @@ let cssBytes = 0;
 // Try the client-reference-manifest / CSS manifest approach.
 const cssManifestPath = join(NEXT_DIR, "static", "css");
 try {
-  const { readdirSync } = await import("node:fs");
   const cssFiles = readdirSync(cssManifestPath);
   // We attribute all CSS files to the route budget because on this minimal app
   // the only route-specific CSS is from the card page. This is conservative
@@ -121,14 +129,69 @@ try {
   console.warn("  ⚠ Could not read .next/static/css/ — skipping CSS check.");
 }
 
+// ─── Lite card budget (issue #535) ────────────────────────────────────────────
+// The lite rendition is a zero-JS server component tree. After `next build`
+// its pre-rendered HTML is emitted somewhere under .next/server/app/card/c/.
+// We locate the lite HTML artifact, gzip it in-memory, and assert the budget.
+function findLiteHtml() {
+  const candidates = [
+    join(NEXT_DIR, "server", "app", "card", "c", "[token]", "lite.html"),
+    join(NEXT_DIR, "server", "app", "card", "c", "[token].html"),
+  ];
+  for (const c of candidates) {
+    try {
+      if (statSync(c).isFile()) return c;
+    } catch {
+      /* keep looking */
+    }
+  }
+  // Fallback: walk .next/server/app/card/c/ for any *.html artifact.
+  const base = join(NEXT_DIR, "server", "app", "card", "c");
+  try {
+    const stack = [base];
+    while (stack.length) {
+      const dir = stack.pop();
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) stack.push(full);
+        else if (entry.name.endsWith(".html")) return full;
+      }
+    }
+  } catch {
+    /* not found */
+  }
+  return null;
+}
+
+const liteHtmlPath = findLiteHtml();
+let liteGzipBytes = null;
+if (liteHtmlPath) {
+  try {
+    const html = readFileSync(liteHtmlPath);
+    liteGzipBytes = gzipSync(html).length;
+  } catch {
+    console.warn(`  ⚠ Could not read lite HTML artifact: ${liteHtmlPath}`);
+  }
+} else {
+  console.warn(
+    "  ⚠ Lite card HTML artifact not found under .next/server/app/card/c/ — skipping lite budget check.",
+  );
+}
+
 // ─── Report ───────────────────────────────────────────────────────────────────
 console.log("\n── Bundle size check: card/[id] route ──────────────────────");
 console.log(`  Route key: ${routeKey}`);
 console.log(`  JS  chunks: ${jsChunks.length} files → ${kb(jsBytes)}`);
 console.log(`  CSS chunks: ${kb(cssBytes)}`);
+console.log(`  Fonts:      ${fontFileCount} woff2 files → ${kb(fontBytes)}`);
 console.log(
-  `  Budgets:    JS ≤ ${kb(JS_BUDGET_BYTES)} | CSS ≤ ${kb(CSS_BUDGET_BYTES)}`,
+  `  Budgets:    JS ≤ ${kb(JS_BUDGET_BYTES)} | CSS ≤ ${kb(CSS_BUDGET_BYTES)} | Font ≤ ${kb(FONT_BUDGET_BYTES)}`,
 );
+if (liteGzipBytes !== null) {
+  console.log(
+    `  Lite card:  ${kb(liteGzipBytes)} gzipped (budget ≤ ${kb(LITE_BUDGET_BYTES)})`,
+  );
+}
 
 let failed = false;
 
@@ -156,6 +219,22 @@ if (cssBytes > CSS_BUDGET_BYTES) {
   console.log(
     `✓ CSS within budget (${kb(cssBytes)} ≤ ${kb(CSS_BUDGET_BYTES)})`,
   );
+}
+
+if (liteGzipBytes !== null) {
+  if (liteGzipBytes > LITE_BUDGET_BYTES) {
+    console.error(
+      `✗ Lite card budget exceeded: ${kb(liteGzipBytes)} > ${kb(LITE_BUDGET_BYTES)}`,
+    );
+    console.error(
+      "  The zero-JS lite card must stay under 10 kB gzipped (issue #535).",
+    );
+    failed = true;
+  } else {
+    console.log(
+      `✓ Lite card within budget (${kb(liteGzipBytes)} ≤ ${kb(LITE_BUDGET_BYTES)})`,
+    );
+  }
 }
 
 console.log("────────────────────────────────────────────────────────────\n");
