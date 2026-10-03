@@ -36,6 +36,33 @@ const MAX_INPUT_DIMENSION = 10_000;
 const UPLOAD_FREQUENCY_MAX = 5;
 const UPLOAD_FREQUENCY_WINDOW_SECONDS = 60;
 
+// Responsive avatar variants generated at upload time so cards can serve a
+// few-KB image over slow connections instead of paying on-the-fly
+// optimization latency/cost on every cache miss. The largest variant stays
+// within the existing 800x800 pixel budget.
+const VARIANT_WIDTHS = [96, 192, 400] as const;
+const VARIANT_FORMATS = ["avif", "webp", "jpeg"] as const;
+type VariantFormat = (typeof VARIANT_FORMATS)[number];
+
+const FORMAT_EXTENSION: Record<VariantFormat, string> = {
+  avif: "avif",
+  webp: "webp",
+  jpeg: "jpg",
+};
+
+const FORMAT_CONTENT_TYPE: Record<VariantFormat, string> = {
+  avif: "image/avif",
+  webp: "image/webp",
+  jpeg: "image/jpeg",
+};
+
+// Deterministic storage key for a given user/width/format. Deriving the key
+// from the identity (rather than a random name) means a replacement always
+// overwrites the same objects, so no orphaned variants can accumulate.
+function variantPath(userId: string, width: number, format: VariantFormat) {
+  return `${userId}/photo-${width}.${FORMAT_EXTENSION[format]}`;
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -142,7 +169,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Resize: max 800px on any side, keep aspect ratio
+    // Resize: max 800px on any side, keep aspect ratio. This is the shared
+    // base the per-variant resizes below derive from, so the pixel budget
+    // (and the decode cost) is unchanged from the single-output pipeline.
     sharpInstance = sharpInstance.resize({
       width: 800,
       height: 800,
@@ -150,26 +179,15 @@ export async function POST(request: Request) {
       withoutEnlargement: true,
     });
 
-    let outputBuffer: Buffer;
-    const mimeType = file.type;
-    let extension = "jpg";
-
-    // A file whose container header declares dimensions within budget but
-    // whose actual compressed payload doesn't match (a malformed/adversarial
-    // file, not a resource-exhaustion vector -- decoders are bounded by the
-    // *declared* header size and error out quickly rather than processing
-    // the mismatched real payload) fails here, not at metadata() above.
+    // Encode the base once, then derive every variant from it. A file whose
+    // container header declares dimensions within budget but whose actual
+    // compressed payload doesn't match (a malformed/adversarial file, not a
+    // resource-exhaustion vector -- decoders are bounded by the *declared*
+    // header size and error out quickly rather than processing the
+    // mismatched real payload) fails here, not at metadata() above.
+    let baseBuffer: Buffer;
     try {
-      if (file.type === "image/png") {
-        outputBuffer = await sharpInstance.png().toBuffer();
-        extension = "png";
-      } else if (file.type === "image/webp") {
-        outputBuffer = await sharpInstance.webp().toBuffer();
-        extension = "webp";
-      } else {
-        outputBuffer = await sharpInstance.jpeg().toBuffer();
-        extension = "jpg";
-      }
+      baseBuffer = await sharpInstance.png().toBuffer();
     } catch {
       return NextResponse.json(
         { error: "Invalid or corrupted image data" },
@@ -177,17 +195,66 @@ export async function POST(request: Request) {
       );
     }
 
-    const path = `${user.id}/photo.${extension}`;
+    // Emit all width x format variants in parallel, each within the existing
+    // pixel budget (the largest is 400px, well under the 800px base).
+    let variants: { path: string; buffer: Buffer; contentType: string }[];
+    try {
+      const encoded = await Promise.all(
+        VARIANT_WIDTHS.flatMap((variantWidth) =>
+          VARIANT_FORMATS.map(async (format) => {
+            const pipeline = sharp(baseBuffer).resize({
+              width: variantWidth,
+              height: variantWidth,
+              fit: "inside",
+              withoutEnlargement: true,
+            });
 
-    const { error: uploadError } = await supabase.storage
-      .from("avatars")
-      .upload(path, outputBuffer, {
-        upsert: true,
-        contentType: mimeType,
-      });
+            const variantBuffer =
+              format === "avif"
+                ? await pipeline.avif({ quality: 50 }).toBuffer()
+                : format === "webp"
+                  ? await pipeline.webp({ quality: 70 }).toBuffer()
+                  : await pipeline.jpeg({ quality: 75 }).toBuffer();
 
-    if (uploadError) {
-      return NextResponse.json({ error: uploadError.message }, { status: 500 });
+            return {
+              path: variantPath(user.id, variantWidth, format),
+              buffer: variantBuffer,
+              contentType: FORMAT_CONTENT_TYPE[format],
+            };
+          }),
+        ),
+      );
+      variants = encoded;
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid or corrupted image data" },
+        { status: 400 },
+      );
+    }
+
+    // Uploads are atomic: write every variant first, then only report success
+    // once all writes land. On any partial failure, remove the objects we did
+    // write so a replacement never leaves orphaned variants behind.
+    const written: string[] = [];
+    for (const variant of variants) {
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(variant.path, variant.buffer, {
+          upsert: true,
+          contentType: variant.contentType,
+        });
+
+      if (uploadError) {
+        if (written.length > 0) {
+          await supabase.storage.from("avatars").remove(written);
+        }
+        return NextResponse.json(
+          { error: uploadError.message },
+          { status: 500 },
+        );
+      }
+
+      written.push(variant.path);
     }
 
     // Issue #528: bucket is now private; return a short-lived signed URL so

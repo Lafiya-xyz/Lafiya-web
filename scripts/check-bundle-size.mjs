@@ -2,8 +2,8 @@
 /**
  * scripts/check-bundle-size.mjs
  *
- * Checks that the JS and CSS chunks for the public emergency card route stay
- * within the budgets defined in docs/perf-budget.md.
+ * Checks that the JS, CSS, and web-font assets for the public emergency card
+ * route stay within the budgets defined in docs/perf-budget.md.
  *
  * Called from CI after `npm run build`. Exits non-zero on a budget violation
  * so the build fails fast instead of silently bloating over time.
@@ -13,6 +13,9 @@
  *  - Reads .next/build-manifest.json (always present after `next build`) to
  *    discover which chunk files belong to the card route, then sums their
  *    sizes from .next/static/.
+ *  - Font bytes are summed from .next/static/media/ (where next/font emits
+ *    its self-hosted, subsetted woff2 files) so that oversized or
+ *    un-subsetted fonts fail CI instead of silently regressing.
  *  - Thresholds are set a little above the perf-budget.md targets to avoid
  *    noise from minor framework version bumps:
  *      JS  budget: 60 kB  (target ≤ 50 kB)
@@ -180,8 +183,9 @@ console.log("\n── Bundle size check: card/[id] route ───────�
 console.log(`  Route key: ${routeKey}`);
 console.log(`  JS  chunks: ${jsChunks.length} files → ${kb(jsBytes)}`);
 console.log(`  CSS chunks: ${kb(cssBytes)}`);
+console.log(`  Fonts:      ${fontFileCount} woff2 files → ${kb(fontBytes)}`);
 console.log(
-  `  Budgets:    JS ≤ ${kb(JS_BUDGET_BYTES)} | CSS ≤ ${kb(CSS_BUDGET_BYTES)}`,
+  `  Budgets:    JS ≤ ${kb(JS_BUDGET_BYTES)} | CSS ≤ ${kb(CSS_BUDGET_BYTES)} | Font ≤ ${kb(FONT_BUDGET_BYTES)}`,
 );
 if (liteGzipBytes !== null) {
   console.log(
