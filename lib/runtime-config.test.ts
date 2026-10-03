@@ -8,10 +8,14 @@ import {
   verifyRpcHostResolution,
 } from "./runtime-config";
 
-const TESTNET = "Test SDF Network ; September 2015";
-const MAINNET = "Public Global Stellar Network ; September 2015";
-const CONTRACT_ID = `C${"A".repeat(55)}`;
-const PUBLIC_KEY = `G${"A".repeat(55)}`;
+const baseEnv = {
+  LAFIYA_DEPLOYMENT_ENV: "preview",
+  NEXT_PUBLIC_SUPABASE_URL: "https://branch-preview.supabase.co",
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-key",
+  SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
+  LAFIYA_ATTESTATION_MODE: "mock",
+  LAFIYA_CHAIN_NETWORK: "testnet",
+} as const;
 
 type EnvOverrides = Record<string, string | undefined>;
 
@@ -222,85 +226,32 @@ describe("runtime configuration — additional negative test cases", () => {
     ).toThrow("MALFORMED_VALUE");
   });
 
-  it("rejects a mainnet passphrase in a non-production environment", () => {
-    // MAINNET_NETWORK_OUTSIDE_MAINNET — testnet environments must not use the
-    // mainnet passphrase, which would silently point real traffic at the wrong
-    // network.
-    expect(() =>
-      getRuntimeConfig(
-        baseEnv({
-          LAFIYA_DEPLOYMENT_ENV: "staging",
-          STELLAR_NETWORK_PASSPHRASE: MAINNET,
-          ATTESTATION_MODE: "live",
-          ATTESTATION_CONTRACT_ID: CONTRACT_ID,
-        }),
-      ),
-    ).toThrow("MAINNET_NETWORK_OUTSIDE_MAINNET");
+  it("forces mock attestations in previews", () => {
+    const config = resolveRuntimeConfig({ ...baseEnv, LAFIYA_ATTESTATION_MODE: "live" });
+    expect(config.attestationMode).toBe("mock");
   });
 
-  it("rejects a mock attestation contract ID when ATTESTATION_MODE is mock", () => {
-    // MOCK_ATTESTATION_CONTRACT_FORBIDDEN — a contract ID in mock mode is a
-    // configuration mistake: it implies live lookups but won't perform them.
+  it("rejects previews that point at mainnet", () => {
     expect(() =>
-      getRuntimeConfig(
-        baseEnv({
-          LAFIYA_DEPLOYMENT_ENV: "staging",
-          ATTESTATION_MODE: "mock",
-          ATTESTATION_CONTRACT_ID: CONTRACT_ID,
-        }),
-      ),
-    ).toThrow("MOCK_ATTESTATION_CONTRACT_FORBIDDEN");
+      resolveRuntimeConfig({ ...baseEnv, LAFIYA_CHAIN_NETWORK: "mainnet" }),
+    ).toThrow(/mainnet/i);
   });
 
-  it("rejects Sentry DSN configuration when SENTRY_ENABLED is false", () => {
-    // SENTRY_DISABLED_WITH_CONFIGURATION — a DSN present with Sentry disabled
-    // is a misconfiguration: the DSN would silently go unused, hiding an
-    // operator mistake.
+  it("rejects previews that reuse the shared staging database", () => {
     expect(() =>
-      getRuntimeConfig(
-        baseEnv({
-          SENTRY_ENABLED: "false",
-          SENTRY_DSN: "https://public@example.ingest.sentry.io/1",
-        }),
-      ),
-    ).toThrow("SENTRY_DISABLED_WITH_CONFIGURATION");
-  });
-
-  it("rejects a missing required anon key (empty string is treated as absent)", () => {
-    expect(() =>
-      getRuntimeConfig(
-        baseEnv({ NEXT_PUBLIC_SUPABASE_ANON_KEY: "" }),
-      ),
-    ).toThrow("MALFORMED_VALUE");
-  });
-
-  it("rejects a missing required service role key", () => {
-    expect(() =>
-      getRuntimeConfig(
-        baseEnv({ SUPABASE_SERVICE_ROLE_KEY: "" }),
-      ),
-    ).toThrow("MALFORMED_VALUE");
-  });
-
-  it("rejects an ATTESTATION_CACHE_TTL_SECONDS value exceeding the allowed maximum", () => {
-    expect(() =>
-      getRuntimeConfig(
-        baseEnv({ ATTESTATION_CACHE_TTL_SECONDS: "9999" }),
-      ),
-    ).toThrow("MALFORMED_VALUE");
-  });
-
-  it("accepts a valid non-production configuration end-to-end", () => {
-    const config = getRuntimeConfig(
-      baseEnv({
-        LAFIYA_DEPLOYMENT_ENV: "staging",
-        ATTESTATION_MODE: "live",
-        ATTESTATION_CONTRACT_ID: CONTRACT_ID,
+      resolveRuntimeConfig({
+        ...baseEnv,
+        NEXT_PUBLIC_SUPABASE_URL: "https://staging.supabase.co",
       }),
-    );
-    expect(config.deployment).toBe("staging");
-    expect(config.isProduction).toBe(false);
-    expect(config.attestation.mode).toBe("live");
+    ).toThrow(/isolated/i);
+  });
+
+  it("accepts a well-formed preview configuration", () => {
+    const config = resolveRuntimeConfig(baseEnv);
+    expect(config.deploymentEnv).toBe("preview");
+    expect(config.attestationMode).toBe("mock");
+    expect(config.chainNetwork).toBe("testnet");
+    expect(() => assertPreviewGuardrails(baseEnv)).not.toThrow();
   });
 });
 

@@ -22,6 +22,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:property": "vitest run tests/property/chw-intent-model.test.ts",
+    "test:property:nightly": "cross-env CHW_PROPERTY_NUM_RUNS=1000 vitest run tests/property/chw-intent-model.test.ts",
     "test:integration": "vitest run -c vitest.integration.config.ts",
     "test:integration:flake": "node scripts/check-integration-flake.mjs",
     "test:e2e": "playwright test",

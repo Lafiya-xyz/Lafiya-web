@@ -1,6 +1,14 @@
--- Local-dev-only fixture: one demo patient, for manually exercising the
--- profile editor, the public card page, and QR scanning against
--- `npm run dev` + `supabase start`. Runs on every `supabase db reset`.
+-- Fixture data for local dev and per-PR preview environments.
+--
+-- Local dev: runs on every `supabase db reset` against `npm run dev` +
+-- `supabase start`, for manually exercising the profile editor, the public
+-- card page, and QR scanning.
+--
+-- Per-PR previews (issue #611): the preview workflow applies migrations and
+-- then this seed against the ephemeral Supabase branch so reviewers get a
+-- deterministic synthetic dataset. The data below is entirely synthetic and
+-- contains no real PHI.
+--
 -- Never applied against a hosted/production project.
 
 insert into auth.users (
@@ -23,7 +31,8 @@ values (
   now(),
   now(),
   '', '', '', '', '', ''
-);
+)
+on conflict (id) do nothing;
 
 -- Required alongside auth.users for GoTrue's email/password sign-in to
 -- find the identity (this is what supabase.auth.signUp() creates for you
@@ -42,7 +51,8 @@ values (
   now(),
   now(),
   now()
-);
+)
+on conflict (provider_id, provider) do nothing;
 
 insert into public.profiles (
   user_id, card_public_id, name, date_of_birth, blood_group, genotype,
@@ -60,8 +70,15 @@ values (
   array['Asthma'],
   '[{"name": "Halima Yusuf", "phone": "+2348012345678", "relationship": "Mother"}]'::jsonb,
   'Hausa'
-);
+)
+on conflict (user_id) do nothing;
 
 insert into public.consent_events(user_id,purpose,purpose_version,action,idempotency_key)
 select '00000000-0000-0000-0000-000000000001', purpose, 1, 'acknowledged', gen_random_uuid()
-from (values ('emergency_public_disclosure'), ('offline_caching')) purposes(purpose);
+from (values ('emergency_public_disclosure'), ('offline_caching')) purposes(purpose)
+where not exists (
+  select 1 from public.consent_events ce
+  where ce.user_id = '00000000-0000-0000-0000-000000000001'
+    and ce.purpose = purposes.purpose
+    and ce.purpose_version = 1
+);

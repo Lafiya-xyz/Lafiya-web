@@ -189,6 +189,7 @@ type RpcEndpointKind = "rpc" | "horizon";
 export type RuntimeConfig = {
   deployment: DeploymentEnvironment;
   isProduction: boolean;
+  isPreview: boolean;
   buildRevision: string;
   schemaCompatibility: string;
   attestation: {
@@ -383,6 +384,7 @@ export function getRuntimeConfig(
   const config = parsed.data;
   const deployment = inferDeployment(env);
   const isProduction = deployment === "production" || deployment === "mainnet";
+  const isPreview = deployment === "preview";
   const attestationMode =
     config.ATTESTATION_MODE ??
     (config.ATTESTATION_CONTRACT_ID || isProduction ? "live" : "mock");
