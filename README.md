@@ -106,6 +106,8 @@ Implementation: `public/sw.js` (the worker), `public/offline-cache-helpers.js` (
 
 The Soroban attestation registry, attester allowlist, and CHW verifier tool live in the `lafiya-contracts` and `lafiya-verifier` repos respectively — see [Lafiya Organization](#lafiya-organization).
 
+- **Wallet passes (in progress):** an "Add to Wallet" pass puts the emergency QR on the lock screen instead of requiring the app or a printout. The pass-content model and API routes (`lib/wallet-passes/`, `app/api/wallet/*`) are implemented and unit-tested, but signing is not yet functional on any deployment pending real Apple/Google credentials — see [`docs/wallet-passes.md`](docs/wallet-passes.md).
+
 ## Attestation & Trust Layer
 
 Lafiya Proof is the Stellar-native trust and payment layer underneath the Lafiya Card:
@@ -495,3 +497,11 @@ These works directly informed Lafiya's design and are the intended reading for c
 _Built for the Stellar ecosystem. Open source. Community owned._
 
 </div>
+
+## Handsoff notes
+
+<!-- handsoff-issue-620 -->
+- #620: [API] Deliver HMAC-signed webhooks to partners for attestation and verification events
+
+<!-- handsoff-issue-623 -->
+- #623: [Architecture] Split `profile/actions.ts` into domain use-cases with ports and adapters

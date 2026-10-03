@@ -16,8 +16,16 @@ export default defineConfig({
   test: {
     name: "integration",
     environment: "node",
+    // Each worker gets its own cloned database (see
+    // tests/integration/global-setup.ts), so the suite can run in parallel
+    // without cross-worker interference.
+    globalSetup: ["./tests/integration/global-setup.ts"],
     setupFiles: ["./tests/integration/setup.ts"],
     include: ["tests/integration/**/*.test.ts"],
+    // Run at least 4 workers so the per-worker database isolation actually
+    // buys us parallel wall-clock time.
+    minWorkers: 4,
+    maxWorkers: 4,
     // Real network calls to a local Supabase stack are slower than jsdom
     // unit tests; give them room rather than flaking under load.
     testTimeout: 20_000,

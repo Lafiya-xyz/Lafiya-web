@@ -1,55 +1,41 @@
-import Image from "next/image";
+'use client';
 
-import { formatDate } from "@/lib/format/datetime";
-import { generateQrDataUrl } from "@/lib/qr/generateQrDataUrl";
+import { useEffect, useRef, useState } from 'react';
+import QRCode from 'qrcode';
 
 import { CopyLinkButton } from "./copy-link-button";
+import { NfcWriteButton } from "./nfc-write-button";
 import { RegenerateCardButton } from "./regenerate-card-button";
 
-export async function QrCardDisplay({
-  cardUrl,
-  legacySunsetAt,
-}: {
-  cardUrl: string;
-  legacySunsetAt: string;
-}) {
-  let qrDataUrl: string | null = null;
-  let qrError: string | null = null;
+    let cancelled = false;
 
-  try {
-    qrDataUrl = await generateQrDataUrl(cardUrl);
-  } catch (error) {
-    if (error instanceof QrCapacityError) {
-      qrError =
-        "This card URL is too long to display as a QR code. Copy the link below to share it manually.";
-    } else {
-      qrError = "Could not generate QR code. Copy the link below to share it.";
-    }
-  }
+    QRCode.toCanvas(
+      canvas,
+      value,
+      {
+        width: size,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#ffffff',
+        },
+      },
+      (err) => {
+        if (cancelled) return;
+        setError(err ? 'Unable to render QR code.' : null);
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [value, size]);
 
   return (
-    <div className="flex flex-col items-center gap-4 rounded-lg border border-zinc-300 p-6 text-center dark:border-zinc-700">
-      <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-        Legacy emergency card (migration link)
-      </p>
-      <Image
-        src={qrDataUrl}
-        alt="QR code linking to your public emergency card"
-        width={200}
-        height={200}
-        unoptimized
-        className="rounded-md"
-      />
-      <p className="sr-only">
-        This QR code links to your public emergency card — the page a first
-        responder or clinician sees when they scan it. It shows only the health
-        information you have chosen to make visible in your privacy settings.
-        No login is required to view it. Scan or share the link below to give
-        responders access to your emergency information.
-      </p>
-      <p
-        data-testid="card-url"
-        className="max-w-xs text-xs break-all text-zinc-500 dark:text-zinc-500"
+    <div className="flex w-full min-w-0 flex-col items-center gap-2">
+      <div
+        className="w-full max-w-full min-w-0 overflow-hidden rounded-lg border border-neutral-300 bg-white p-3 forced-colors:border-[CanvasText]"
+        style={{ forcedColorAdjust: 'none' }}
       >
         {cardUrl}
       </p>
@@ -75,10 +61,19 @@ export async function QrCardDisplay({
         This legacy QR will stop working on {formatDate(legacySunsetAt)}.
         Create a current emergency QR below.
       </p>
-      <div className="flex gap-3">
+      <div className="flex flex-wrap justify-center gap-3">
         <CopyLinkButton text={cardUrl} />
+        <NfcWriteButton cardUrl={cardUrl} revokeHref="#capability-share-heading" />
         <RegenerateCardButton />
       </div>
+      {error ? (
+        <p
+          role="alert"
+          className="max-w-full break-words text-sm text-red-600 forced-colors:text-[CanvasText]"
+        >
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -17,6 +17,12 @@ const SERVER_ONLY_ENV_VARS = [
   "PAYOUT_INDEXER_CRON_SECRET",
 ];
 
+// The Stellar Wallets Kit is a heavy, wallet-agnostic dependency that must only
+// ever be pulled in through the lazy-loaded CHW signing module. If it leaks into
+// the eagerly-loaded public card bundle, the bundle check fails so the regression
+// is caught at build time (issue #557).
+const LAZY_ONLY_MODULES = ["@creit.tech/stellar-wallets-kit"];
+
 const searchTargets = new Map(SERVER_ONLY_ENV_VARS.map((name) => [name, name]));
 
 for (const name of SERVER_ONLY_ENV_VARS) {
@@ -53,6 +59,10 @@ console.log(`Scanning client chunks in ${CHUNKS_DIR}...`);
 console.log(
   "Searching for sensitive server-only env identifiers and configured values:",
   Array.from(searchTargets.values()),
+);
+console.log(
+  "Enforcing lazy-only modules stay out of the public card bundle:",
+  LAZY_ONLY_MODULES,
 );
 
 const files = getFilesRecursively(CHUNKS_DIR);

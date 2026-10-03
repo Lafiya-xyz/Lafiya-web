@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 
 import { repairProfileSecret } from "./actions";
+import { StepUpChallenge } from "./step-up-challenge";
 
 /**
  * Shown on /profile when the patient's profile exists but the per-patient
@@ -16,9 +17,16 @@ export function MissingSecretBanner() {
     async () => repairProfileSecret(),
     undefined,
   );
+  const formRef = useRef<HTMLFormElement>(null);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    if (isPending) setDismissed(false);
+  }, [isPending]);
 
   const repaired =
     state?.status === "already_ok" || state?.status === "repaired";
+  const stepUpRequired = state?.status === "step_up_required" && !dismissed;
 
   return (
     <div
@@ -38,7 +46,7 @@ export function MissingSecretBanner() {
         </p>
       ) : null}
 
-      <form action={formAction} className="mt-3">
+      <form ref={formRef} action={formAction} className="mt-3">
         <button
           type="submit"
           disabled={isPending || repaired}
@@ -51,6 +59,13 @@ export function MissingSecretBanner() {
               : "Repair verification setup"}
         </button>
       </form>
+
+      {stepUpRequired ? (
+        <StepUpChallenge
+          onVerified={() => formRef.current?.requestSubmit()}
+          onCancel={() => setDismissed(true)}
+        />
+      ) : null}
     </div>
   );
 }

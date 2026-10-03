@@ -52,6 +52,12 @@ export type ProfileRow = {
   current_revision_id: string | null;
   disclosure_policy: DisclosurePolicy;
   legacy_card_sunset_at: string;
+  /**
+   * Fields the patient marked clinician-only (issue #543 break-glass).
+   * Never exposed via get_emergency_card() or consume_emergency_capability()
+   * — only through open_break_glass_access() to a verified clinician.
+   */
+  clinician_disclosure_policy: DisclosurePolicy;
 };
 
 export type EmergencyCapabilityPurpose = "emergency" | "temporary";
@@ -73,18 +79,91 @@ export type EmergencyCapabilityRow = {
   created_at: string;
 };
 
+/** Issue #628: HMAC-keyed duplicate-detection blocking key. */
+export type PatientBlockingKeyRow = {
+  user_id: string;
+  key_type: "phone" | "name_dob";
+  key_hash: string;
+  updated_at: string;
+};
+
+export type AccountMergeRequestRow = {
+  id: string;
+  requester_user_id: string;
+  other_user_id: string | null;
+  status: "pending" | "verified" | "merged" | "cancelled";
+  requester_verified_at: string | null;
+  other_verified_at: string | null;
+  expires_at: string;
+  created_at: string;
+};
+
+export type AccountMergeAuditRow = {
+  id: string;
+  merge_request_id: string;
+  survivor_user_id: string;
+  loser_user_id: string;
+  moved: Record<string, number>;
+  adjusted_obligations: number;
+  merged_at: string;
+};
+
+export type AccountNotificationOutboxRow = {
+  id: string;
+  user_id: string;
+  template: "account_merged_survivor" | "account_merged_loser";
+  reference_id: string;
+  created_at: string;
+  sent_at: string | null;
+};
+
+/** Issue #631: Argon2id hash of a capability's printed card PIN. */
+export type EmergencyCapabilityPinRow = {
+  capability_id: string;
+  pin_hash: string;
+  failed_attempts: number;
+  locked_at: string | null;
+  unlock_digest: string | null;
+  unlock_expires_at: string | null;
+  created_at: string;
+};
+
 export type CardAccessEventRow = {
   id: string;
   user_id: string;
   capability_id: string | null;
   access_kind: "legacy" | "capability";
-  outcome: "served" | "inactive";
+  outcome: "served" | "inactive" | "pin_success" | "pin_failure" | "pin_locked";
   observed_at: string;
+};
+
+/** Row shape of public.emergency_contact_notification_events. See Issue #542. */
+export type EmergencyContactNotificationEventRow = {
+  id: string;
+  user_id: string;
+  capability_id: string | null;
+  facility_name: string | null;
+  sent_at: string;
 };
 
 export type DisclosurePolicy = {
   version: 1;
   fields: Record<string, boolean>;
+  /** Issue #631: fields that require the printed card PIN. */
+  requires_card_pin?: string[];
+};
+
+/** Row shape of public.break_glass_accesses (issue #543). Immutable audit trail. */
+export type BreakGlassAccessRow = {
+  id: string;
+  patient_user_id: string;
+  clinician_id: string;
+  revision_id: string;
+  reason: string;
+  fields_disclosed: Record<string, boolean>;
+  opened_at: string;
+  expires_at: string;
+  patient_notified_at: string | null;
 };
 
 export type RecordLifecycleState =
@@ -118,7 +197,8 @@ export type ConsentPurpose =
   | "emergency_public_disclosure"
   | "offline_caching"
   | "clinical_verification"
-  | "optional_analytics";
+  | "optional_analytics"
+  | "emergency_contact_notification";
 
 /** Row shape of public.consent_purposes. */
 export type ConsentPurposeRow = {
@@ -282,6 +362,8 @@ export type PayoutObligationRow = {
   adjustment_reason: string | null;
 };
 
+export type PayoutSettlementStatus = "matched" | "quarantined";
+
 export type PayoutSettlementRow = {
   id: string;
   obligation_id: string | null;
@@ -291,16 +373,42 @@ export type PayoutSettlementRow = {
   asset_identifier: string;
   sponsor_pool: string;
   settled_at: string;
-  status: "matched" | "quarantined";
+  status: PayoutSettlementStatus;
   reason_code: string | null;
   created_at: string;
 };
 
 export type ProtocolIndexerCheckpointRow = {
-  stream: "attestations" | "payments";
+  stream: "attestations" | "payments" | "contract_admin";
   cursor: string;
   ledger_sequence: number | null;
   ledger_hash: string | null;
+  updated_at: string;
+};
+
+export type AttestationContractAdminEventRow = {
+  event_id: string;
+  kind:
+    | "wasm_upgrade"
+    | "admin_transfer"
+    | "allowlist_change"
+    | "pause"
+    | "unpause";
+  contract_id: string;
+  ledger_sequence: number;
+  transaction_hash: string;
+  wasm_hash: string | null;
+  subject: string | null;
+  action: "added" | "removed" | null;
+  observed_at: string;
+  indexed_at: string;
+};
+
+export type AttestationContractTrustStateRow = {
+  singleton: boolean;
+  state: "trusted" | "needs_review" | "paused";
+  wasm_hash: string | null;
+  reason_code: string | null;
   updated_at: string;
 };
 
@@ -327,7 +435,7 @@ export type EmergencyCardRow = {
   chronic_conditions: string[] | null;
   emergency_contacts: EmergencyContact[] | null;
   language: string | null;
-  disclosure_states: Record<string, "disclosed" | "withheld">;
+  disclosure_states: Record<string, "disclosed" | "withheld" | "pin_required">;
   schema_version: number;
   offline_cache_allowed: boolean;
   trust_state: TrustDecisionRow["state"];
@@ -349,6 +457,50 @@ export type ConsentLogRow = {
   accepted_at: string;
 };
 
+// ---------------------------------------------------------------------------
+// Issue #531: Delegated caregiver model
+// ---------------------------------------------------------------------------
+
+/** Row shape of public.dependants. */
+export type DependantRow = {
+  id: string;
+  guardian_user_id: string;
+  name: string;
+  date_of_birth: string | null;
+  language: string | null;
+  blood_group: string | null;
+  genotype: string | null;
+  allergies: string[];
+  medications: string[];
+  chronic_conditions: string[];
+  emergency_contacts: EmergencyContact[];
+  card_public_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type GuardianshipRole = "primary" | "secondary";
+
+/** Row shape of public.guardianships. */
+export type GuardianshipRow = {
+  id: string;
+  guardian_id: string;
+  dependant_profile_id: string;
+  role: GuardianshipRole;
+  granted_at: string;
+  revoked_at: string | null;
+};
+
+/** Row shape of public.guardian_audit_log. */
+export type GuardianAuditLogRow = {
+  id: string;
+  actor_id: string;
+  subject_id: string;
+  action: string;
+  meta: Record<string, unknown>;
+  occurred_at: string;
+};
+
 /** Row shape of public.rate_limits. See lib/rate-limit.ts. */
 export type RateLimitRow = {
   key: string;
@@ -363,11 +515,37 @@ export type RateLimitRecordFailureRow = {
   blocked_until: string | null;
 };
 
+/** Coarse browser family stored for a session (never a raw user agent). */
+export type SessionBrowserFamily =
+  | "Chrome"
+  | "Edge"
+  | "Firefox"
+  | "Safari"
+  | "Opera"
+  | "Samsung Internet"
+  | "Other";
+
+/** Coarse OS family stored for a session (never a version or device model). */
+export type SessionOsFamily =
+  "Android" | "iOS" | "Windows" | "macOS" | "Linux" | "ChromeOS" | "Other";
+
+/** Row shape of public.user_sessions. See lib/sessions/. */
+export type UserSessionRow = {
+  session_id: string;
+  user_id: string;
+  browser: SessionBrowserFamily;
+  os: SessionOsFamily;
+  created_at: string;
+  last_seen_at: string;
+};
+
 /** Row shape of public.frequency_limits. See lib/frequency-limit.ts. */
 export type FrequencyLimitRow = {
   key: string;
   window_start: string;
   count: number;
+  /** The p_window_seconds this row's window was opened/last refreshed with (Issue #514). */
+  window_seconds: number;
 };
 
 export type ChwPayoutStatus = "pending" | "paid";
@@ -411,6 +589,12 @@ export type FrequencyLimitCheckAndIncrementRow = {
   allowed: boolean;
   count: number;
   retry_after_seconds: number;
+};
+
+/** Return row shape of public.purge_expired_limits(p_batch_size int). See Issue #514. */
+export type PurgeExpiredLimitsRow = {
+  rate_limits_purged: number;
+  frequency_limits_purged: number;
 };
 
 /**
@@ -513,10 +697,24 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      emergency_contact_notification_events: {
+        Row: EmergencyContactNotificationEventRow;
+        Insert: Pick<EmergencyContactNotificationEventRow, "user_id"> &
+          Partial<EmergencyContactNotificationEventRow>;
+        Update: never;
+        Relationships: [];
+      };
       frequency_limits: {
         Row: FrequencyLimitRow;
         Insert: Pick<FrequencyLimitRow, "key"> & Partial<FrequencyLimitRow>;
         Update: Partial<FrequencyLimitRow>;
+        Relationships: [];
+      };
+      user_sessions: {
+        Row: UserSessionRow;
+        // Written only through touch_my_session() / revoke_my_session().
+        Insert: never;
+        Update: never;
         Relationships: [];
       };
       rate_limits: {
@@ -627,11 +825,87 @@ export type Database = {
         Update: Partial<Omit<PayoutSettlementRow, "id">>;
         Relationships: [];
       };
+      ledger_checkpoints: {
+        Row: LedgerCheckpointRow;
+        Insert: Partial<LedgerCheckpointRow>;
+        Update: Partial<LedgerCheckpointRow>;
+        Relationships: [];
+      };
+      payout_evidence: {
+        Row: PayoutEvidenceRow;
+        Insert: Omit<PayoutEvidenceRow, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<Omit<PayoutEvidenceRow, "id">>;
+        Relationships: [];
+      };
+      conflicting_observations: {
+        Row: ConflictingObservationRow;
+        Insert: Partial<ConflictingObservationRow>;
+        Update: Partial<Omit<ConflictingObservationRow, "id">>;
+        Relationships: [];
+      };
       protocol_indexer_checkpoints: {
         Row: ProtocolIndexerCheckpointRow;
         Insert: Pick<ProtocolIndexerCheckpointRow, "stream" | "cursor"> &
           Partial<ProtocolIndexerCheckpointRow>;
         Update: Partial<Omit<ProtocolIndexerCheckpointRow, "stream">>;
+        Relationships: [];
+      };
+      attestation_contract_admin_events: {
+        Row: AttestationContractAdminEventRow;
+        Insert: Omit<AttestationContractAdminEventRow, "indexed_at"> &
+          Partial<Pick<AttestationContractAdminEventRow, "indexed_at">>;
+        Update: Partial<AttestationContractAdminEventRow>;
+        Relationships: [];
+      };
+      attestation_contract_trust_state: {
+        Row: AttestationContractTrustStateRow;
+        Insert: Pick<AttestationContractTrustStateRow, "state"> &
+          Partial<AttestationContractTrustStateRow>;
+        Update: Partial<AttestationContractTrustStateRow>;
+        Relationships: [];
+      };
+      patient_blocking_keys: {
+        Row: PatientBlockingKeyRow;
+        Insert: Omit<PatientBlockingKeyRow, "updated_at"> &
+          Partial<Pick<PatientBlockingKeyRow, "updated_at">>;
+        Update: Partial<PatientBlockingKeyRow>;
+        Relationships: [];
+      };
+      account_merge_requests: {
+        Row: AccountMergeRequestRow;
+        Insert: Pick<
+          AccountMergeRequestRow,
+          "requester_user_id" | "other_user_id" | "expires_at"
+        > &
+          Partial<AccountMergeRequestRow>;
+        Update: Partial<
+          Pick<
+            AccountMergeRequestRow,
+            "status" | "requester_verified_at" | "other_verified_at"
+          >
+        >;
+        Relationships: [];
+      };
+      account_merge_audit: {
+        Row: AccountMergeAuditRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      account_notification_outbox: {
+        Row: AccountNotificationOutboxRow;
+        Insert: never;
+        Update: Partial<Pick<AccountNotificationOutboxRow, "sent_at">>;
+        Relationships: [];
+      };
+      emergency_capability_pins: {
+        Row: EmergencyCapabilityPinRow;
+        Insert: Pick<EmergencyCapabilityPinRow, "capability_id" | "pin_hash"> &
+          Partial<EmergencyCapabilityPinRow>;
+        Update: Partial<Omit<EmergencyCapabilityPinRow, "capability_id">>;
         Relationships: [];
       };
       protocol_quarantine: {
@@ -642,6 +916,33 @@ export type Database = {
         > &
           Partial<ProtocolQuarantineRow>;
         Update: Partial<Omit<ProtocolQuarantineRow, "id">>;
+        Relationships: [];
+      };
+      dependants: {
+        Row: DependantRow;
+        Insert: Pick<DependantRow, "guardian_user_id" | "name"> &
+          Partial<DependantRow>;
+        Update: Partial<Omit<DependantRow, "id" | "guardian_user_id">>;
+        Relationships: [];
+      };
+      guardianships: {
+        Row: GuardianshipRow;
+        Insert: Pick<
+          GuardianshipRow,
+          "guardian_id" | "dependant_profile_id"
+        > &
+          Partial<GuardianshipRow>;
+        Update: Partial<Omit<GuardianshipRow, "id">>;
+        Relationships: [];
+      };
+      guardian_audit_log: {
+        Row: GuardianAuditLogRow;
+        Insert: Pick<
+          GuardianAuditLogRow,
+          "actor_id" | "subject_id" | "action"
+        > &
+          Partial<GuardianAuditLogRow>;
+        Update: never;
         Relationships: [];
       };
     };
@@ -686,9 +987,75 @@ export type Database = {
         Args: {
           p_capability_id: string;
           p_access_kind: "legacy" | "capability";
-          p_outcome: "served" | "inactive";
+          p_outcome:
+            | "served"
+            | "inactive"
+            | "pin_success"
+            | "pin_failure"
+            | "pin_locked";
         };
         Returns: undefined;
+      };
+      find_user_id_by_email: {
+        Args: { p_email: string };
+        Returns: string | null;
+      };
+      count_duplicate_candidates: {
+        Args: { p_user_id: string };
+        Returns: number;
+      };
+      accounts_share_blocking_key: {
+        Args: { p_a: string; p_b: string };
+        Returns: boolean;
+      };
+      recompute_patient_payout_eligibility: {
+        Args: { p_user_id: string };
+        Returns: number;
+      };
+      merge_patient_accounts: {
+        Args: { p_merge_request_id: string; p_survivor_user_id: string };
+        Returns: AccountMergeAuditRow;
+      };
+      get_card_pin_gate: {
+        Args: { p_capability_id: string; p_unlock_digest: string };
+        Returns: {
+          gated_fields: string[];
+          has_pin: boolean;
+          locked: boolean;
+          unlocked: boolean;
+        }[];
+      };
+      get_legacy_card_pin_gated_fields: {
+        Args: { p_card_id: string };
+        Returns: string[];
+      };
+      set_card_pin: {
+        Args: { p_capability_id: string; p_pin_hash: string };
+        Returns: undefined;
+      };
+      begin_card_pin_attempt: {
+        Args: { p_token_digest: string };
+        Returns: {
+          capability_id: string;
+          pin_hash: string | null;
+          allowed: boolean;
+        }[];
+      };
+      complete_card_pin_success: {
+        Args: {
+          p_capability_id: string;
+          p_unlock_digest: string;
+          p_unlock_expires_at: string;
+        };
+        Returns: undefined;
+      };
+      get_my_card_pin_access_summary: {
+        Args: Record<string, never>;
+        Returns: {
+          pin_successes_30d: number;
+          pin_failures_30d: number;
+          last_pin_failure_at: string | null;
+        }[];
       };
       record_legacy_card_access_event: {
         Args: { p_card_id: string };
@@ -699,6 +1066,22 @@ export type Database = {
         Returns: {
           views_last_30_days: number;
           last_viewed_at: string | null;
+        }[];
+      };
+      notify_emergency_contacts: {
+        Args: { p_token_digest: string; p_facility_name?: string | null };
+        Returns: {
+          allowed: boolean;
+          reason: string;
+          contacts: EmergencyContact[] | null;
+          patient_first_name: string | null;
+        }[];
+      };
+      get_my_emergency_contact_notification_summary: {
+        Args: Record<string, never>;
+        Returns: {
+          notifications_last_30_days: number;
+          last_sent_at: string | null;
         }[];
       };
       save_record_revision: {
@@ -731,6 +1114,18 @@ export type Database = {
         Args: { p_expected_revision_id: string };
         Returns: ReattestationRequestRow;
       };
+      touch_my_session: {
+        Args: { p_browser: SessionBrowserFamily; p_os: SessionOsFamily };
+        Returns: boolean;
+      };
+      revoke_my_session: {
+        Args: { p_session_id: string };
+        Returns: boolean;
+      };
+      purge_expired_user_sessions: {
+        Args: Record<string, never>;
+        Returns: number;
+      };
       rate_limit_record_failure: {
         Args: { p_key: string };
         Returns: RateLimitRecordFailureRow[];
@@ -742,6 +1137,10 @@ export type Database = {
           p_window_seconds: number;
         };
         Returns: FrequencyLimitCheckAndIncrementRow[];
+      };
+      purge_expired_limits: {
+        Args: { p_batch_size?: number };
+        Returns: PurgeExpiredLimitsRow[];
       };
       apply_chw_attestation: {
         Args: {
@@ -839,10 +1238,53 @@ export type Database = {
         Args: { p_stream: string; p_event_id: string; p_reason_code: string };
         Returns: number;
       };
+      can_manage_profile: {
+        Args: { p_dependant_id: string };
+        Returns: boolean;
+      };
+      create_dependant: {
+        Args: {
+          p_name: string;
+          p_date_of_birth?: string | null;
+          p_language?: string | null;
+          p_blood_group?: string | null;
+          p_genotype?: string | null;
+          p_allergies?: string[];
+          p_medications?: string[];
+          p_chronic_conditions?: string[];
+          p_emergency_contacts?: Record<string, unknown>[];
+        };
+        Returns: DependantRow;
+      };
+      update_dependant: {
+        Args: {
+          p_dependant_id: string;
+          p_name?: string | null;
+          p_date_of_birth?: string | null;
+          p_language?: string | null;
+          p_blood_group?: string | null;
+          p_genotype?: string | null;
+          p_allergies?: string[] | null;
+          p_medications?: string[] | null;
+          p_chronic_conditions?: string[] | null;
+          p_emergency_contacts?: Record<string, unknown>[] | null;
+        };
+        Returns: DependantRow;
+      };
+      delete_dependant: {
+        Args: { p_dependant_id: string };
+        Returns: undefined;
+      };
+      get_my_dependants: {
+        Args: Record<string, never>;
+        Returns: DependantRow[];
+      };
     };
     Enums: {
       blood_group_enum: BloodGroup;
+      chw_payout_status: ChwPayoutStatus;
       genotype_enum: Genotype;
+      payout_settlement_status: PayoutSettlementStatus;
       record_lifecycle_state: RecordLifecycleState;
     };
   };

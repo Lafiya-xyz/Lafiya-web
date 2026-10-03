@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildOfflineBannerHtml,
+  cardSecretFromUrl,
   createOfflineEnvelope,
+  decryptOfflineEnvelope,
+  encryptOfflineEnvelope,
   formatCachedAt,
   injectOfflineBanner,
   OFFLINE_MAX_AGE_MS,
+  offlineCacheKey,
+  offlineEnvelopeResponse,
   renderOfflineEnvelope,
   validateOfflineEnvelope,
 } from "../../public/offline-cache-helpers.js";
@@ -164,6 +169,110 @@ describe("offline-cache-helpers", () => {
         "Current authorization and revocation cannot be checked offline",
       );
       expect(html).toContain("Synthetic Patient");
+    });
+  });
+
+  describe("encryption at rest (issue #630)", () => {
+    const token = "c1_" + "A".repeat(43);
+    const url = `https://lafiya.example/card/c/${token}`;
+
+    async function encryptedBytes() {
+      const envelope = await createOfflineEnvelope(
+        sourceHtml(),
+        "2026-08-21T00:00:00.000Z",
+      );
+      const cacheKey = await offlineCacheKey(url);
+      const record = (await encryptOfflineEnvelope(
+        envelope,
+        cardSecretFromUrl(url),
+        cacheKey,
+      ))!;
+      const raw = new Uint8Array(
+        await offlineEnvelopeResponse(record).arrayBuffer(),
+      );
+      return { envelope, cacheKey, record, raw };
+    }
+
+    it("keeps PHI and the capability out of the raw cached bytes and key", async () => {
+      const { cacheKey, raw } = await encryptedBytes();
+      const text = new TextDecoder().decode(raw);
+      for (const phi of [
+        "Synthetic Patient",
+        "Penicillin",
+        "Hausa",
+        "O+",
+        "projection",
+        token,
+      ]) {
+        expect(text).not.toContain(phi);
+      }
+      expect(cacheKey).toMatch(/^\/__lafiya-offline-envelope\/[0-9a-f]{64}$/);
+      expect(cacheKey).not.toContain(token);
+    });
+
+    it("decrypts back to a valid envelope from the same URL", async () => {
+      const { envelope, cacheKey, raw } = await encryptedBytes();
+      const stored = JSON.parse(new TextDecoder().decode(raw));
+      const decrypted = await decryptOfflineEnvelope(
+        stored,
+        cardSecretFromUrl(url),
+        cacheKey,
+      );
+      expect(decrypted).toEqual(envelope);
+      await expect(
+        validateOfflineEnvelope(decrypted, "2026-08-21T00:00:01.000Z"),
+      ).resolves.toEqual({ valid: true, reason: null });
+    });
+
+    it("refuses a different link, a swapped cache entry, tampering, and v1 plaintext", async () => {
+      const { envelope, cacheKey, record } = await encryptedBytes();
+      const otherUrl = `https://lafiya.example/card/c/c1_${"B".repeat(43)}`;
+      expect(
+        await decryptOfflineEnvelope(
+          record,
+          cardSecretFromUrl(otherUrl),
+          cacheKey,
+        ),
+      ).toBeNull();
+      expect(
+        await decryptOfflineEnvelope(
+          record,
+          cardSecretFromUrl(url),
+          await offlineCacheKey(otherUrl),
+        ),
+      ).toBeNull();
+      const tampered = {
+        ...record,
+        ciphertext: record.ciphertext.replace(/^./, (c: string) =>
+          c === "A" ? "B" : "A",
+        ),
+      };
+      expect(
+        await decryptOfflineEnvelope(
+          tampered,
+          cardSecretFromUrl(url),
+          cacheKey,
+        ),
+      ).toBeNull();
+      expect(
+        await decryptOfflineEnvelope(
+          envelope,
+          cardSecretFromUrl(url),
+          cacheKey,
+        ),
+      ).toBeNull();
+    });
+
+    it("uses a fresh salt and IV per envelope", async () => {
+      const first = await encryptedBytes();
+      const second = await encryptedBytes();
+      expect(first.record.salt).not.toBe(second.record.salt);
+      expect(first.record.iv).not.toBe(second.record.iv);
+    });
+
+    it("only derives secrets from card URLs", () => {
+      expect(cardSecretFromUrl(url)).toBe(token);
+      expect(cardSecretFromUrl("https://lafiya.example/profile")).toBeNull();
     });
   });
 });

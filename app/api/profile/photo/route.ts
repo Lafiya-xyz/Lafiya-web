@@ -4,6 +4,7 @@ import sharp from "sharp";
 import { checkAndIncrementFrequency } from "@/lib/frequency-limit";
 import { logError } from "@/lib/logging/logger";
 import { createClient } from "@/lib/supabase/server";
+import { getAvatarSignedUrl } from "@/lib/storage/avatar";
 
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp"];
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -189,9 +190,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: uploadError.message }, { status: 500 });
     }
 
-    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+    // Issue #528: bucket is now private; return a short-lived signed URL so
+    // the client can show an immediate preview, and also return the canonical
+    // storage path so the profile form stores the path (not a time-limited
+    // signed URL) in profiles.photo_url.
+    const storagePath = path;
+    const signedUrl = await getAvatarSignedUrl(storagePath);
+    if (!signedUrl) {
+      return NextResponse.json(
+        { error: "Photo uploaded but could not generate preview URL." },
+        { status: 500 },
+      );
+    }
 
-    return NextResponse.json({ publicUrl: data.publicUrl });
+    // publicUrl is kept as field name for backwards compat with the client.
+    // The client stores photoUrl from this field; the signed URL is short-lived
+    // so the profile form stores the storagePath which is stable.
+    return NextResponse.json({ publicUrl: storagePath, signedUrl });
   } catch (error: unknown) {
     logError("Error handling avatar upload", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

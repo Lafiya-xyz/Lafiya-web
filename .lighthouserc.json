@@ -2,7 +2,8 @@
   "ci": {
     "collect": {
       "url": [
-        "http://localhost:3000/card/11111111-1111-1111-1111-111111111111"
+        "http://localhost:3000/card/11111111-1111-1111-1111-111111111111",
+        "http://localhost:3000/profile"
       ],
       "numberOfRuns": 3,
       "settings": {
@@ -29,6 +30,7 @@
       "assertions": {
         "categories:performance": ["error", { "minScore": 0.85 }],
         "categories:accessibility": ["error", { "minScore": 0.9 }],
+        "first-contentful-paint": ["error", { "maxNumericValue": 1800 }],
         "largest-contentful-paint": ["error", { "maxNumericValue": 2500 }],
         "total-blocking-time": ["error", { "maxNumericValue": 200 }],
         "cumulative-layout-shift": ["error", { "maxNumericValue": 0.1 }],

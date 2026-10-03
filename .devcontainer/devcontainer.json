@@ -1,0 +1,46 @@
+{
+  "name": "Attestation Dev Environment",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:24-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "moby": true,
+      "dockerDashComposeVersion": "v2"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "version": "latest"
+    }
+  },
+  "runArgs": ["--add-host=host.docker.internal:host-gateway"],
+  "containerEnv": {
+    "NODE_ENV": "development",
+    "STELLAR_NETWORK": "local",
+    "STELLAR_RPC_URL": "http://localhost:8000/soroban/rpc",
+    "STELLAR_HORIZON_URL": "http://localhost:8000",
+    "STELLAR_FRIENDBOT_URL": "http://localhost:8000/friendbot"
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "docker compose -f .devcontainer/docker-compose.yml up -d",
+  "forwardPorts": [3000, 54321, 54322, 8000],
+  "portsAttributes": {
+    "3000": { "label": "Next.js app", "onAutoForward": "openPreview" },
+    "54321": { "label": "Supabase API", "onAutoForward": "silent" },
+    "54322": { "label": "Supabase Postgres", "onAutoForward": "silent" },
+    "8000": { "label": "Stellar quickstart (RPC/Horizon/Friendbot)", "onAutoForward": "silent" }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "supabase.vscode-supabase-extension",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+      }
+    }
+  },
+  "remoteUser": "node"
+}

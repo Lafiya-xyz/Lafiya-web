@@ -46,3 +46,66 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* Windows High Contrast / forced-colors mode.
+   In forced-colors mode the OS overrides author colours, so any state that
+   was conveyed by background colour alone (verified badge, severity markers,
+   selected/active states) or by an SVG icon that inherits `currentColor`
+   would otherwise vanish. We keep the QR code black-on-white so it stays
+   scannable, and give the remaining states a visible border/outline using
+   system colour keywords. */
+@media (forced-colors: active) {
+  /* QR code must remain a high-contrast black-on-white image so scanners
+     can still decode it; opt it out of the forced palette. */
+  .qr-code,
+  .qr-code svg,
+  .qr-code canvas,
+  .qr-code img {
+    forced-color-adjust: none;
+    background: #ffffff;
+    color: #000000;
+  }
+
+  /* Verified badge: keep the check icon visible and add a border so the
+     badge is distinguishable without relying on its background colour. */
+  .verified-badge {
+    forced-color-adjust: none;
+    color: CanvasText;
+    background: Canvas;
+    border: 1px solid CanvasText;
+  }
+
+  .verified-badge svg {
+    forced-color-adjust: none;
+    color: CanvasText;
+    fill: currentColor;
+  }
+
+  /* Severity markers previously distinguished only by background colour. */
+  .severity-marker {
+    forced-color-adjust: none;
+    color: CanvasText;
+    background: Canvas;
+    border: 1px solid CanvasText;
+  }
+
+  .severity-marker[data-severity="critical"],
+  .severity-marker[data-severity="high"] {
+    border-width: 2px;
+    border-style: solid;
+  }
+
+  /* Focus indicators: ensure a visible outline in forced colours. */
+  :focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  /* Selected/active states that relied on background colour get a border. */
+  [aria-selected="true"],
+  [aria-pressed="true"],
+  [data-state="active"],
+  [data-state="selected"] {
+    border: 1px solid Highlight;
+  }
+}

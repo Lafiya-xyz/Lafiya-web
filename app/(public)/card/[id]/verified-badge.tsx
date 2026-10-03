@@ -83,6 +83,13 @@
  * - All others: Amber badge with status-specific label (from pendingLabels map)
  * - Unknown or fallback: Gray question mark badge
  *
+ * FORCED-COLORS / WINDOWS HIGH CONTRAST:
+ * The badge previously relied on background colour alone to convey status, which
+ * disappears under `forced-colors: active`. Each state now carries a distinct
+ * icon (check, question mark, clock, warning) plus a visible border so the
+ * status stays distinguishable when the OS overrides colours. The QR code is
+ * handled separately and keeps `forced-color-adjust: none` so it still decodes.
+ *
  * IMPLEMENTATION NOTE:
  * The badge is purely presentational. It does NOT fetch attestation data itself;
  * all verification is pre-computed on the server and passed via card.trust_state.
@@ -101,25 +108,96 @@ export type VerificationStatus =
   | "conflicted"
   | "unavailable";
 
+function CheckIcon() {
+  return (
+    <svg
+      className="h-4 w-4 shrink-0 fill-current"
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+      data-testid="verified-icon"
+    >
+      <path
+        fillRule="evenodd"
+        d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
+function QuestionIcon() {
+  return (
+    <svg
+      className="h-4 w-4 shrink-0 stroke-current"
+      viewBox="0 0 24 24"
+      fill="none"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      data-testid="unverified-icon"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+      <path d="M12 17h.01" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg
+      className="h-4 w-4 shrink-0 stroke-current"
+      viewBox="0 0 24 24"
+      fill="none"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      data-testid="pending-icon"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
+function WarningIcon() {
+  return (
+    <svg
+      className="h-4 w-4 shrink-0 stroke-current"
+      viewBox="0 0 24 24"
+      fill="none"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      data-testid="warning-icon"
+    >
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
+    </svg>
+  );
+}
+
+const badgeBase =
+  "inline-flex w-fit items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium";
+
+// In forced-colors mode the OS replaces our colours, so we lean on system colour
+// keywords and a visible border to keep each state distinguishable.
+const verifiedClasses = `${badgeBase} border-emerald-700 bg-emerald-600 text-white dark:border-emerald-500 dark:bg-emerald-600 dark:text-white forced-colors:border-[CanvasText] forced-colors:bg-[Highlight] forced-colors:text-[HighlightText]`;
+const pendingClasses = `${badgeBase} border-amber-700 bg-amber-600 text-white dark:border-amber-500 dark:bg-amber-600 dark:text-white forced-colors:border-[CanvasText] forced-colors:bg-[Canvas] forced-colors:text-[CanvasText]`;
+const neutralClasses = `${badgeBase} border-zinc-600 bg-zinc-500 text-white dark:border-zinc-400 dark:bg-zinc-600 dark:text-white forced-colors:border-[CanvasText] forced-colors:bg-[Canvas] forced-colors:text-[CanvasText]`;
+
 export function VerifiedBadge({ status }: { status: VerificationStatus }) {
   if (status === "verified") {
     return (
-      <span 
-        className="inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1 text-sm font-medium text-white dark:bg-emerald-600 dark:text-white"
+      <span
+        className={verifiedClasses}
         aria-label="Verified: Health-worker attestation finalized"
       >
-        <svg
-          className="h-4 w-4 shrink-0 fill-current"
-          viewBox="0 0 20 20"
-          aria-hidden="true"
-          data-testid="verified-icon"
-        >
-          <path
-            fillRule="evenodd"
-            d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z"
-            clipRule="evenodd"
-          />
-        </svg>
+        <CheckIcon />
         Health-worker attestation finalized
       </span>
     );
@@ -127,10 +205,11 @@ export function VerifiedBadge({ status }: { status: VerificationStatus }) {
 
   if (status === "unavailable") {
     return (
-      <span 
-        className="inline-flex w-fit items-center gap-1.5 rounded-full bg-amber-600 px-3 py-1 text-sm font-medium text-white dark:bg-amber-600 dark:text-white"
+      <span
+        className={pendingClasses}
         aria-label="Verification status unavailable"
       >
+        <WarningIcon />
         Verification status unavailable
       </span>
     );
@@ -147,34 +226,16 @@ export function VerifiedBadge({ status }: { status: VerificationStatus }) {
   const label = pendingLabels[status];
   if (label) {
     return (
-      <span 
-        className="inline-flex w-fit items-center gap-1.5 rounded-full bg-amber-600 px-3 py-1 text-sm font-medium text-white dark:bg-amber-600 dark:text-white"
-        aria-label={label}
-      >
+      <span className={pendingClasses} aria-label={label}>
+        <ClockIcon />
         {label}
       </span>
     );
   }
 
   return (
-    <span 
-      className="inline-flex w-fit items-center gap-1.5 rounded-full bg-zinc-500 px-3 py-1 text-sm font-medium text-white dark:bg-zinc-600 dark:text-white"
-      aria-label="Not yet verified"
-    >
-      <svg
-        className="h-4 w-4 shrink-0 stroke-current"
-        viewBox="0 0 24 24"
-        fill="none"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-        data-testid="unverified-icon"
-      >
-        <circle cx="12" cy="12" r="10" />
-        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-        <path d="M12 17h.01" />
-      </svg>
+    <span className={neutralClasses} aria-label="Not yet verified">
+      <QuestionIcon />
       Not yet verified
     </span>
   );

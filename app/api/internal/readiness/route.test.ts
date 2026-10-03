@@ -2,15 +2,20 @@ import { describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getRuntimeConfig: vi.fn(),
+  getRpcResolutionStatus: vi.fn(() => "verified"),
   createAdminClient: vi.fn(),
   getHealth: vi.fn(),
 }));
 
 vi.mock("@/lib/runtime-config", () => ({
   getRuntimeConfig: mocks.getRuntimeConfig,
+  getRpcResolutionStatus: mocks.getRpcResolutionStatus,
 }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: mocks.createAdminClient,
+}));
+vi.mock("@/lib/stellar/verification-indexer/trust-state", () => ({
+  getContractTrustState: vi.fn().mockResolvedValue("trusted"),
 }));
 vi.mock("@/lib/env-server", () => ({
   serverEnv: { SOROBAN_RPC_URL: "https://soroban-rpc.example" },
@@ -40,6 +45,7 @@ function readyConfig() {
     },
     payoutIndexer: { enabled: true },
     sentry: { enabled: true },
+    rpcEndpoints: { policy: "allowlist" },
   };
 }
 
@@ -64,10 +70,26 @@ describe("readiness route", () => {
         supabase: "ok",
         stellar: "ok",
         attestation: "live",
+        attestationGovernance: "trusted",
         payoutIndexer: "enabled",
         sentry: "enabled",
+        rpcEndpoints: { policy: "allowlist", resolution: "verified" },
       },
     });
+  });
+
+  it("reports RPC URL validation results without exposing the configured URLs", async () => {
+    mocks.getRuntimeConfig.mockReturnValue(readyConfig());
+    const limit = vi.fn().mockResolvedValue({ error: null });
+    mocks.createAdminClient.mockReturnValue({
+      from: vi.fn(() => ({ select: vi.fn(() => ({ limit })) })),
+    });
+    mocks.getHealth.mockResolvedValue({ status: "healthy" });
+
+    const body = JSON.stringify(await (await GET()).json());
+
+    expect(body).toContain('"rpcEndpoints"');
+    expect(body).not.toContain("soroban-rpc.example");
   });
 
   it("fails closed with a 503 when Supabase cannot be reached", async () => {

@@ -29,6 +29,18 @@ function supabaseStoragePattern() {
 const supabaseStorageOrigin = supabaseStoragePattern();
 
 const nextConfig: NextConfig = {
+  /**
+   * Cache Components / Partial Prerendering (Next 16).
+   *
+   * Enables the static shell of a route to be prerendered and streamed
+   * immediately, while dynamic, per-user sections render behind Suspense
+   * boundaries. The profile shell (navigation, headings, help text) is
+   * static; user-specific sections opt into dynamic rendering via Suspense
+   * and `use cache` is only applied to non-user-scoped data.
+   *
+   * See node_modules/next/dist/docs/ for the exact Next 16 API surface.
+   */
+  cacheComponents: true,
   images: {
     remotePatterns: [
       // Derived from the configured Supabase origin (local dev + hosted).

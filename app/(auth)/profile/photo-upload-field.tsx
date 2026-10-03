@@ -92,15 +92,19 @@ export function PhotoUploadField({
         return;
       }
 
-      const { publicUrl } = await response.json();
-      // Revoke the preview URL now that we have the real public URL
+      const { publicUrl, signedUrl } = await response.json();
+      // Revoke the preview URL now that we have the real signed URL
       if (previewUrlRef.current) {
         URL.revokeObjectURL(previewUrlRef.current);
         previewUrlRef.current = null;
       }
       setPreviewUrl(null);
-      // Cache-bust so the new photo shows immediately after an overwrite.
-      setPhotoUrl(`${publicUrl}?updated=${Date.now()}`);
+      // Store the storage path (stable) in photoUrl for the form hidden input;
+      // use the signed URL for preview, cache-busted to force a refresh.
+      // Issue #528: never store a signed URL in profiles.photo_url — it expires.
+      const preview = signedUrl || publicUrl;
+      setPhotoUrl(publicUrl);
+      setPreviewUrl(`${preview}?updated=${Date.now()}`);
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       setLocalError(errorMsg || "An unexpected error occurred.");
@@ -129,6 +133,9 @@ export function PhotoUploadField({
               alt=""
               width={64}
               height={64}
+              // Issue #528: could be a blob URL (local preview) or signed URL — skip
+              // Next.js image optimization in either case.
+              unoptimized
               className="h-16 w-16 rounded-full object-cover"
             />
           ) : (

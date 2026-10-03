@@ -14,19 +14,32 @@
 //                trip.  This measures *worst-case / cold-cache* latency
 //                under realistic multi-patient load.
 //
+// Connection-pooling proof (issue #584):
+//   The cache_miss scenario is the DB-bound path.  Every request that misses
+//   ISR goes through supabase-js → PostgREST → Supavisor (transaction mode)
+//   → Postgres.  To prove the pooler holds under saturation we snapshot
+//   pg_stat_activity via the Supabase Management API (or a read-only
+//   `pg_stat_activity` RPC) at a fixed interval and record the observed
+//   connection counts as k6 metrics.  Set SUPABASE_MGMT_TOKEN and
+//   SUPABASE_PROJECT_REF to enable snapshots; without them the harness still
+//   runs and simply skips the connection metrics.
+//
 // Usage:
 //   BASE_URL=http://localhost:3000 k6 run loadtest/k6_get_emergency_card_test.js
 //
 // Environment variables:
-//   BASE_URL     — origin of the running Next.js app  (required)
-//   CONCURRENCY  — target VUs per scenario             (default: 50)
-//   DURATION     — steady-state duration per scenario  (default: "1m")
+//   BASE_URL             — origin of the running Next.js app  (required)
+//   CONCURRENCY          — target VUs per scenario             (default: 500)
+//   DURATION             — steady-state duration per scenario  (default: "1m")
+//   SUPABASE_MGMT_TOKEN  — Supabase Management API token      (optional)
+//   SUPABASE_PROJECT_REF — Supabase project ref               (optional)
+//   PG_SNAPSHOT_INTERVAL — seconds between snapshots           (default: 5)
 // ---------------------------------------------------------------------------
 
 import http from "k6/http";
 import { check, sleep } from "k6";
 import { SharedArray } from "k6/data";
-import { Rate, Trend } from "k6/metrics";
+import { Rate, Trend, Gauge } from "k6/metrics";
 
 // ── Custom metrics ──────────────────────────────────────────────────────────
 
@@ -38,6 +51,14 @@ const cacheHitDuration = new Trend("cache_hit_duration", true);
 const cacheMissDuration = new Trend("cache_miss_duration", true);
 const cacheHitErrors = new Rate("cache_hit_errors");
 const cacheMissErrors = new Rate("cache_miss_errors");
+
+// Connection-pool metrics sampled from pg_stat_activity snapshots.
+// `pg_connections` is the total backend count; `pg_active_connections` is the
+// subset currently executing a query.  Both are gauges so the k6 summary
+// reports min/avg/max across the run.
+const pgConnections = new Gauge("pg_connections");
+const pgActiveConnections = new Gauge("pg_active_connections");
+const pgSnapshotErrors = new Rate("pg_snapshot_errors");
 
 // ── Shared data ─────────────────────────────────────────────────────────────
 
@@ -60,8 +81,21 @@ const fixedCardId = cardIds[0];
 
 // ── Options ─────────────────────────────────────────────────────────────────
 
-const vus = Number(__ENV.CONCURRENCY) || 50;
+const vus = Number(__ENV.CONCURRENCY) || 500;
 const duration = __ENV.DURATION || "1m";
+
+// Snapshot cadence for pg_stat_activity sampling (seconds).
+const snapshotInterval = Number(__ENV.PG_SNAPSHOT_INTERVAL) || 5;
+
+// Total wall-clock length of the cache_hit scenario (ramp + steady + ramp).
+const cacheHitTotalSeconds = 30 + parseDurationSeconds(duration);
+
+// cache_miss starts after cache_hit + 30 s cool-down so ISR entries from
+// scenario A have a chance to expire and we avoid cross-contamination.
+const cacheMissStartSeconds = cacheHitTotalSeconds + 30;
+
+// Total run length, used to schedule the pg_stat_activity sampler.
+const totalRunSeconds = cacheMissStartSeconds + 30 + parseDurationSeconds(duration);
 
 export const options = {
   scenarios: {
@@ -79,8 +113,6 @@ export const options = {
     },
 
     // Scenario B: hits spread across many distinct cards (cache-miss / DB-bound).
-    // Starts after cache_hit finishes + 30 s cool-down so ISR entries from
-    // scenario A have a chance to expire and we avoid cross-contamination.
     cache_miss: {
       executor: "ramping-vus",
       exec: "cacheMissScenario",
@@ -90,9 +122,19 @@ export const options = {
         { duration: duration, target: vus },
         { duration: "15s", target: 0 },
       ],
-      // cache_hit ≈ 15s ramp + duration + 15s ramp + 30s gap
-      startTime: `${30 + parseDurationSeconds(duration) + 30}s`,
+      startTime: `${cacheMissStartSeconds}s`,
       tags: { scenario: "cache_miss" },
+    },
+
+    // Scenario C: background sampler that records pg_stat_activity connection
+    // counts while the DB-bound scenario is running.  Runs as a single VU so
+    // it does not add meaningful load of its own.
+    pg_snapshot: {
+      executor: "constant-vus",
+      exec: "pgSnapshotScenario",
+      vus: 1,
+      duration: `${totalRunSeconds}s`,
+      tags: { scenario: "pg_snapshot" },
     },
   },
 
@@ -149,7 +191,7 @@ export function cacheHitScenario() {
 }
 
 export function cacheMissScenario() {
-  // Pick a random card from the full pool — with 500 cards and 50 VUs,
+  // Pick a random card from the full pool — with 500 cards and 500 VUs,
   // most requests will be cache misses within any 60 s ISR window.
   const id = cardIds[Math.floor(Math.random() * cardIds.length)];
   const res = makeRequest(id);
@@ -164,4 +206,64 @@ export function cacheMissScenario() {
   errorRate.add(!ok);
 
   sleep(0.5 + Math.random() * 0.5);
+}
+
+// ── Connection-pool sampler ─────────────────────────────────────────────────
+
+/**
+ * Sample pg_stat_activity through the Supabase Management API and record the
+ * observed connection counts.  This is the evidence that Supavisor (in
+ * transaction mode) keeps backend connections bounded while the DB-bound
+ * scenario runs at the target concurrency.
+ *
+ * The query counts total backends and the subset that are actively running a
+ * query.  It never selects query text or any patient data — only aggregate
+ * counts — so no PHI leaves the database.
+ */
+export function pgSnapshotScenario() {
+  const token = __ENV.SUPABASE_MGMT_TOKEN;
+  const ref = __ENV.SUPABASE_PROJECT_REF;
+
+  // Without credentials we cannot snapshot; skip quietly so the harness still
+  // runs in local/CI environments that lack Management API access.
+  if (!token || !ref) {
+    sleep(snapshotInterval);
+    return;
+  }
+
+  const url = `https://api.supabase.com/v1/projects/${ref}/database/query`;
+  const body = JSON.stringify({
+    query:
+      "select count(*)::int as total, " +
+      "count(*) filter (where state = 'active')::int as active " +
+      "from pg_stat_activity where backend_type = 'client backend'",
+  });
+
+  const res = http.post(url, body, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    tags: { name: "POST pg_stat_activity" },
+  });
+
+  const ok = check(res, {
+    "snapshot status is 200": (r) => r.status === 200,
+  });
+  pgSnapshotErrors.add(!ok);
+
+  if (ok) {
+    try {
+      const rows = res.json();
+      const row = Array.isArray(rows) ? rows[0] : rows;
+      if (row && typeof row.total === "number") {
+        pgConnections.add(row.total);
+        pgActiveConnections.add(row.active || 0);
+      }
+    } catch (e) {
+      pgSnapshotErrors.add(true);
+    }
+  }
+
+  sleep(snapshotInterval);
 }

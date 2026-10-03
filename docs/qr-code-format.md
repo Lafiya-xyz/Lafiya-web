@@ -38,6 +38,29 @@ The combination of Q-level error correction, 400 px width, and a 4-module quiet 
 
 If the QR options ever need to be changed — for example to support a smaller print format or a higher-density payload — the tradeoff to preserve is: ECC level ≥ `Q`, width ≥ `300`, margin ≥ `4`. Going below any of these risks real-world scan failures in exactly the conditions (bad lighting, damaged printout, cracked screen) where this product is used.
 
+## Verification: decode round-trip and damage simulation
+
+Every capability URL format we issue is proven decodable, not just
+generatable, by [`lib/qr/generateQrDataUrl.damage.test.ts`](../lib/qr/generateQrDataUrl.damage.test.ts), which runs in CI as part of `npm test`.
+
+**Decoder.** The harness decodes generated PNGs with [`jsQR`](https://github.com/cozmo/jsQR) (a pure-JS QR decoder — no native/canvas dependency), after reading the PNG's raw RGBA pixels with [`pngjs`](https://github.com/lukeapage/pngjs). Both are dev-only dependencies (`lib/qr/decodeQr.ts`); production code never depends on a decoder.
+
+**Round-trip.** For each capability URL format — the legacy `/card/<uuid>` link and the current `/card/c/<capability>` link (ADR-003) — the harness generates a QR, decodes it, and asserts the decoded text is byte-for-byte identical to the input.
+
+**Damage simulation** (`lib/qr/qrDamageSimulation.ts`), applied to the generated symbol's raw pixels before decoding:
+
+| Transform | Parameters | Simulates |
+|---|---|---|
+| Gaussian blur | 3-pass box blur, radius 2 | Camera motion blur / out-of-focus phone scan |
+| Random occlusion | ~15% of area, opaque mid-gray blocks | A thumb, sticker, or lamination bubble partially covering the symbol |
+| Low contrast | Pixel values pulled 60% toward mid-gray | A faded or sun-bleached printout |
+| Downscale | Nearest-neighbor to 150 px | The print-scaling / low-resolution preview artefacts of a small laminated card |
+| Combined | Blur (radius 1) → occlusion (~10%) → low contrast (35%) → downscale (150 px) | A realistic worst case: several forms of damage at once |
+
+Each transform is applied individually, and once combined, to every URL format. The suite also runs a property-style test over eight randomly generated (deterministically seeded) capability tokens at their fixed real-world length — a versioned, base64url-encoded 256-bit token, `v1.` + 43 characters, per ADR-003 — asserting every one of them decodes correctly after every damage transform.
+
+**Evidence.** With the current parameters (ECC `Q`, 400 px, 4-module margin), all cases above decode successfully for both URL formats. This is well within headroom: Q-level error correction tolerates ~25% codeword damage, and the transforms above are calibrated to be a meaningful stress test without exceeding what a real laminated card in normal use would suffer. If a future change to these parameters, the URL scheme, or the capability token length causes this suite to fail, that is a signal the change risks real-world scan failures and needs re-tuning before shipping — see the "Generation options" trade-offs above for the floor on each parameter.
+
 ## Relationship to the offline-first emergency page
 
 The QR encodes a URL, not a data snapshot. The emergency page at that URL:

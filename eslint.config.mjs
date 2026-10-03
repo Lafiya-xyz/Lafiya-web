@@ -18,6 +18,16 @@ const eslintConfig = defineConfig([
     },
   },
   {
+    // Issue #586: application and library code must emit structured events
+    // through lib/logging/logger.ts so every log conforms to the PHI-safe
+    // schema. Forbid console.* entirely in app/ and lib/ (no warn/error
+    // escape hatch) so free-form messages can't bypass the schema.
+    files: ["app/**/*.{ts,tsx,js,jsx,mjs,cjs}", "lib/**/*.{ts,tsx,js,jsx,mjs,cjs}"],
+    rules: {
+      "no-console": "error",
+    },
+  },
+  {
     // The logger's own console.log call is the intended sink, not a leftover.
     files: ["lib/logging/logger.ts"],
     rules: {

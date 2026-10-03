@@ -33,7 +33,7 @@ export async function checkAndIncrementFrequency(
   maxCount: number,
   windowSeconds: number,
 ): Promise<FrequencyLimitResult> {
-  const supabase = createAdminClient();
+  const supabase = createAdminClient({ purpose: "frequency-limit" });
   const { data, error } = await supabase
     .rpc("frequency_limit_check_and_increment", {
       p_key: key,
@@ -83,7 +83,7 @@ export function sanitizeFrequencyLimitResult(
  * Helper to clear all frequency-limit counters for a key (useful in tests).
  */
 export async function clearFrequencyLimit(key: string): Promise<void> {
-  const supabase = createAdminClient();
+  const supabase = createAdminClient({ purpose: "frequency-limit" });
   const { error } = await supabase
     .from("frequency_limits")
     .delete()

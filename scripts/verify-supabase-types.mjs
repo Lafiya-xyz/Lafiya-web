@@ -52,7 +52,11 @@ function extractPublicTables(sql) {
   const matches = [
     ...sql.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?public\.([a-z0-9_]+)/gi),
   ];
-  return matches.map((m) => m[1]);
+  // Physical partitions inherit the parent row type and are not separate API
+  // tables. Keep them out of the logical schema/type comparison.
+  return matches
+    .map((m) => m[1])
+    .filter((name) => name !== "card_access_events_default" && !/_20\d{2}_\d{2}$/.test(name));
 }
 
 function extractColumns(sql, tableName) {

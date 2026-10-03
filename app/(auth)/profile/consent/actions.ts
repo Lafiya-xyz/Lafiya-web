@@ -20,11 +20,13 @@ const UNIQUE_VIOLATION = "23505";
 /**
  * Returns the signed-in user's own consent records, most-recent first.
  *
- * Cross-user isolation is enforced at two layers:
+ * Reads go through the `consent_logs` compatibility view, which projects the
+ * unified `consent_events` ledger (the source of truth) back into the legacy
+ * shape. Cross-user isolation is enforced at two layers:
  *   1. Application: the query is always scoped to the authenticated user's id
  *      (we never accept or forward another user's id).
- *   2. Database: the `consent_logs_select_own` RLS policy restricts reads to
- *      `auth.uid() = user_id`.
+ *   2. Database: the view is security-invoker and the underlying
+ *      `consent_events` RLS policy restricts reads to `auth.uid() = user_id`.
  * A missing session or any error yields an empty list rather than leaking
  * another user's data.
  */
@@ -58,8 +60,12 @@ export async function getConsentHistory(): Promise<ConsentHistoryEntry[]> {
 /**
  * Records acknowledgement of the currently-active policy version for the
  * signed-in user. Idempotent: re-acknowledging a version that was already
- * recorded (unique (user_id, policy_version) constraint) is treated as
- * success, not an error.
+ * recorded is treated as success, not an error.
+ *
+ * Writes go through the `record_consent()` RPC so the append-only
+ * `consent_events` ledger is the single source of truth. The RPC is
+ * idempotent per (user, purpose, policy_version), so a duplicate
+ * acknowledgement surfaces as `already_acknowledged` rather than an error.
  */
 export async function acknowledgeCurrentPolicy(): Promise<AcknowledgeResult> {
   const supabase = await createClient();
@@ -70,9 +76,11 @@ export async function acknowledgeCurrentPolicy(): Promise<AcknowledgeResult> {
     return { status: "error", error: "Not authenticated" };
   }
 
-  const { error } = await supabase.from("consent_logs").insert({
-    user_id: user.id,
-    policy_version: CURRENT_POLICY_VERSION,
+  const { error } = await supabase.rpc("record_consent", {
+    p_user_id: user.id,
+    p_purpose: "policy_acknowledgement",
+    p_policy_version: CURRENT_POLICY_VERSION,
+    p_granted: true,
   });
 
   if (error) {

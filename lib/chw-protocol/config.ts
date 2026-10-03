@@ -34,6 +34,64 @@ export type ProtocolRuntimeConfig = {
   epochId: string | undefined;
 };
 
+/**
+ * A versioned incentive rate card. Per-verification payout amounts are pinned
+ * to the card effective at the attestation ledger/time so a later config
+ * change can never re-price historical obligations.
+ */
+export type IncentiveRateCard = {
+  id: string;
+  version: number;
+  amountStroops: bigint;
+  asset: string;
+  effectiveFrom: Date;
+  createdBy: string;
+  approvedBy: string;
+};
+
+/**
+ * Two-person rule: a rate card may only be activated once a second, distinct
+ * approver signs off. Self-approval by the proposer is rejected.
+ */
+export function assertRateCardApproved(card: IncentiveRateCard): void {
+  if (!card.approvedBy || card.approvedBy === card.createdBy) {
+    throw new ProtocolError(
+      "UNSUPPORTED_EPOCH",
+      "RATE_CARD_REQUIRES_DISTINCT_APPROVER",
+    );
+  }
+}
+
+/**
+ * Resolve the single rate card effective for an asset at a given ledger/time.
+ * Exactly one active card must exist per asset at any instant; overlapping
+ * effective windows are a governance error and fail closed.
+ */
+export function resolveRateCard(
+  cards: readonly IncentiveRateCard[],
+  asset: string,
+  at: Date,
+): IncentiveRateCard {
+  const active = cards.filter(
+    (card) => card.asset === asset && card.effectiveFrom.getTime() <= at.getTime(),
+  );
+  if (active.length === 0) {
+    throw new ProtocolError("UNSUPPORTED_EPOCH", "NO_ACTIVE_RATE_CARD");
+  }
+  const latest = active.reduce((a, b) =>
+    a.effectiveFrom.getTime() >= b.effectiveFrom.getTime() ? a : b,
+  );
+  const overlapping = active.filter(
+    (card) =>
+      card.id !== latest.id &&
+      card.effectiveFrom.getTime() === latest.effectiveFrom.getTime(),
+  );
+  if (overlapping.length > 0) {
+    throw new ProtocolError("UNSUPPORTED_EPOCH", "AMBIGUOUS_ACTIVE_RATE_CARD");
+  }
+  return latest;
+}
+
 function inferredDeployment(
   env: NodeJS.ProcessEnv,
 ): z.infer<typeof deploymentSchema> {
