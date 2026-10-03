@@ -25,5 +25,35 @@ export default defineConfig({
       STELLAR_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015",
       SOROBAN_RPC_URL: "https://soroban-testnet.stellar.org",
     },
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json-summary", "json"],
+      reportsDirectory: "./coverage",
+      include: ["lib/**/*.{ts,tsx}"],
+      exclude: [
+        "**/node_modules/**",
+        "**/*.test.{ts,tsx}",
+        "**/*.d.ts",
+        "lib/**/index.ts",
+      ],
+      thresholds: {
+        "lib/emergency/**": {
+          lines: 90,
+          branches: 90,
+        },
+        "lib/attestation/**": {
+          lines: 90,
+          branches: 90,
+        },
+        "lib/chw-protocol/**": {
+          lines: 90,
+          branches: 90,
+        },
+        "lib/stellar/**": {
+          lines: 90,
+          branches: 90,
+        },
+      },
+    },
   },
 });
