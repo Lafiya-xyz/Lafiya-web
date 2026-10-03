@@ -4,6 +4,7 @@ import "./globals.css";
 
 import { ServiceWorkerRegister } from "./offline-register";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { VitalsReporter } from "./vitals-reporter";
 
 // Nigerian-language glyph coverage (Hausa, Yoruba, Igbo):
 // ɓ ɗ ƙ ƴ (Latin Extended-B), ẹ ọ ṣ (Latin Extended Additional),
@@ -75,6 +76,7 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col">
         {children}
         <ServiceWorkerRegister />
+        <VitalsReporter />
       </body>
     </html>
   );

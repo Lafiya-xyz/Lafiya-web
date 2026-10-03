@@ -129,14 +129,9 @@ export function TagListField({
               id={`${name}-${index}`}
               name={name}
               type="text"
-              value={value}
+              defaultValue={value}
               placeholder={placeholder}
               maxLength={MAX_TAG_LENGTH}
-              onChange={(event) => {
-                const next = [...values];
-                next[index] = event.target.value;
-                setValues(next);
-              }}
               onBlur={(event) => {
                 const trimmed = normalizeTagValue(event.target.value);
                 if (trimmed === values[index]) return;
