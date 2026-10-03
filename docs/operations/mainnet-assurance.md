@@ -40,6 +40,34 @@ days; low findings are reviewed quarterly. An exception records advisory,
 affected path, mitigation, owner, and expiry in release evidence. It is never
 a permanent ignore rule.
 
+## Build provenance trust chain
+
+Every release build produces signed SLSA build provenance for the deployable
+artefacts, and the mainnet release gate refuses to promote anything whose
+provenance cannot be verified. The trust chain is:
+
+1. **Reviewed commit.** The release is cut from a commit that passed CI on the
+   protected branch. The workflow records the commit SHA as the build identity.
+2. **Build.** `.github/workflows/mainnet-release.yml` builds the application and
+   packages the `.next` output as a tarball, alongside the CycloneDX SBOM.
+3. **Attestation.** `actions/attest-build-provenance` signs provenance for both
+   the `.next` tarball and the SBOM, binding each artefact's SHA-256 digest to
+   the workflow, repository, and commit that produced it. The attestations are
+   stored in the repository's attestation store.
+4. **Verification.** `scripts/verify-release-gate.mjs` runs
+   `gh attestation verify` against the artefact digest before promotion. The
+   gate fails closed: a missing attestation, an attestation that does not match
+   the artefact digest, or an attestation whose signer/workflow does not match
+   the expected release identity all block the release.
+5. **Promotion.** Only after the gate passes is the verified artefact promoted
+   to the protected production/mainnet environment.
+
+Provenance proves which workflow and commit produced an artefact; it does not
+prove the artefact is free of defects. It complements, and does not replace,
+the readiness checks, migration invariants, and named approvals above. The
+verification step never logs artefact contents, credentials, or capability
+tokens — only digests, workflow identity, and pass/fail outcomes.
+
 ## Runtime configuration and readiness
 
 `lib/runtime-config.ts` validates all server configuration before traffic.
@@ -107,64 +135,6 @@ Alerts are symptom-based, grouped by deployment + component, deduplicated for
 30 minutes, and suppressed only during a documented maintenance window. Every
 page links to a runbook with impact, confirmation query, safe mitigation,
 rollback/roll-forward point, owner, and escalation path. Sentry is configured
-with `sendDefaultPii: false`, event and breadcrumb sanitization, and canary
-tests for credentials, dates, phones, capabilities, IDs, commitments, and
-Stellar secrets.
+with `sendDefaultPii: false`, event and breadc
 
-## Required rehearsals and evidence
-
-The following evidence is mandatory before a pilot or mainnet gate can be
-approved. Run it against synthetic or properly authorized anonymized data; do
-not paste sensitive payloads into issue comments, artifacts, dashboards, or
-runbooks.
-
-| Exercise            | Required evidence                                                                                                           | Minimum invariant                                                                |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Migration rehearsal | commit, migration IDs, row volume, lock time, checkpoint metrics, recovery command, reconciliation output                   | one current revision per profile; RLS and payout reconciliation remain valid     |
-| Fault injection     | database latency, RPC timeout/throttle, cron failure, cursor lag, storage failure, bad deploy, regional/provider outage     | card remains usable where designed; no duplicate settlement or cursor skip       |
-| Mixed load/soak     | p50/p95/p99, throughput, DB connections, memory/CPU, storage/cache/RPC quotas and cost at pilot + 10x                       | no tenant leakage, connection exhaustion, unbounded backlog, or duplicate payout |
-| Restore drill       | declared RPO/RTO, isolated restore timestamp, row/object counts, RLS, revisions, secrets, cursors, obligations, settlements | restored state reconciles and applies migrations safely                          |
-| Rotation exercise   | Supabase service role, cron, Sentry, CHW, contract admin, treasury key replacement                                          | no uncontrolled outage; reconciliation before resuming payouts                   |
-| Privacy canary      | test run and sink/artifact search output                                                                                    | canaries absent from logs, traces, Sentry, analytics, alerts, artifacts          |
-| Security review     | independent report, finding severity/owner/deadline, fix and retest evidence                                                | no unresolved release-blocking finding                                           |
-| Pilot rehearsal     | support roster, stop conditions, escalation/tabletop output, patient communication template                                 | team can halt safely and communicate without exposing records                    |
-
-Backups are not accepted until the restore drill succeeds. The drill must state
-the RPO/RTO for Postgres, Storage, configuration, ledger-derived mirrors, and
-operational evidence. Ledger checkpoints may be reconstructed only by replaying
-from a known safe checkpoint and proving idempotent convergence; an unavailable
-provider range is a visible failure, never a skipped cursor.
-
-## Security, privacy, and treasury controls
-
-The release owner maintains a secret inventory with storage location,
-environment, least privilege, owner, rotation frequency, expiry, and audit
-trail for Supabase, cron, Sentry, providers, CHW, contract-admin, and treasury
-credentials. Production secrets live only in a managed environment-specific
-secret store. Contract upgrades, treasury movement, payout-limit changes, and
-mainnet promotion require two distinct approvers and an audit record.
-
-Payout operations require configured per-transaction, batch, per-CHW, and
-daily limits; a pause path; a reconciliation before resume; and an emergency
-key-compromise procedure. A recipient is copied into the immutable obligation,
-so a later address change cannot redirect an earned payment.
-
-Data processing, retention, data-subject requests, breach response, and pilot
-consent require qualified privacy/legal/clinical review. This repository does
-not claim those approvals merely because it implements technical controls.
-
-## Pilot and mainnet gate
-
-The normal mainnet workflow must use a protected `mainnet` GitHub Environment
-with separate deploy and approve roles. It refuses to run without a release
-evidence manifest that references current CI, SBOM/provenance, completed
-rehearsals, security review, pilot result, and two approvals. The template is
-`docs/operations/release-gate.example.json`; an approved, non-sensitive copy
-must be placed under `release-evidence/` for the gate. Evidence references
-contain no PHI, secrets, capabilities, wallet material, record IDs, or raw
-logs.
-
-Pilot stop conditions include emergency-card SLO breach, a privacy incident,
-unresolved trust/payout correctness issue, release-blocking security finding,
-or an unsafe clinical-content issue. The support lead owns patient
-communication and the incident commander owns pause/rollback decisions.
+/* … truncated 4987 chars — edit only what you need near the top … */

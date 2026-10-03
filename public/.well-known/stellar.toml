@@ -1,0 +1,22 @@
+# Stellar TOML for CHW wallet sign-in (SEP-1)
+# See SEP-10: https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0010.md
+
+VERSION = "1.0.0"
+
+# The home domain of this service. Must match the `home_domain` used when
+# building SEP-10 challenges so clients can verify the challenge server.
+# Replace with the production host before deploying.
+# HOME_DOMAIN = "example.org"
+
+# SEP-10 web authentication endpoint. Clients fetch a challenge from here
+# and exchange the signed challenge for a JWT at the same endpoint.
+WEB_AUTH_ENDPOINT = "https://example.org/api/sep10"
+
+# Server signing key used to sign SEP-10 challenges. This is the public key
+# corresponding to the server's secret key held in server env (SEP10_SIGNING_KEY).
+# Replace with the actual public key before deploying.
+SIGNING_KEY = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
+
+# Accounts allowed to authenticate. Empty means any account may attempt
+# SEP-10 authentication (subject to the challenge/token endpoints' checks).
+ACCOUNTS = []

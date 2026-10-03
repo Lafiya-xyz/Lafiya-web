@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createHash } from "node:crypto";
 
 import { deleteAccountAndData } from "@/lib/account/deleteAccount";
+import { syncBlockingKeys } from "@/lib/account/duplicates";
 import {
   ensureRecordSecret,
   secretExistsByUserId,
@@ -14,6 +15,11 @@ import {
   digestCapability,
   EMERGENCY_FIELD_ALLOWLIST,
 } from "@/lib/emergency/capability";
+import {
+  generateCardPin,
+  hashCardPin,
+  PIN_GATEABLE_FIELDS,
+} from "@/lib/emergency/card-pin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { ProfileRow } from "@/lib/supabase/types";
@@ -26,14 +32,21 @@ import {
   normalizeEmergencyRecord,
 } from "@/lib/records/canonicalization";
 
+import { serverEnv } from "@/lib/env-server";
 import { logError } from "@/lib/logging/logger";
 import { getBaseUrl } from "@/lib/url/getBaseUrl";
+import { withIdempotency } from "@/lib/idempotency/withIdempotency";
 
 export interface ProfileFormState {
   error?: string;
   errors?: Record<string, string>;
   success?: boolean;
-  code?: "STALE_REVISION" | "AUTH_REQUIRED" | "VALIDATION" | "DATABASE";
+  code?:
+    | "STALE_REVISION"
+    | "AUTH_REQUIRED"
+    | "VALIDATION"
+    | "DATABASE"
+    | typeof STEP_UP_REQUIRED;
   currentRevisionId?: string;
 }
 
@@ -41,6 +54,8 @@ export type CapabilityShareState = {
   error?: string;
   capabilityUrl?: string;
   expiresAt?: string;
+  /** Issue #631: shown once for printing; only its hash is stored. */
+  cardPin?: string;
 };
 
 /**
@@ -51,32 +66,63 @@ export type CapabilityShareState = {
  */
 export async function createEmergencyCapability(
   _previous: CapabilityShareState | undefined,
-  _formData: FormData,
+  formData: FormData,
 ): Promise<CapabilityShareState> {
   void _previous;
-  void _formData;
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "You must be signed in." };
 
+  return withIdempotency(
+    { formData, action: "createEmergencyCapability" },
+    async () => {
+      return _createEmergencyCapabilityImpl(user.id);
+    },
+  );
+}
+
+async function _createEmergencyCapabilityImpl(
+  _userId: string,
+): Promise<CapabilityShareState> {
+  const supabase = await createClient();
   const rawCapability = createRawCapability();
   // Stay below the database's 180-day hard ceiling to tolerate small
   // application/database clock differences without weakening the policy.
   const expiresAt = new Date(
     Date.now() + 179 * 24 * 60 * 60 * 1000,
   ).toISOString();
-  const { error } = await supabase.rpc("create_emergency_capability", {
-    p_token_digest: digestCapability(rawCapability),
-    p_purpose: "emergency",
-    p_field_allowlist: EMERGENCY_FIELD_ALLOWLIST,
-    p_expires_at: expiresAt,
-    p_max_views: null,
-  });
-  if (error) {
+  const { data: capability, error } = await supabase.rpc(
+    "create_emergency_capability",
+    {
+      p_token_digest: digestCapability(rawCapability),
+      p_purpose: "emergency",
+      p_field_allowlist: EMERGENCY_FIELD_ALLOWLIST,
+      p_expires_at: expiresAt,
+      p_max_views: null,
+    },
+  );
+  if (error || !capability) {
     logError("Failed to issue emergency capability", error, {
       route: "/profile (action: createEmergencyCapability)",
+    });
+    return { error: "Could not create a new emergency QR. Please try again." };
+  }
+
+  // Issue #631: a fresh printed PIN per card rotation. A card without its
+  // PIN would lock the patient's sensitive fields, so revoke it on failure.
+  const cardPin = generateCardPin();
+  const { error: pinError } = await createAdminClient().rpc("set_card_pin", {
+    p_capability_id: capability.id,
+    p_pin_hash: await hashCardPin(cardPin),
+  });
+  if (pinError) {
+    logError("Failed to store card PIN", pinError, {
+      route: "/profile (action: createEmergencyCapability)",
+    });
+    await supabase.rpc("revoke_emergency_capability", {
+      p_capability_id: capability.id,
     });
     return { error: "Could not create a new emergency QR. Please try again." };
   }
@@ -85,6 +131,7 @@ export async function createEmergencyCapability(
   return {
     capabilityUrl: `${await getBaseUrl()}/card/c/${rawCapability}`,
     expiresAt,
+    cardPin,
   };
 }
 
@@ -167,7 +214,8 @@ function stableJson(value: unknown): string {
  * role key is used, so a user can never fetch another user's row.
  */
 export async function exportMyProfileData(): Promise<
-  { data: ProfileExport } | { error: string }
+  | { data: ProfileExport }
+  | { error: string; code?: typeof STEP_UP_REQUIRED }
 > {
   const supabase = await createClient();
 
@@ -178,6 +226,16 @@ export async function exportMyProfileData(): Promise<
 
   if (authError || !user) {
     return { error: "You must be signed in to export your data." };
+  }
+
+  // Issue #522: a full health-record export is exactly the kind of
+  // high-impact action a stolen session cookie should not be enough for --
+  // require a completed step-up challenge when MFA is enrolled.
+  if (await needsStepUp(supabase, "aal2")) {
+    return {
+      error: "Additional verification is required to export your data.",
+      code: STEP_UP_REQUIRED,
+    };
   }
 
   // Explicit column list rather than `select("*")`: `last_attested_hash` is
@@ -284,10 +342,9 @@ function getEmergencyContacts(formData: FormData): unknown[] {
 }
 
 export async function regenerateCardId(
-  _prevState: { error?: string } | undefined,
+  _prevState: { error?: string; code?: typeof STEP_UP_REQUIRED } | undefined,
   formData: FormData,
 ): Promise<{ error?: string }> {
-  void formData;
   const supabase = await createClient();
   const {
     data: { user },
@@ -297,30 +354,63 @@ export async function regenerateCardId(
     return { error: "You must be signed in." };
   }
 
-  const { data: current } = await supabase
-    .from("profiles")
-    .select("card_public_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  const newId = crypto.randomUUID();
+  return withIdempotency(
+    {
+      formData,
+      action: "regenerateCardId",
+      // The card_public_id written to the DB is generated server-side, so
+      // the only meaningful payload field is the user's intent (the form
+      // itself has no variable fields beyond the idempotency key).
+    },
+    async () => {
+      const { data: current } = await supabase
+        .from("profiles")
+        .select("card_public_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      const newId = crypto.randomUUID();
 
-  const { error } = await supabase
-    .from("profiles")
-    .update({ card_public_id: newId })
-    .eq("user_id", user.id);
+      const { error } = await supabase
+        .from("profiles")
+        .update({ card_public_id: newId })
+        .eq("user_id", user.id);
 
-  if (error) {
-    logError("Failed to regenerate card id", error, {
-      route: "/profile (action: regenerateCardId)",
-    });
-    return { error: "Could not regenerate your QR code. Please try again." };
-  }
+      if (error) {
+        logError("Failed to regenerate card id", error, {
+          route: "/profile (action: regenerateCardId)",
+        });
+        return { error: "Could not regenerate your QR code. Please try again." };
+      }
 
-  revalidatePath("/profile");
-  if (current?.card_public_id)
-    revalidatePath(`/card/${current.card_public_id}`);
-  revalidatePath(`/card/${newId}`);
-  return {};
+      revalidatePath("/profile");
+      if (current?.card_public_id)
+        revalidatePath(`/card/${current.card_public_id}`);
+      revalidatePath(`/card/${newId}`);
+      return {};
+    },
+  );
+}
+
+/**
+ * Issue #537: audit-trail entry for a Web NFC card-link write. Records only
+ * the outcome, never the capability URL/token itself — the URL is the
+ * bearer secret and must not be persisted or sent to telemetry (see
+ * lib/logging/logger.ts's Hard Rule).
+ */
+export async function logNfcCardWrite(
+  outcome: "success" | "error",
+): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  logInfo("Emergency card link written to NFC tag", {
+    route: "/profile (action: logNfcCardWrite)",
+    userId: user.id,
+    outcome,
+  });
 }
 
 export async function recordConsentChoice(formData: FormData): Promise<void> {
@@ -337,6 +427,7 @@ export async function recordConsentChoice(formData: FormData): Promise<void> {
     "offline_caching",
     "clinical_verification",
     "optional_analytics",
+    "emergency_contact_notification",
   ];
   if (!allowed.includes(purpose)) throw new Error("INVALID_CONSENT_PURPOSE");
   const { error } = await supabase.rpc("record_consent", {
@@ -371,7 +462,16 @@ export async function updateDisclosureChoices(
       formData.get(`field:${field}`) === "on";
   }
   fields.date_of_birth = false; // only derived age may ever be public
-  const policy: DisclosurePolicy = { version: 1, fields };
+  const requiresCardPin = PIN_GATEABLE_FIELDS.filter(
+    (field) => formData.get(`pin:${field}`) === "on",
+  );
+  const policy: DisclosurePolicy = {
+    version: 1,
+    fields,
+    ...(requiresCardPin.length > 0
+      ? { requires_card_pin: requiresCardPin }
+      : {}),
+  };
   const { error } = await supabase.rpc("update_disclosure_policy", {
     p_expected_revision_id: expected,
     p_disclosure_policy: policy,
@@ -527,6 +627,27 @@ export async function upsertProfile(
     };
   }
 
+  // Issue #628: refresh keyed duplicate-detection blocking keys. Best effort:
+  // a failure must never block saving emergency information.
+  if (serverEnv.ACCOUNT_LINKAGE_HMAC_SECRET) {
+    try {
+      await syncBlockingKeys(
+        createAdminClient(),
+        serverEnv.ACCOUNT_LINKAGE_HMAC_SECRET,
+        user.id,
+        {
+          phone: user.phone,
+          name: parsed.data.name,
+          dateOfBirth: parsed.data.dateOfBirth || null,
+        },
+      );
+    } catch (keyError) {
+      logError("Failed to sync duplicate-detection keys", keyError, {
+        route: "/profile (action: upsertProfile)",
+      });
+    }
+  }
+
   const { data: updatedProfile } = await supabase
     .from("profiles")
     .select("card_public_id")
@@ -551,6 +672,16 @@ export async function deleteAccount(
 
   if (!user) {
     return { error: "You must be signed in." };
+  }
+
+  // Issue #522: a stolen session cookie alone must not be enough to delete
+  // the account -- if the user has MFA enrolled, the session must have
+  // actually completed a step-up challenge in this login.
+  if (await needsStepUp(supabase, "aal2")) {
+    return {
+      error: "Additional verification is required to delete your account.",
+      code: STEP_UP_REQUIRED,
+    };
   }
 
   const confirm = formData.get("confirm")?.toString().trim();
@@ -647,6 +778,7 @@ export type RepairSecretResult =
   | { status: "repaired" }
   | { status: "not_found" }
   | { status: "unauthorized" }
+  | { status: "step_up_required" }
   | { status: "error"; error: string };
 
 /**
@@ -669,6 +801,13 @@ export async function repairProfileSecret(): Promise<RepairSecretResult> {
 
   if (!user) {
     return { status: "unauthorized" };
+  }
+
+  // Issue #522: this repair path can provision a new record secret for the
+  // caller's profile -- the same "a stolen session shouldn't be enough"
+  // reasoning as the other high-impact actions in this file applies here.
+  if (await needsStepUp(supabase, "aal2")) {
+    return { status: "step_up_required" };
   }
 
   // Resolve the authenticated user's profile. RLS (eq(user_id)) ensures

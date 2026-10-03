@@ -21,11 +21,86 @@ const AVATAR_DELETE_BATCH_SIZE = 100;
  * The `emergency_capabilities` table has `Update: never` in its TypeScript
  * type to prevent untrusted client-side mutations, but the service-role admin
  * client bypasses RLS entirely. The cast below is intentional and safe.
+ *
+ * Crypto-shredding: field-level encrypted columns are protected by a per-user
+ * data encryption key (DEK) stored in `user_data_keys`. Deleting rows does not
+ * remove ciphertext from point-in-time backups, so the DEK is destroyed first.
+ * Any residual ciphertext in a restored backup is then irrecoverable. The
+ * shred event is recorded in `account_shred_audit` with no PHI.
  */
 export async function deleteAccountAndData(
   admin: AdminClient,
   userId: string,
 ): Promise<void> {
+  // 0. Crypto-shred: destroy the per-user DEK before deleting any rows so that
+  //    residual ciphertext in backups becomes undecryptable. The audit row
+  //    records only the event and a key fingerprint, never PHI.
+  const { data: keyRow, error: keyLookupError } = await (
+    admin.from("user_data_keys") as unknown as {
+      select: (cols: string) => {
+        eq: (
+          col: string,
+          val: string,
+        ) => {
+          maybeSingle: () => Promise<{
+            data: { key_fingerprint: string | null } | null;
+            error: { message: string } | null;
+          }>;
+        };
+      };
+    }
+  )
+    .select("key_fingerprint")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (keyLookupError) {
+    throw new Error(
+      `Failed to look up account data key: ${keyLookupError.message}`,
+      { cause: keyLookupError },
+    );
+  }
+
+  const { error: shredError } = await (
+    admin.from("user_data_keys") as unknown as {
+      delete: () => {
+        eq: (
+          col: string,
+          val: string,
+        ) => Promise<{ error: { message: string } | null }>;
+      };
+    }
+  )
+    .delete()
+    .eq("user_id", userId);
+
+  if (shredError) {
+    throw new Error(
+      `Failed to destroy account data key: ${shredError.message}`,
+      { cause: shredError },
+    );
+  }
+
+  const { error: auditError } = await (
+    admin.from("account_shred_audit") as unknown as {
+      insert: (
+        row: Record<string, unknown>,
+      ) => Promise<{ error: { message: string } | null }>;
+    }
+  ).insert({
+    user_id: userId,
+    event: "dek_destroyed",
+    key_fingerprint: keyRow?.key_fingerprint ?? null,
+    shredded_at: new Date().toISOString(),
+  });
+
+  if (auditError) {
+    throw new Error(
+      `Failed to record key shred event: ${auditError.message}`,
+      { cause: auditError },
+    );
+  }
+
   // 1. Revoke all active capability shares so no previously-shared link can
   //    resolve to the patient's data after deletion.
   //

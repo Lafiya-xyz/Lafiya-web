@@ -1,7 +1,7 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
-import reactCompiler from "eslint-plugin-react-compiler";
+import noWildcardPhiSelect from "./eslint-rules/no-wildcard-phi-select.js";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -18,6 +18,16 @@ const eslintConfig = defineConfig([
     },
   },
   {
+    // Issue #586: application and library code must emit structured events
+    // through lib/logging/logger.ts so every log conforms to the PHI-safe
+    // schema. Forbid console.* entirely in app/ and lib/ (no warn/error
+    // escape hatch) so free-form messages can't bypass the schema.
+    files: ["app/**/*.{ts,tsx,js,jsx,mjs,cjs}", "lib/**/*.{ts,tsx,js,jsx,mjs,cjs}"],
+    rules: {
+      "no-console": "error",
+    },
+  },
+  {
     // The logger's own console.log call is the intended sink, not a leftover.
     files: ["lib/logging/logger.ts"],
     rules: {
@@ -25,15 +35,24 @@ const eslintConfig = defineConfig([
     },
   },
   {
-    // Issue #588: the React Compiler is enabled in next.config.ts, so surface
-    // rule-of-React violations (e.g. mutating props/state during render) as
-    // lint errors instead of letting the compiler silently bail out of
-    // optimizing the affected component.
+    // Issue #612: forbid wildcard selects on PHI-bearing Supabase tables.
+    // The PHI table list is configurable and should be kept in sync with the
+    // RoPA annotations.
+    files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
     plugins: {
-      "react-compiler": reactCompiler,
+      local: {
+        rules: {
+          "no-wildcard-phi-select": noWildcardPhiSelect,
+        },
+      },
     },
     rules: {
-      "react-compiler/react-compiler": "error",
+      "local/no-wildcard-phi-select": [
+        "error",
+        {
+          phiTables: ["profiles", "record_revisions", "profile_secrets"],
+        },
+      ],
     },
   },
   // Override default ignores of eslint-config-next.

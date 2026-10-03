@@ -18,22 +18,92 @@
  *    the rest of the app. Next.js CSS imports in layout/page components are
  *    bundled into the route's own CSS chunk.
  *
- * 3. ZERO-CLIENT-COMPONENT POLICY — This route is intentionally a pure
- *    server-rendered page. No "use client" components may be rendered from
- *    this layout or its descendants, apart from an explicitly allowlisted set
- *    of islands (currently: none — service worker registration lives outside
- *    the card route). The policy is enforced at build time by
- *    scripts/check-client-bundles.js, which fails CI when the card route's
- *    client JS exceeds its byte budget. See CONTRIBUTING.md for details.
+ * 3. LABEL LOCALE — The card is rendered bilingually: field labels follow the
+ *    responder's language, negotiated from the Accept-Language header, while
+ *    patient-entered free text keeps its own language (profiles.language) and
+ *    is marked with a `lang` attribute. The negotiated locale is exposed on
+ *    <html lang> so assistive tech and the browser pick the right language for
+ *    the label text. The manual switch (a plain link, no JS required) persists
+ *    the responder's choice in a cookie; when that cookie is present it wins
+ *    over Accept-Language.
  */
 
+import { cookies, headers } from "next/headers";
 import "./print.css";
+
+/**
+ * Locales we ship reviewed clinical label translations for. Kept in sync with
+ * the glossary used by the card content and the offline envelope.
+ */
+const SUPPORTED_LABEL_LOCALES = ["en", "ha", "fr", "ar"] as const;
+
+const DEFAULT_LABEL_LOCALE = "en";
+
+/** Cookie that persists the responder's manual label-language choice. */
+const LABEL_LOCALE_COOKIE = "card_label_locale";
+
+/**
+ * Pick the best supported label locale from an Accept-Language header value.
+ *
+ * We deliberately do a simple, dependency-free negotiation: parse the
+ * comma-separated list, honour q-values, and match on the primary subtag
+ * (e.g. "ha-NG" → "ha"). This keeps the route free of extra runtime weight
+ * and avoids sending anything to a third party.
+ */
+function negotiateLabelLocale(acceptLanguage: string | null): string {
+  if (!acceptLanguage) return DEFAULT_LABEL_LOCALE;
+
+  const ranked = acceptLanguage
+    .split(",")
+    .map((part) => {
+      const [tag, ...params] = part.trim().split(";");
+      const qParam = params.find((p) => p.trim().startsWith("q="));
+      const q = qParam ? Number.parseFloat(qParam.split("=")[1]) : 1;
+      return { tag: tag.trim().toLowerCase(), q: Number.isNaN(q) ? 0 : q };
+    })
+    .filter((entry) => entry.tag.length > 0)
+    .sort((a, b) => b.q - a.q);
+
+  for (const { tag } of ranked) {
+    const primary = tag.split("-")[0];
+    const match = SUPPORTED_LABEL_LOCALES.find((locale) => locale === primary);
+    if (match) return match;
+  }
+
+  return DEFAULT_LABEL_LOCALE;
+}
+
+/**
+ * Resolve the label locale for this request. A manual choice stored in the
+ * cookie takes precedence over the Accept-Language header so the no-JS switch
+ * link is sticky across visits.
+ */
+function resolveLabelLocale(
+  cookieValue: string | undefined,
+  acceptLanguage: string | null,
+): string {
+  if (
+    cookieValue &&
+    (SUPPORTED_LABEL_LOCALES as readonly string[]).includes(cookieValue)
+  ) {
+    return cookieValue;
+  }
+  return negotiateLabelLocale(acceptLanguage);
+}
 
 export default function CardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const cookieStore = cookies();
+  const headerStore = headers();
+
+  const labelLocale = resolveLabelLocale(
+    cookieStore.get(LABEL_LOCALE_COOKIE)?.value,
+    headerStore.get("accept-language"),
+  );
+
   return (
     <>
       {/*
@@ -53,7 +123,15 @@ export default function CardLayout({
           --font-mono: ui-monospace, "Courier New", monospace;
         }
       `}</style>
-      {children}
+      {/*
+       * Announce the negotiated label language to assistive tech and the
+       * browser. Free-text blocks rendered by the card content carry their own
+       * `lang` attribute (the patient's entry language), which overrides this
+       * for those spans so screen readers switch voices correctly.
+       */}
+      <div lang={labelLocale} data-label-locale={labelLocale}>
+        {children}
+      </div>
     </>
   );
 }

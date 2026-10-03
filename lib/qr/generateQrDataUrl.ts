@@ -62,17 +62,47 @@ export async function generateQrDataUrl(text: string): Promise<string> {
       width: 400,
     });
   } catch (error) {
-    // The qrcode library throws a plain Error whose message mentions that
-    // the data is "too big" when the input exceeds the maximum QR capacity.
-    // Translate this into a typed, catchable error so call sites can
-    // show a clear message rather than leaking raw library internals.
-    const msg = error instanceof Error ? error.message : String(error);
-    if (/too big|overflow|too long|capacity/i.test(msg)) {
-      throw new QrCapacityError(
-        "The emergency card URL is too long to encode as a QR code. " +
-          "Contact support if this persists.",
-      );
-    }
-    throw error;
+    throw translateQrError(error);
   }
+}
+
+/**
+ * Same QR payload/options contract as {@link generateQrDataUrl}, but
+ * returns a raw PNG buffer instead of a data: URL, for callers that
+ * composite the code into a larger raster image server-side (e.g. the
+ * lock-screen wallpaper generator) rather than embedding it in an <img>.
+ *
+ * `width` lets those callers size the code for a specific canvas while
+ * keeping the same error-correction level and quiet zone as the on-screen
+ * QR -- both scan-reliability decisions documented above, independent of
+ * output size.
+ */
+export async function generateQrBuffer(
+  text: string,
+  width: number,
+): Promise<Buffer> {
+  try {
+    return await QRCode.toBuffer(text, {
+      errorCorrectionLevel: "Q",
+      margin: 4,
+      width,
+    });
+  } catch (error) {
+    throw translateQrError(error);
+  }
+}
+
+function translateQrError(error: unknown): Error {
+  // The qrcode library throws a plain Error whose message mentions that
+  // the data is "too big" when the input exceeds the maximum QR capacity.
+  // Translate this into a typed, catchable error so call sites can
+  // show a clear message rather than leaking raw library internals.
+  const msg = error instanceof Error ? error.message : String(error);
+  if (/too big|overflow|too long|capacity/i.test(msg)) {
+    return new QrCapacityError(
+      "The emergency card URL is too long to encode as a QR code. " +
+        "Contact support if this persists.",
+    );
+  }
+  return error instanceof Error ? error : new Error(msg);
 }

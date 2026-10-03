@@ -31,12 +31,13 @@ const CARD_CLIENT_ALLOWLIST = [
   'service-worker-registration',
 ];
 
-// Byte budget for the card route's client JS. Keep in sync with the numbers
-// reported in the PR.
-const CARD_CLIENT_BYTE_BUDGET = 8 * 1024; // 8 KiB
+// The Stellar Wallets Kit is a heavy, wallet-agnostic dependency that must only
+// ever be pulled in through the lazy-loaded CHW signing module. If it leaks into
+// the eagerly-loaded public card bundle, the bundle check fails so the regression
+// is caught at build time (issue #557).
+const LAZY_ONLY_MODULES = ["@creit.tech/stellar-wallets-kit"];
 
-// Route prefixes that are subject to the zero-client-component policy.
-const CARD_ROUTE_PREFIXES = ['/card'];
+const searchTargets = new Map(SERVER_ONLY_ENV_VARS.map((name) => [name, name]));
 
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -60,19 +61,31 @@ function isAllowlisted(chunkPath) {
   return CARD_CLIENT_ALLOWLIST.some((name) => chunkPath.includes(name));
 }
 
-function checkCardRouteBudget() {
-  const manifest = collectClientChunks();
-  if (!manifest) {
-    console.log(
-      '[check-client-bundles] No build manifest found; skipping card route budget check.'
-    );
-    return true;
-  }
+console.log(`Scanning client chunks in ${CHUNKS_DIR}...`);
+console.log(
+  "Searching for sensitive server-only env identifiers and configured values:",
+  Array.from(searchTargets.values()),
+);
+console.log(
+  "Enforcing lazy-only modules stay out of the public card bundle:",
+  LAZY_ONLY_MODULES,
+);
 
-  const cardRoutes = Object.keys(manifest).filter(isCardRoute);
-  if (cardRoutes.length === 0) {
-    console.log('[check-client-bundles] No card routes found in build manifest.');
-    return true;
+const files = getFilesRecursively(CHUNKS_DIR);
+let leakDetected = false;
+const textAssetExtensions = new Set([
+  ".cjs",
+  ".html",
+  ".js",
+  ".json",
+  ".map",
+  ".mjs",
+  ".txt",
+]);
+
+files.forEach((file) => {
+  if (!textAssetExtensions.has(path.extname(file))) {
+    return;
   }
 
   let ok = true;

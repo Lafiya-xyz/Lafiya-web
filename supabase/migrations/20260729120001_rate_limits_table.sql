@@ -50,7 +50,7 @@ create or replace function public.rate_limit_record_failure(p_key text)
 returns table (attempts integer, blocked_until timestamptz)
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
 begin
   return query

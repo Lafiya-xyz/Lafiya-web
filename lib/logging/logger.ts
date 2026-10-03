@@ -26,6 +26,159 @@ function shouldLog(level: LogLevel): boolean {
   return LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[currentLogLevel];
 }
 
+/**
+ * Typed log event schema.
+ *
+ * Every structured log must declare one of these event names and the
+ * required fields below. Free-form objects are rejected at compile time
+ * because `LogEvent` is a discriminated union keyed on `event`.
+ *
+ * PHI-safe: only coarse, non-identifying fields are permitted. Never add
+ * patient identifiers, capability tokens, or raw request bodies here.
+ */
+export type RouteClass =
+  | "public"
+  | "authenticated"
+  | "emergency"
+  | "internal"
+  | "webhook";
+
+export type Outcome = "success" | "failure" | "partial";
+
+interface LogEventBase {
+  /** Coarse route classification — never the raw path or query string. */
+  route_class: RouteClass;
+  outcome: Outcome;
+  /** Wall-clock duration of the operation in milliseconds. */
+  duration_ms: number;
+}
+
+export interface CardViewEvent extends LogEventBase {
+  event: "card_view";
+}
+
+export interface CardCreateEvent extends LogEventBase {
+  event: "card_create";
+}
+
+export interface CardUpdateEvent extends LogEventBase {
+  event: "card_update";
+}
+
+export interface AuthEvent extends LogEventBase {
+  event: "auth";
+}
+
+export interface ApiRequestEvent extends LogEventBase {
+  event: "api_request";
+}
+
+export interface JobRunEvent extends LogEventBase {
+  event: "job_run";
+}
+
+export interface ErrorEvent extends LogEventBase {
+  event: "error";
+}
+
+export type LogEvent =
+  | CardViewEvent
+  | CardCreateEvent
+  | CardUpdateEvent
+  | AuthEvent
+  | ApiRequestEvent
+  | JobRunEvent
+  | ErrorEvent;
+
+export type LogEventName = LogEvent["event"];
+
+/**
+ * Sampling policy: fraction of matching events that are emitted.
+ *
+ * High-volume success logs (e.g. card views) are sampled aggressively to
+ * bound cost and privacy surface, while failures and warnings are always
+ * kept. Values are per-event and per-level; the most specific match wins.
+ */
+export interface SamplingPolicy {
+  /** Default sampling rate applied to all events at a given level. */
+  byLevel: Record<LogLevel, number>;
+  /** Per-event overrides, e.g. 1% sampling for card-view success. */
+  byEvent: Partial<Record<LogEventName, number>>;
+}
+
+export const DEFAULT_SAMPLING: SamplingPolicy = {
+  byLevel: {
+    debug: 0.1,
+    info: 0.1,
+    warn: 1,
+    error: 1,
+  },
+  byEvent: {
+    // Card views are the highest-volume success path — keep 1%.
+    card_view: 0.01,
+  },
+};
+
+let samplingPolicy: SamplingPolicy = DEFAULT_SAMPLING;
+
+export function setSamplingPolicy(policy: SamplingPolicy): void {
+  samplingPolicy = policy;
+}
+
+export function getSamplingPolicy(): SamplingPolicy {
+  return samplingPolicy;
+}
+
+/**
+ * Resolves the sampling rate for an event. Failures are never sampled away:
+ * any non-success outcome is always emitted so incidents stay observable.
+ */
+export function getSamplingRate(
+  event: LogEventName,
+  level: LogLevel,
+  outcome: Outcome,
+): number {
+  if (outcome !== "success") {
+    return 1;
+  }
+  const byEvent = samplingPolicy.byEvent[event];
+  if (typeof byEvent === "number") {
+    return byEvent;
+  }
+  return samplingPolicy.byLevel[level] ?? 1;
+}
+
+/**
+ * Decides whether an event should be emitted given a sampling rate.
+ * `random` is injectable so sampling can be tested deterministically.
+ */
+export function shouldSample(
+  rate: number,
+  random: () => number = Math.random,
+): boolean {
+  if (rate >= 1) {
+    return true;
+  }
+  if (rate <= 0) {
+    return false;
+  }
+  return random() < rate;
+}
+
+/**
+ * Retention policy per sink. Documented here so the platform settings and
+ * the code stay in sync. See README for the operator-facing summary.
+ *
+ * - Vercel (stdout/console): 7 days — platform log drain retention.
+ * - Sentry: 30 days — error/event retention on the team plan.
+ * - Supabase (Postgres logs): 7 days — default log retention window.
+ */
+export const RETENTION_DAYS: Record<"vercel" | "sentry" | "supabase", number> = {
+  vercel: 7,
+  sentry: 30,
+  supabase: 7,
+};
+
 // `JSON.stringify` throws on BigInt (e.g. a ledger number in log context),
 // which would otherwise turn a log call into a thrown error for its caller.
 function stringifyLogPayload(payload: unknown): string {
@@ -192,6 +345,42 @@ export function redactSensitiveData(
 }
 
 /**
+ * Emits a schema-conforming structured log event.
+ *
+ * The event is validated against the typed union at compile time, redacted,
+ * and sampled according to the active policy. Failures are never sampled away.
+ */
+export function logEvent(
+  level: LogLevel,
+  event: LogEvent,
+  random: () => number = Math.random,
+): void {
+  if (!shouldLog(level)) {
+    return;
+  }
+
+  const rate = getSamplingRate(event.event, level, event.outcome);
+  if (!shouldSample(rate, random)) {
+    return;
+  }
+
+  const logPayload = {
+    level,
+    timestamp: new Date().toISOString(),
+    ...(redactSensitiveData(event) as Record<string, unknown>),
+  };
+
+  const serialized = stringifyLogPayload(logPayload);
+  if (level === "error") {
+    console.error(serialized);
+  } else if (level === "warn") {
+    console.warn(serialized);
+  } else {
+    console.log(serialized);
+  }
+}
+
+/**
  * Logs an error to console.error as structured JSON and captures it in Sentry.
  * Recursively redacts all sensitive fields and email patterns.
  *
@@ -313,33 +502,4 @@ export function logWarn(
   };
 
   console.warn(stringifyLogPayload(logPayload));
-}
-
-/**
- * Logs debug information to console.log as structured JSON.
- * Only output in development; suppressed in production by default.
- * Recursively redacts all sensitive fields and email patterns.
- */
-export function logDebug(
-  message: string,
-  context?: Record<string, unknown>,
-): void {
-  if (!shouldLog("debug")) {
-    return;
-  }
-
-  const timestamp = new Date().toISOString();
-  const redactedContext =
-    context !== undefined
-      ? (redactSensitiveData(context) as Record<string, unknown>)
-      : undefined;
-
-  const logPayload = {
-    level: "debug",
-    message: redactString(message),
-    timestamp,
-    context: redactedContext,
-  };
-
-  console.log(stringifyLogPayload(logPayload));
 }

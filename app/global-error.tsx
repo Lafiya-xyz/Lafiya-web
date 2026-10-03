@@ -2,6 +2,9 @@
 
 import { useEffect } from "react";
 
+const STATUS_PAGE_URL =
+  process.env.NEXT_PUBLIC_STATUS_PAGE_URL ?? "https://status.lafiya.health";
+
 export default function GlobalError({
   error,
   reset,
@@ -33,6 +36,16 @@ export default function GlobalError({
             <p className="mt-4 text-base leading-7 text-zinc-600 dark:text-zinc-400">
               The application could not render correctly. Please try again. If
               the issue persists, contact support with the time this happened.
+            </p>
+            <p className="mt-4 text-base leading-7 text-zinc-600 dark:text-zinc-400">
+              You can check whether this is a known outage on our{" "}
+              <a
+                href={STATUS_PAGE_URL}
+                className="font-medium text-zinc-950 underline underline-offset-4 hover:text-zinc-700 dark:text-zinc-50 dark:hover:text-zinc-300"
+              >
+                public status page
+              </a>
+              .
             </p>
             <div className="mt-8 flex justify-center">
               <button

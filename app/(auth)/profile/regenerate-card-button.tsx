@@ -1,8 +1,10 @@
 "use client";
 
-import { useActionState, useRef } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 
+import { IdempotencyKeyInputClient } from "@/lib/idempotency/IdempotencyKeyInputClient";
 import { regenerateCardId } from "./actions";
+import { StepUpChallenge } from "./step-up-challenge";
 
 export function RegenerateCardButton() {
   const [state, formAction, isPending] = useActionState(
@@ -10,6 +12,14 @@ export function RegenerateCardButton() {
     undefined,
   );
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    if (isPending) setDismissed(false);
+  }, [isPending]);
+
+  const stepUpRequired = state?.code === "STEP_UP_REQUIRED" && !dismissed;
 
   return (
     <>
@@ -26,6 +36,7 @@ export function RegenerateCardButton() {
         className="w-full max-w-sm rounded-xl border border-zinc-300 bg-white p-6 text-zinc-950 backdrop:bg-black/40 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
       >
         <form action={formAction}>
+          <IdempotencyKeyInputClient />
           <h2 className="text-lg font-semibold">Regenerate QR code?</h2>
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
             This will immediately invalidate your current QR code and card link.
@@ -57,6 +68,13 @@ export function RegenerateCardButton() {
           </div>
         </form>
       </dialog>
+
+      {stepUpRequired ? (
+        <StepUpChallenge
+          onVerified={() => formRef.current?.requestSubmit()}
+          onCancel={() => setDismissed(true)}
+        />
+      ) : null}
     </>
   );
 }

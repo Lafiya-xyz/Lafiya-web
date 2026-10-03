@@ -24,6 +24,21 @@ const mockSecretExistsByUserId = vi.mocked(
 const mockLogError = vi.mocked((await import("@/lib/logging/logger")).logError);
 const authUser = { id: crypto.randomUUID() };
 
+// No MFA factor enrolled -- nextLevel stays aal1, so needsStepUp() returns
+// false and every test below sees the same pre-Issue-#522 behavior unless
+// it explicitly overrides this. The step-up guard itself is covered in the
+// "repairProfileSecret step-up guard (#522)" describe block below.
+const NO_MFA_ENROLLED = {
+  getAuthenticatorAssuranceLevel: vi.fn().mockResolvedValue({
+    data: {
+      currentLevel: "aal1",
+      nextLevel: "aal1",
+      currentAuthenticationMethods: [],
+    },
+    error: null,
+  }),
+};
+
 function form(expected?: string) {
   const data = new FormData();
   if (expected) data.set("expectedRevisionId", expected);
@@ -43,7 +58,10 @@ function clientFor(
     .mockResolvedValue({ data: { card_public_id: "card-id" } });
   return {
     rpc,
-    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: authUser } }) },
+    auth: {
+      getUser: vi.fn().mockResolvedValue({ data: { user: authUser } }),
+      mfa: NO_MFA_ENROLLED,
+    },
     from: vi.fn().mockReturnValue({
       select: vi.fn().mockReturnValue({
         eq: vi.fn().mockReturnValue({ maybeSingle, single }),
@@ -126,6 +144,7 @@ describe("repairProfileSecret", () => {
           data: { user },
           error: user ? null : new Error("Not authenticated"),
         }),
+        mfa: NO_MFA_ENROLLED,
       },
       from: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnValue({
@@ -153,6 +172,7 @@ describe("repairProfileSecret", () => {
           data: { user: { id: userId } },
           error: null,
         }),
+        mfa: NO_MFA_ENROLLED,
       },
       from: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnValue({
