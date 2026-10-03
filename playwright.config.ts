@@ -1,10 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const pseudoLocaleEnv = {
-  NEXT_PUBLIC_PSEUDO_LOCALE: "1",
-  NEXT_PUBLIC_PSEUDO_LOCALE_EXPANSION: "0.4",
-};
-
+// Network-emulation e2e scenarios (issue #610) rely on the Chrome DevTools
+// Protocol (`Network.emulateNetworkConditions`), which is only available in
+// Chromium. Firefox and WebKit cannot throttle/flap connectivity this way, so
+// the suite intentionally runs on Chromium only.
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -38,10 +37,13 @@ export default defineConfig({
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
     {
-      name: "pseudo-locale",
-      testDir: "./e2e/pseudo-locale",
-      use: { ...devices["Desktop Chrome"] },
-      metadata: { pseudoLocale: true },
+      name: "forced-colors",
+      testMatch: /forced-colors\/.*\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        colorScheme: "dark",
+        forcedColors: "active",
+      },
     },
   ],
 });

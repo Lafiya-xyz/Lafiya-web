@@ -68,19 +68,27 @@ test.describe("Golden path: signup → profile edit → QR scan → public card"
     await page.check("#consent");
     await page.getByTestId("signup-submit").click();
 
-    // Handle both cases: immediate session, or email confirmation required.
-    const infoMessage = page.getByText(/check your email/i);
-    if (await infoMessage.isVisible({ timeout: 3000 }).catch(() => false)) {
+    // Sign-up always answers with the same "check your email" message and
+    // never signs the user in directly, so it can't reveal whether the email
+    // already had an account (#527).
+    await expect(page.getByText(/check your email/i)).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page).toHaveURL(/\/signup$/);
+
+    // Only follow a confirmation link when the local stack requires one.
+    const { data: users } = await adminClient.auth.admin.listUsers();
+    const created = users.users.find((u) => u.email === email);
+    if (!created?.email_confirmed_at) {
       const confirmationLink = await getConfirmationLinkFromInbucket(email);
       expect(confirmationLink).not.toBeNull();
       await page.goto(confirmationLink!);
-
-      // Confirmation alone may not create a session; sign in explicitly.
-      await page.goto("/signin");
-      await page.fill("#email", email);
-      await page.fill("#password", password);
-      await page.getByTestId("signin-submit").click();
     }
+
+    await page.goto("/signin");
+    await page.fill("#email", email);
+    await page.fill("#password", password);
+    await page.getByTestId("signin-submit").click();
 
     // --- 2. Should now be on the profile page ---
     await page.waitForURL("**/profile", { timeout: 30_000 });

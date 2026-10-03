@@ -335,3 +335,52 @@ splits into cross-repo implementation work:
   policy rather than inheriting `lafiya-web`'s default (§9).
 - Cross-repo: stand up the governance-event transparency mirror (§5),
   reusing the payout-indexer pattern.
+
+## 12. Admin-event monitoring and approved WASM hashes (issue #629)
+
+`lafiya-web` now watches the attestation contract's administrative events
+and fails safe when the contract's code changes without approval.
+
+**What is indexed.** `ContractGovernanceMonitor`
+(`lib/stellar/verification-indexer/governance-monitor.ts`) reads WASM
+upgrades, admin transfers, allowlist changes, and pause/unpause events
+and records each one in `attestation_contract_admin_events` (service role
+only). Its cursor lives in `protocol_indexer_checkpoints` under the
+`contract_admin` stream and, like the attestation indexer, is saved only
+after every event in a page is recorded, so a crash replays idempotently.
+
+**Approved WASM hash allowlist.** `ATTESTATION_APPROVED_WASM_HASHES` is a
+comma-separated list of lowercase 64-character hex WASM hashes that
+governance has approved. It is validated at startup
+(`APPROVED_WASM_HASH_INVALID` on a malformed entry). Hashes are public
+on-chain values, not secrets.
+
+**Fail-safe behaviour.** The current state is kept in
+`attestation_contract_trust_state`:
+
+| State          | Trigger                                                           | Effect                                                           |
+| -------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `trusted`      | No upgrade seen yet, or the latest upgrade's hash is approved     | Badges render normally                                           |
+| `needs_review` | An upgrade to a hash outside the allowlist, or an unreadable hash | Badges show "Verification status unavailable"; operators alerted |
+| `paused`       | A `pause` event (cleared by `unpause`)                            | Badges show "Verification status unavailable"; operators alerted |
+
+The card pages also degrade if the trust state cannot be read. Readiness
+(`/api/internal/readiness`) exposes the state as
+`components.attestationGovernance` without failing readiness, because
+emergency data stays readable while verification is degraded.
+
+**Alerts.** Unapproved upgrades, admin transfers, pauses, and allowlist
+changes raise an operator alert through `logError` with a stable code
+(`ATTESTATION_GOVERNANCE_<CODE>`), which is routed to Sentry. Alerts carry
+only the contract ID, event ID, and WASM hash — never patient data.
+
+**Approving an upgrade (runbook).**
+
+1. Confirm the upgrade went through the governance process in §2/§7
+   (multisig approval, timelock elapsed, audited build).
+2. Reproduce the WASM hash from the audited, tagged `lafiya-contracts`
+   build and compare it with the hash in the alert.
+3. Add the hash to `ATTESTATION_APPROVED_WASM_HASHES` and redeploy. The
+   next monitor run re-evaluates the stored hash and restores `trusted`.
+4. If the hash does not match an approved build, treat it as a
+   compromised admin key and follow §7.

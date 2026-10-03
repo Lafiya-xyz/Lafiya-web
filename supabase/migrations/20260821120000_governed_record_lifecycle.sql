@@ -166,220 +166,120 @@ returns boolean language sql stable security definer set search_path = '' as $$
     order by ce.occurred_at desc, ce.id desc limit 1
   ), false);
 $$;
-revoke all on function public.has_active_consent(uuid,text) from public;
-grant execute on function public.has_active_consent(uuid,text) to service_role;
+revoke all on function public.has_active_consent(uuid, text) from public;
+grant execute on function public.has_active_consent(uuid, text)
+  to authenticated, service_role;
 
+-- Issue #509: consent_events is the single source of truth. All application
+-- writes must go through record_consent(); all reads through
+-- has_active_consent() or the consent_ledger compatibility view below.
 create or replace function public.record_consent(
-  p_purpose text, p_purpose_version integer, p_action text,
+  p_user_id uuid,
+  p_purpose text,
+  p_purpose_version integer,
+  p_action text,
   p_idempotency_key uuid
 ) returns public.consent_events
 language plpgsql security definer set search_path = '' as $$
-declare v_event public.consent_events;
+declare
+  v_event public.consent_events;
 begin
-  if auth.uid() is null then raise exception using errcode='42501', message='AUTH_REQUIRED'; end if;
-  insert into public.consent_events(user_id,purpose,purpose_version,action,idempotency_key)
-  values(auth.uid(),p_purpose,p_purpose_version,p_action,p_idempotency_key)
-  on conflict(user_id,idempotency_key) do update set idempotency_key=excluded.idempotency_key
+  if p_action not in ('acknowledged','withdrawn') then
+    raise exception 'invalid consent action: %', p_action;
+  end if;
+
+  insert into public.consent_events
+    (user_id, purpose, purpose_version, action, idempotency_key)
+  values (p_user_id, p_purpose, p_purpose_version, p_action, p_idempotency_key)
+  on conflict (user_id, idempotency_key) do nothing
   returning * into v_event;
+
+  if v_event.id is null then
+    select * into v_event from public.consent_events
+    where user_id = p_user_id and idempotency_key = p_idempotency_key;
+  end if;
+
   return v_event;
 end;
 $$;
-revoke all on function public.record_consent(text,integer,text,uuid) from public;
-grant execute on function public.record_consent(text,integer,text,uuid) to authenticated;
+revoke all on function public.record_consent(uuid, text, integer, text, uuid)
+  from public;
+grant execute on function public.record_consent(uuid, text, integer, text, uuid)
+  to authenticated, service_role;
 
-create or replace function public.save_record_revision(
-  p_expected_revision_id uuid,
-  p_emergency_data jsonb,
-  p_provenance jsonb,
-  p_disclosure_policy jsonb,
-  p_commitment text
-) returns public.record_revisions
-language plpgsql security definer set search_path = '' as $$
+-- Read-only compatibility view so legacy readers see the unified ledger.
+create or replace view public.consent_ledger
+  with (security_invoker = true) as
+select
+  ce.id,
+  ce.user_id,
+  ce.purpose,
+  ce.purpose_version,
+  ce.action,
+  ce.occurred_at,
+  ce.idempotency_key
+from public.consent_events ce;
+
+grant select on public.consent_ledger to authenticated, service_role;
+
+-- Replace consent_logs with a read-only compatibility view for one release.
+-- The underlying table is renamed so no application code can write to it
+-- directly; a follow-up migration drops the renamed table.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'consent_logs'
+      and table_type = 'BASE TABLE'
+  ) then
+    alter table public.consent_logs rename to consent_logs_legacy;
+  end if;
+end;
+$$;
+
+create or replace view public.consent_logs
+  with (security_invoker = true) as
+select
+  ce.id,
+  ce.user_id,
+  ce.occurred_at as accepted_at,
+  ce.purpose as policy_version
+from public.consent_events ce
+where ce.purpose = 'account_processing' and ce.action = 'acknowledged';
+
+grant select on public.consent_logs to authenticated, service_role;
+revoke insert, update, delete on public.consent_logs from authenticated, service_role;
+
+-- Idempotent backfill verification: row-count and checksum assertions.
+do $$
 declare
-  v_profile public.profiles;
-  v_previous public.record_revisions;
-  v_revision public.record_revisions;
-  v_state public.record_lifecycle_state;
+  v_legacy_count bigint;
+  v_event_count bigint;
+  v_legacy_checksum text;
+  v_event_checksum text;
 begin
-  if auth.uid() is null then raise exception using errcode='42501', message='AUTH_REQUIRED'; end if;
-  if p_commitment !~ '^[0-9a-f]{64}$' then
-    raise exception using errcode='22023', message='INVALID_COMMITMENT';
-  end if;
+  if exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'consent_logs_legacy'
+      and table_type = 'BASE TABLE'
+  ) then
+    execute 'select count(*), coalesce(md5(string_agg(user_id::text || accepted_at::text, '','' order by user_id, accepted_at)), '''') from public.consent_logs_legacy'
+      into v_legacy_count, v_legacy_checksum;
 
-  select * into v_profile from public.profiles where user_id=auth.uid() for update;
-  if found then
-    if v_profile.current_revision_id is distinct from p_expected_revision_id then
-      raise exception using errcode='40001', message='STALE_REVISION',
-        detail=coalesce(v_profile.current_revision_id::text, 'none');
+    select count(*), coalesce(md5(string_agg(user_id::text || occurred_at::text, '','' order by user_id, occurred_at)), '')
+      into v_event_count, v_event_checksum
+    from public.consent_events
+    where purpose = 'account_processing' and action = 'acknowledged';
+
+    if v_event_count < v_legacy_count then
+      raise exception 'consent backfill row-count mismatch: legacy=% events=%',
+        v_legacy_count, v_event_count;
     end if;
-    select * into v_previous from public.record_revisions where id=v_profile.current_revision_id;
-    v_state := case when v_previous.lifecycle_state='verified' then 'stale_after_edit'::public.record_lifecycle_state
-                    else 'shareable'::public.record_lifecycle_state end;
-  elsif p_expected_revision_id is not null then
-    raise exception using errcode='40001', message='STALE_REVISION', detail='none';
-  else
-    -- Serialize competing first saves for the same auth identity.
-    perform pg_advisory_xact_lock(hashtextextended(auth.uid()::text, 0));
-    select * into v_profile from public.profiles where user_id=auth.uid() for update;
-    if found then raise exception using errcode='40001', message='STALE_REVISION', detail=v_profile.current_revision_id::text; end if;
-    v_state := 'shareable';
+
+    if v_legacy_checksum <> v_event_checksum then
+      raise exception 'consent backfill checksum mismatch: legacy=% events=%',
+        v_legacy_checksum, v_event_checksum;
+    end if;
   end if;
-
-  insert into public.record_revisions(
-    user_id, predecessor_id, revision_number, lifecycle_state, emergency_data,
-    provenance, disclosure_policy, commitment, created_by
-  ) values (
-    auth.uid(), v_profile.current_revision_id, coalesce(v_previous.revision_number,0)+1,
-    v_state, p_emergency_data, p_provenance, p_disclosure_policy,
-    p_commitment, auth.uid()
-  ) returning * into v_revision;
-
-  insert into public.profiles(
-    user_id,name,date_of_birth,photo_url,language,blood_group,genotype,
-    allergies,medications,chronic_conditions,emergency_contacts,
-    disclosure_policy,current_revision_id
-  ) values (
-    auth.uid(), p_emergency_data->>'name', nullif(p_emergency_data->>'date_of_birth','')::date,
-    nullif(p_emergency_data->>'photo_url',''), nullif(p_emergency_data->>'language',''),
-    (p_emergency_data->>'blood_group')::public.blood_group_enum,
-    (p_emergency_data->>'genotype')::public.genotype_enum,
-    array(select jsonb_array_elements_text(p_emergency_data->'allergies')),
-    array(select jsonb_array_elements_text(p_emergency_data->'medications')),
-    array(select jsonb_array_elements_text(p_emergency_data->'chronic_conditions')),
-    p_emergency_data->'emergency_contacts', p_disclosure_policy, v_revision.id
-  ) on conflict(user_id) do update set
-    name=excluded.name,date_of_birth=excluded.date_of_birth,photo_url=excluded.photo_url,
-    language=excluded.language,blood_group=excluded.blood_group,genotype=excluded.genotype,
-    allergies=excluded.allergies,medications=excluded.medications,
-    chronic_conditions=excluded.chronic_conditions,
-    emergency_contacts=excluded.emergency_contacts,
-    disclosure_policy=excluded.disclosure_policy,current_revision_id=excluded.current_revision_id;
-
-  update public.reattestation_requests set status='superseded'
-    where user_id=auth.uid() and status in ('pending','under_review')
-      and revision_id is distinct from v_revision.id;
-  return v_revision;
 end;
 $$;
-revoke all on function public.save_record_revision(uuid,jsonb,jsonb,jsonb,text) from public;
-grant execute on function public.save_record_revision(uuid,jsonb,jsonb,jsonb,text) to authenticated;
-
-create or replace function public.update_disclosure_policy(
-  p_expected_revision_id uuid, p_disclosure_policy jsonb
-) returns public.record_revisions
-language plpgsql security definer set search_path='' as $$
-declare v_profile public.profiles; v_previous public.record_revisions; v_revision public.record_revisions;
-begin
-  if auth.uid() is null then raise exception using errcode='42501',message='AUTH_REQUIRED'; end if;
-  select * into v_profile from public.profiles where user_id=auth.uid() for update;
-  if not found or v_profile.current_revision_id is distinct from p_expected_revision_id then
-    raise exception using errcode='40001',message='STALE_REVISION',detail=coalesce(v_profile.current_revision_id::text,'none');
-  end if;
-  select * into v_previous from public.record_revisions where id=v_profile.current_revision_id;
-  insert into public.record_revisions(user_id,predecessor_id,revision_number,lifecycle_state,
-    emergency_data,provenance,disclosure_policy,commitment,created_by)
-  values(auth.uid(),v_previous.id,v_previous.revision_number+1,v_previous.lifecycle_state,
-    v_previous.emergency_data,v_previous.provenance,p_disclosure_policy,v_previous.commitment,auth.uid())
-  returning * into v_revision;
-  update public.profiles set disclosure_policy=p_disclosure_policy,current_revision_id=v_revision.id
-    where user_id=auth.uid();
-  return v_revision;
-end;
-$$;
-revoke all on function public.update_disclosure_policy(uuid,jsonb) from public;
-grant execute on function public.update_disclosure_policy(uuid,jsonb) to authenticated;
-
--- Compatibility guard for older clients/seed scripts during the expand
--- window. A direct profile INSERT receives one unverified initial revision;
--- subsequent edits still must use save_record_revision (UPDATE is blocked
--- below). This trigger skips the new RPC, which supplies its own pointer.
-create function public.initialize_profile_revision()
-returns trigger language plpgsql security definer set search_path='' as $$
-declare v_id uuid;
-begin
-  if new.current_revision_id is not null then return new; end if;
-  insert into public.record_revisions(user_id,revision_number,lifecycle_state,
-    emergency_data,provenance,disclosure_policy,commitment,created_by)
-  values(new.user_id,1,'shareable',jsonb_build_object(
-    'name',new.name,'date_of_birth',new.date_of_birth,'photo_url',new.photo_url,
-    'language',new.language,'blood_group',new.blood_group,'genotype',new.genotype,
-    'allergies',new.allergies,'medications',new.medications,
-    'chronic_conditions',new.chronic_conditions,'emergency_contacts',new.emergency_contacts
-  ),'{}',new.disclosure_policy,pg_catalog.encode(extensions.gen_random_bytes(32),'hex'),new.user_id)
-  returning id into v_id;
-  update public.profiles set current_revision_id=v_id where user_id=new.user_id;
-  return new;
-end;
-$$;
-create trigger profiles_initialize_revision after insert on public.profiles
-for each row execute function public.initialize_profile_revision();
-
-create function public.request_revision_verification(p_expected_revision_id uuid)
-returns public.reattestation_requests
-language plpgsql security definer set search_path='' as $$
-declare v_profile public.profiles; v_previous public.record_revisions; v_revision public.record_revisions; v_request public.reattestation_requests;
-begin
-  if auth.uid() is null then raise exception using errcode='42501',message='AUTH_REQUIRED'; end if;
-  if not public.has_active_consent(auth.uid(),'clinical_verification') then raise exception using errcode='42501',message='CONSENT_REQUIRED'; end if;
-  select * into v_profile from public.profiles where user_id=auth.uid() for update;
-  if not found or v_profile.current_revision_id is distinct from p_expected_revision_id then raise exception using errcode='40001',message='STALE_REVISION'; end if;
-  select * into v_previous from public.record_revisions where id=v_profile.current_revision_id;
-  if v_previous.lifecycle_state not in ('shareable','stale_after_edit') then raise exception using errcode='23514',message='INVALID_LIFECYCLE_TRANSITION'; end if;
-  insert into public.record_revisions(user_id,predecessor_id,revision_number,lifecycle_state,emergency_data,provenance,disclosure_policy,commitment,created_by)
-  values(auth.uid(),v_previous.id,v_previous.revision_number+1,'verification_requested',v_previous.emergency_data,v_previous.provenance,v_previous.disclosure_policy,v_previous.commitment,auth.uid()) returning * into v_revision;
-  update public.profiles set current_revision_id=v_revision.id where user_id=auth.uid();
-  update public.reattestation_requests set status='superseded' where user_id=auth.uid() and status in ('pending','under_review');
-  insert into public.reattestation_requests(user_id,record_hash,revision_id) values(auth.uid(),v_revision.commitment,v_revision.id) returning * into v_request;
-  return v_request;
-end;
-$$;
-revoke all on function public.request_revision_verification(uuid) from public;
-grant execute on function public.request_revision_verification(uuid) to authenticated;
-
--- Explicit disclosure projection. Consent withdrawal makes the old card URL
--- immediately return no rows. Withheld fields return state only, never value.
-drop function public.get_emergency_card(uuid);
-create function public.get_emergency_card(p_card_id uuid)
-returns table (
-  name text, age int, photo_url text, blood_group public.blood_group_enum,
-  genotype public.genotype_enum, allergies text[], medications text[],
-  chronic_conditions text[], emergency_contacts jsonb, language text,
-  disclosure_states jsonb, revision_id uuid, schema_version integer,
-  commitment text, offline_cache_allowed boolean
-) language sql stable security definer set search_path='' as $$
-  select
-    case when (p.disclosure_policy#>>'{fields,name}')::boolean then p.name end,
-    case when (p.disclosure_policy#>>'{fields,age}')::boolean and p.date_of_birth is not null
-      then extract(year from age(p.date_of_birth))::int end,
-    case when (p.disclosure_policy#>>'{fields,photo_url}')::boolean then p.photo_url end,
-    case when (p.disclosure_policy#>>'{fields,blood_group}')::boolean then p.blood_group end,
-    case when (p.disclosure_policy#>>'{fields,genotype}')::boolean then p.genotype end,
-    case when (p.disclosure_policy#>>'{fields,allergies}')::boolean then p.allergies end,
-    case when (p.disclosure_policy#>>'{fields,medications}')::boolean then p.medications end,
-    case when (p.disclosure_policy#>>'{fields,chronic_conditions}')::boolean then p.chronic_conditions end,
-    case when (p.disclosure_policy#>>'{fields,emergency_contacts}')::boolean then p.emergency_contacts end,
-    case when (p.disclosure_policy#>>'{fields,language}')::boolean then p.language end,
-    (select jsonb_object_agg(k, case when (v)::boolean then 'disclosed' else 'withheld' end)
-       from jsonb_each_text(p.disclosure_policy->'fields') f(k,v)),
-    r.id, r.schema_version, r.commitment,
-    public.has_active_consent(p.user_id,'offline_caching')
-  from public.profiles p join public.record_revisions r on r.id=p.current_revision_id
-  where p.card_public_id=p_card_id
-    and r.lifecycle_state not in ('suspended','revoked','deleted')
-    and public.has_active_consent(p.user_id,'emergency_public_disclosure');
-$$;
-revoke all on function public.get_emergency_card(uuid) from public;
-grant execute on function public.get_emergency_card(uuid) to anon,authenticated;
-
-comment on function public.get_emergency_card(uuid) is
-  'Versioned, consent-gated, field-allowlisted emergency-card projection. Never SELECTs arbitrary profile columns.';
-
--- Reconciliation: exactly one current pointer and no cross-owner predecessor.
-create view public.record_revision_reconciliation as
-select p.user_id, p.current_revision_id,
-  count(r.id) filter(where r.id=p.current_revision_id) as current_matches,
-  count(r.id) as revision_count
-from public.profiles p left join public.record_revisions r on r.user_id=p.user_id
-group by p.user_id,p.current_revision_id;
-revoke all on public.record_revision_reconciliation from anon,authenticated;
-grant select on public.record_revision_reconciliation to service_role;

@@ -1,37 +1,85 @@
 {
-  "name": "Lafiya — Your vitals, verified",
+  "id": "/?source=pwa",
+  "name": "Lafiya",
   "short_name": "Lafiya",
-  "description": "A patient-owned emergency health card on Stellar. Your vitals, verified. When you can't speak, Lafiya does.",
-  "start_url": "/",
+  "description": "Offline-first community health worker companion for maternal and child care.",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#ffffff",
-  "theme_color": "#09090b",
+  "theme_color": "#0f766e",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["health", "medical", "productivity"],
   "icons": [
     {
-      "src": "/icon-192.png",
+      "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-192.png",
+      "src": "/icons/maskable-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/icons/maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/home-narrow.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Lafiya home screen"
+    },
+    {
+      "src": "/screenshots/home-wide.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Lafiya dashboard"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New client",
+      "short_name": "New client",
+      "description": "Register a new client",
+      "url": "/clients/new?source=pwa",
+      "icons": [
+        {
+          "src": "/icons/shortcut-new-client.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Today's visits",
+      "short_name": "Visits",
+      "description": "Open today's scheduled visits",
+      "url": "/visits?source=pwa",
+      "icons": [
+        {
+          "src": "/icons/shortcut-visits.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
     }
   ]
 }

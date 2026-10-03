@@ -6,6 +6,10 @@
  * Designed to be called periodically (or on-demand by operators) to detect
  * inconsistencies that the main indexer loop may have missed due to provider
  * lag or conflicting observations.
+ *
+ * Also exposes double-entry ledger reconciliation helpers (issue #562): the
+ * journal is the source of truth for CHW incentives, so reconciliation is a
+ * query over `ledger_entries` rather than a script over independent rows.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -41,6 +45,22 @@ export interface ReconciliationBatch {
   revokedButPaid: ReconciliationRecord[];
   expiredButPaid: ReconciliationRecord[];
   addressMismatchRecords: ReconciliationRecord[];
+}
+
+/**
+ * Result of reconciling the double-entry journal against the legacy
+ * obligation/settlement tables. `balanced` is true when every journal sums to
+ * zero and the derived balances match the legacy rows.
+ */
+export interface LedgerReconciliationResult {
+  balanced: boolean;
+  unbalancedJournals: Array<{ journalId: string; netStroops: string }>;
+  chwPayableStroops: string;
+  chwSettledStroops: string;
+  poolLiabilityStroops: string;
+  legacyObligationStroops: string;
+  legacySettlementStroops: string;
+  discrepancies: string[];
 }
 
 /**
@@ -211,6 +231,131 @@ export class ReconciliationEngine {
   }
 
   /**
+   * Reconcile the double-entry journal (issue #562).
+   *
+   * Every journal must balance to zero (enforced by a deferred constraint
+   * trigger in the database); this pass surfaces any journal that does not,
+   * and compares the derived CHW payable / settled balances against the legacy
+   * `payout_obligations` and `payout_settlements` rows so the backfill can be
+   * verified. Read-only: never mutates ledger state.
+   */
+  async reconcileLedger(): Promise<LedgerReconciliationResult> {
+    try {
+      logInfo("Starting double-entry ledger reconciliation pass");
+
+      const { data: entries, error: entriesError } = await this.client
+        .from("ledger_entries")
+        .select("journal_id, account_id, amount_stroops, direction");
+
+      if (entriesError) {
+        throw new Error(`fetch ledger_entries: ${entriesError.message}`);
+      }
+
+      const { data: accounts, error: accountsError } = await this.client
+        .from("ledger_accounts")
+        .select("id, code");
+
+      if (accountsError) {
+        throw new Error(`fetch ledger_accounts: ${accountsError.message}`);
+      }
+
+      const accountCodeById = new Map(
+        (accounts || []).map((acct: any) => [acct.id, acct.code as string]),
+      );
+
+      // Sum signed entries per journal; a balanced journal nets to zero.
+      const journalNets = new Map<string, bigint>();
+      const balanceByCode = new Map<string, bigint>();
+
+      for (const entry of entries || []) {
+        const amount = BigInt(entry.amount_stroops);
+        const signed = entry.direction === "debit" ? amount : -amount;
+
+        const journalId = entry.journal_id as string;
+        journalNets.set(journalId, (journalNets.get(journalId) ?? 0n) + signed);
+
+        const code = accountCodeById.get(entry.account_id) ?? "unknown";
+        balanceByCode.set(code, (balanceByCode.get(code) ?? 0n) + signed);
+      }
+
+      const unbalancedJournals = Array.from(journalNets.entries())
+        .filter(([, net]) => net !== 0n)
+        .map(([journalId, net]) => ({ journalId, netStroops: net.toString() }));
+
+      const chwPayableStroops = (balanceByCode.get("chw_payable") ?? 0n).toString();
+      const chwSettledStroops = (balanceByCode.get("chw_settled") ?? 0n).toString();
+      const poolLiabilityStroops = (balanceByCode.get("pool") ?? 0n).toString();
+
+      // Compare against legacy rows so the backfill can be verified.
+      const { data: obligations, error: obligationsError } = await this.client
+        .from("payout_obligations")
+        .select("amount_stroops");
+
+      if (obligationsError) {
+        throw new Error(`fetch payout_obligations: ${obligationsError.message}`);
+      }
+
+      const { data: settlements, error: settlementsError } = await this.client
+        .from("payout_settlements")
+        .select("amount_stroops");
+
+      if (settlementsError) {
+        throw new Error(`fetch payout_settlements: ${settlementsError.message}`);
+      }
+
+      const legacyObligationStroops = (obligations || [])
+        .reduce((sum: bigint, row: any) => sum + BigInt(row.amount_stroops), 0n)
+        .toString();
+      const legacySettlementStroops = (settlements || [])
+        .reduce((sum: bigint, row: any) => sum + BigInt(row.amount_stroops), 0n)
+        .toString();
+
+      const discrepancies: string[] = [];
+      if (unbalancedJournals.length > 0) {
+        discrepancies.push(`${unbalancedJournals.length} journal(s) do not balance to zero`);
+      }
+      if (chwPayableStroops !== legacyObligationStroops) {
+        discrepancies.push(
+          `chw_payable (${chwPayableStroops}) != payout_obligations (${legacyObligationStroops})`,
+        );
+      }
+      if (chwSettledStroops !== legacySettlementStroops) {
+        discrepancies.push(
+          `chw_settled (${chwSettledStroops}) != payout_settlements (${legacySettlementStroops})`,
+        );
+      }
+
+      const result: LedgerReconciliationResult = {
+        balanced: discrepancies.length === 0,
+        unbalancedJournals,
+        chwPayableStroops,
+        chwSettledStroops,
+        poolLiabilityStroops,
+        legacyObligationStroops,
+        legacySettlementStroops,
+        discrepancies,
+      };
+
+      if (result.balanced) {
+        logInfo("Double-entry ledger reconciliation pass complete", {
+          chwPayableStroops,
+          chwSettledStroops,
+          poolLiabilityStroops,
+        });
+      } else {
+        logWarn("Double-entry ledger reconciliation found discrepancies", {
+          discrepancies,
+        });
+      }
+
+      return result;
+    } catch (error) {
+      logError("Double-entry ledger reconciliation pass failed", error);
+      throw error;
+    }
+  }
+
+  /**
    * Deep reconcile a single record: fetch all evidence, verify consistency,
    * and suggest resolution steps without modifying state.
    */
@@ -233,223 +378,4 @@ export class ReconciliationEngine {
         .from("attestation_evidence")
         .select("*")
         .eq("record_hash", recordHash)
-        .order("evidence_recorded_at", { ascending: true });
-
-      if (attestationEvError) {
-        throw new Error(`fetch attestation evidence: ${attestationEvError.message}`);
-      }
-
-      const { data: payoutEv, error: payoutEvError } = await this.client
-        .from("payout_evidence")
-        .select("*")
-        .eq("record_hash", recordHash)
-        .order("evidence_recorded_at", { ascending: true });
-
-      if (payoutEvError) {
-        throw new Error(`fetch payout evidence: ${payoutEvError.message}`);
-      }
-
-      const { data: payout, error: payoutError } = await this.client
-        .from("chw_payouts")
-        .select("*")
-        .eq("record_hash", recordHash)
-        .maybeSingle();
-
-      if (payoutError) {
-        throw new Error(`fetch payout: ${payoutError.message}`);
-      }
-
-      const { data: conflicts, error: conflictError } = await this.client
-        .from("conflicting_observations")
-        .select("*")
-        .eq("record_hash", recordHash)
-        .order("detected_at", { ascending: true });
-
-      if (conflictError) {
-        throw new Error(`fetch conflicts: ${conflictError.message}`);
-      }
-
-      // Build evidence chain (timeline of all decisions)
-      const evidenceChain = [
-        ...(attestationEv || []).map((att: any) => ({
-          type: "attestation",
-          timestamp: att.evidence_recorded_at,
-          ledger: BigInt(att.ledger_number),
-          txHash: att.transaction_hash,
-          decision: att.decision,
-        })),
-        ...(payoutEv || []).map((pay: any) => ({
-          type: "payout",
-          timestamp: pay.evidence_recorded_at,
-          ledger: pay.ledger_number ? BigInt(pay.ledger_number) : undefined,
-          txHash: pay.transaction_hash,
-          decision: pay.decision,
-        })),
-      ].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-
-      // Build the reconciliation record
-      const latestAttestation = (attestationEv || [])[(attestationEv?.length || 0) - 1];
-      const record: ReconciliationRecord = {
-        recordHash,
-        attestationExists: !!latestAttestation,
-        isInconsistent: false,
-      };
-
-      if (latestAttestation) {
-        record.attestationLedger = BigInt(latestAttestation.ledger_number);
-        record.attestationTxHash = latestAttestation.transaction_hash;
-        record.attestationTimestamp = latestAttestation.attested_at;
-      }
-
-      if (payout) {
-        record.payoutStatus = payout.status;
-        record.payoutTxHash = payout.payout_tx_hash;
-        record.payoutAmount = payout.amount_usdc;
-        record.payoutTimestamp = payout.paid_at;
-      }
-
-      // Generate recommended actions based on evidence and state
-      const recommendedActions: string[] = [];
-
-      if (!latestAttestation && payout?.status === "paid") {
-        record.isInconsistent = true;
-        recommendedActions.push(
-          "WARNING: Record is marked paid but has no attestation evidence. Review Soroban RPC logs.",
-        );
-        recommendedActions.push("ACTION: Query contract directly to verify attestation status.");
-      }
-
-      if (latestAttestation && payout?.status !== "paid") {
-        recommendedActions.push(
-          "INFO: Attestation recorded but payout not yet confirmed. Verify payout status in Horizon.",
-        );
-        recommendedActions.push("ACTION: Check CHW address and payout pool configuration.");
-      }
-
-      if (latestAttestation?.revoked && payout?.status === "paid") {
-        record.isInconsistent = true;
-        recommendedActions.push(
-          "CRITICAL: Attestation is revoked but payout marked paid. Manual review required.",
-        );
-        recommendedActions.push("ACTION: Consult with CHW and operations team for remediation.");
-      }
-
-      if ((conflicts || []).length > 0) {
-        record.isInconsistent = true;
-        const unresolved = conflicts.filter((c: any) => !c.resolved);
-        recommendedActions.push(
-          `ALERT: ${unresolved.length} unresolved conflict observations detected.`,
-        );
-        recommendedActions.push("ACTION: Review conflicting_observations table for details.");
-      }
-
-      return {
-        record,
-        evidenceChain,
-        recommendedActions,
-      };
-    } catch (error) {
-      logError("Record reconciliation failed", error, { recordHash });
-      throw error;
-    }
-  }
-
-  /**
-   * Log reconciliation findings as conflicts for operator review.
-   * Called after reconcileAll() to formally record detected inconsistencies.
-   */
-  async logReconciliationConflicts(batch: ReconciliationBatch): Promise<void> {
-    try {
-      const conflicts = [];
-
-      for (const record of batch.paidButNotVerified) {
-        conflicts.push({
-          record_hash: record.recordHash,
-          conflict_type: "paid_without_attestation",
-          previous_state: {
-            payoutStatus: record.payoutStatus,
-            payoutTxHash: record.payoutTxHash,
-          },
-          current_state: {
-            attestationExists: record.attestationExists,
-          },
-        });
-      }
-
-      for (const record of batch.verifiedButNotPaid) {
-        conflicts.push({
-          record_hash: record.recordHash,
-          conflict_type: "verified_not_paid",
-          previous_state: {
-            attestationTxHash: record.attestationTxHash,
-          },
-          current_state: {
-            payoutStatus: record.payoutStatus,
-          },
-        });
-      }
-
-      for (const record of batch.revokedButPaid) {
-        conflicts.push({
-          record_hash: record.recordHash,
-          conflict_type: "revoked_attestation",
-          previous_state: {
-            revoked: true,
-            attestationTxHash: record.attestationTxHash,
-          },
-          current_state: {
-            payoutStatus: record.payoutStatus,
-            payoutTxHash: record.payoutTxHash,
-          },
-        });
-      }
-
-      for (const record of batch.expiredButPaid) {
-        conflicts.push({
-          record_hash: record.recordHash,
-          conflict_type: "revoked_attestation", // treat expiry like revocation
-          previous_state: {
-            expiry: record.expiry,
-            attestationTxHash: record.attestationTxHash,
-          },
-          current_state: {
-            payoutStatus: record.payoutStatus,
-            payoutTxHash: record.payoutTxHash,
-          },
-        });
-      }
-
-      for (const record of batch.addressMismatchRecords) {
-        conflicts.push({
-          record_hash: record.recordHash,
-          conflict_type: "address_mismatch",
-          previous_state: {
-            payoutStatus: record.payoutStatus,
-          },
-          current_state: null,
-        });
-      }
-
-      if (conflicts.length === 0) {
-        logInfo("No conflicts to log from reconciliation");
-        return;
-      }
-
-      // Batch insert conflicts, skipping duplicates
-      const { error } = await this.client.from("conflicting_observations").insert(conflicts);
-
-      if (error) {
-        // Ignore unique constraint violations (conflict already logged)
-        if (error.code !== "23505") {
-          throw error;
-        }
-        logWarn("Some conflicts were already logged", { conflictCount: conflicts.length });
-      } else {
-        logInfo("Reconciliation conflicts logged", { conflictCount: conflicts.length });
-      }
-    } catch (error) {
-      logError("Failed to log reconciliation conflicts", error);
-      throw error;
-    }
-  }
-}
+        .order("evidence

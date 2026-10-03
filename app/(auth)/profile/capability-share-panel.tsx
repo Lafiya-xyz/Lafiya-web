@@ -9,6 +9,7 @@ import {
   revokeEmergencyCapability,
 } from "./actions";
 import { CopyLinkButton } from "./copy-link-button";
+import { DownloadCardButton } from "./download-card-button";
 
 function formatDate(value: string | undefined): string {
   if (!value) return "";
@@ -99,8 +100,10 @@ type QrSize = keyof typeof QR_SIZE_OPTIONS;
 
 export function CapabilitySharePanel({
   activeCapabilities,
+  printableCard,
 }: {
   activeCapabilities: ActiveCapability[];
+  printableCard?: Parameters<typeof DownloadCardButton>[0]["card"];
 }) {
   const [state, action, isPending] = useActionState(
     createEmergencyCapability,
@@ -142,7 +145,10 @@ export function CapabilitySharePanel({
 
       {activeCapabilities.length > 0 ? (
         <div>
-          <h3 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+          <h3
+            id="active-shares-heading"
+            className="text-sm font-medium text-zinc-800 dark:text-zinc-200"
+          >
             Active shares
           </h3>
           <ul className="mt-2 flex flex-col gap-2">
@@ -207,8 +213,13 @@ export function CapabilitySharePanel({
           <p className="max-w-full text-xs break-all text-zinc-400 dark:text-zinc-500">
             {state.capabilityUrl}
           </p>
-          <div className="flex gap-3">
+          <WalletPassButtons capabilityUrl={state.capabilityUrl} />
+          <div className="flex flex-wrap justify-center gap-3">
             <CopyLinkButton text={state.capabilityUrl} />
+            <NfcWriteButton
+              cardUrl={state.capabilityUrl}
+              revokeHref="#active-shares-heading"
+            />
             {qrDataUrl ? (
               <a
                 href={qrDataUrl}
@@ -219,6 +230,26 @@ export function CapabilitySharePanel({
               </a>
             ) : null}
           </div>
+          {state.cardPin ? (
+            <div className="flex flex-col items-center gap-2 rounded-md border border-dashed border-zinc-400 p-3">
+              <p className="text-sm font-medium">Card PIN</p>
+              <p className="font-mono text-2xl tracking-[0.3em]">
+                {state.cardPin}
+              </p>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Shown only once. Print it on the back of your card or under a
+                scratch panel, away from the QR code. Responders need it to
+                see the fields you marked as sensitive.
+              </p>
+              {printableCard ? (
+                <DownloadCardButton
+                  cardUrl={state.capabilityUrl}
+                  card={printableCard}
+                  cardPin={state.cardPin}
+                />
+              ) : null}
+            </div>
+          ) : null}
           <p className="text-xs text-zinc-400 dark:text-zinc-500">
             Valid until {formatDate(state.expiresAt)}. Anyone with this QR can
             view only the fields you allow on your emergency card. Pick a

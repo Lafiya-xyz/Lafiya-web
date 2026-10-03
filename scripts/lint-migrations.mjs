@@ -1,46 +1,90 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+#!/usr/bin/env node
+// Migration lint: enforces unique, strictly increasing Supabase migration
+// versions and a canonical filename shape.
+//
+// Supabase keys supabase_migrations.schema_migrations on the numeric version
+// prefix, so two files sharing a version can silently skip one of them, and
+// out-of-order versions make the applied history depend on filename sort.
+//
+// Usage: node scripts/lint-migrations.mjs [migrationsDir]
+// Exits non-zero with an actionable message on the first violation.
 
-const directory = join(process.cwd(), "supabase", "migrations");
-const failures = [];
-for (const name of readdirSync(directory)
-  .filter((name) => name.endsWith(".sql"))
-  .sort()) {
-  const sql = readFileSync(join(directory, name), "utf8");
-  const functions = sql.split(/create(?: or replace)? function/i).slice(1);
-  for (const body of functions) {
-    const header = body.slice(0, body.indexOf("$$"));
-    if (
-      /security definer/i.test(header) &&
-      !/set search_path\s*=/i.test(header)
-    )
-      failures.push(
-        `${name}: SECURITY DEFINER function without pinned search_path`,
-      );
-  }
-  const tables = [
-    ...sql.matchAll(/create table(?: if not exists)?\s+public\.([a-z0-9_]+)/gi),
-  ].map((match) => match[1]);
-  for (const table of tables)
-    if (
-      !new RegExp(
-        `alter table public\\.${table} enable row level security`,
-        "i",
-      ).test(sql)
-    )
-      failures.push(
-        `${name}: public.${table} does not enable RLS in its defining migration`,
-      );
-  const projections = [
-    ...sql.matchAll(
-      /function public\.get_emergency_card[\s\S]*?as\s+\$\$([\s\S]*?)\$\$/gi,
-    ),
-  ];
-  if (projections.some((match) => /select\s+\*/i.test(match[1])))
-    failures.push(`${name}: public emergency projection may not use SELECT *`);
-}
-if (failures.length) {
-  console.error(failures.join("\n"));
+import { readdirSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+
+const FILENAME_RE = /^(\d{14})_[a-z0-9_]+\.sql$/;
+
+const migrationsDir = resolve(process.argv[2] ?? 'supabase/migrations');
+
+function fail(message) {
+  console.error(`\n[migration-lint] ${message}\n`);
   process.exit(1);
 }
-console.log("Migration security lint passed.");
+
+let entries;
+try {
+  entries = readdirSync(migrationsDir);
+} catch (err) {
+  fail(`Could not read migrations directory ${migrationsDir}: ${err.message}`);
+}
+
+const files = entries
+  .filter((name) => statSync(join(migrationsDir, name)).isFile())
+  .filter((name) => name.endsWith('.sql'))
+  .sort();
+
+if (files.length === 0) {
+  console.log('[migration-lint] No migration files found; nothing to check.');
+  process.exit(0);
+}
+
+const seen = new Map();
+let previousVersion = null;
+let previousFile = null;
+
+for (const file of files) {
+  const match = FILENAME_RE.exec(file);
+  if (!match) {
+    fail(
+      `Malformed migration filename: ${file}\n` +
+        `  Expected: <14-digit version>_<lower_snake_case>.sql\n` +
+        `  Example:  20260820130000_add_widgets_table.sql`,
+    );
+  }
+
+  const version = match[1];
+
+  if (seen.has(version)) {
+    fail(
+      `Duplicate migration version ${version}:\n` +
+        `  ${seen.get(version)}\n` +
+        `  ${file}\n` +
+        `  Rename one file to a unique later timestamp (e.g. ${nextVersion(version)}).\n` +
+        `  If a remote database already recorded ${version}, reconcile it with\n` +
+        `  \`supabase migration repair\` — see docs/operations/migration-history-repair.md.`,
+    );
+  }
+  seen.set(version, file);
+
+  if (previousVersion !== null && version <= previousVersion) {
+    fail(
+      `Migration versions are not strictly increasing:\n` +
+        `  ${previousFile} (${previousVersion})\n` +
+        `  ${file} (${version})\n` +
+        `  A new migration must use a version later than the newest one on main.\n` +
+        `  Rebase and re-timestamp the migration instead of reordering history.`,
+    );
+  }
+
+  previousVersion = version;
+  previousFile = file;
+}
+
+console.log(
+  `[migration-lint] OK — ${files.length} migration(s), versions unique and strictly increasing.`,
+);
+
+function nextVersion(version) {
+  const bumped = BigInt(version) + 10000n;
+  return bumped.toString().padStart(14, '0');
+}

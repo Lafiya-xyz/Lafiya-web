@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { BLOOD_GROUPS, GENOTYPES } from "@/lib/validation/profile";
 import type { ProfileRow } from "@/lib/supabase/types";
@@ -12,12 +12,114 @@ import { EmergencyContactsField } from "./emergency-contacts-field";
 import { PhotoUploadField } from "./photo-upload-field";
 import { TagListField } from "./tag-list-field";
 
+const DRAFT_DB_NAME = "handsoff-profile-drafts";
+const DRAFT_STORE = "drafts";
+const DRAFT_KEY_ALG = { name: "AES-GCM", length: 256 } as const;
+
+function draftKey(userId: string) {
+  return `profile-draft:${userId}`;
+}
+
+function openDraftDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DRAFT_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(DRAFT_STORE)) {
+        db.createObjectStore(DRAFT_STORE);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function getDraftKey(userId: string): Promise<CryptoKey> {
+  const db = await openDraftDb();
+  const existing = await new Promise<CryptoKey | undefined>((resolve, reject) => {
+    const tx = db.transaction(DRAFT_STORE, "readonly");
+    const req = tx.objectStore(DRAFT_STORE).get(draftKey(userId));
+    req.onsuccess = () => resolve(req.result?.key as CryptoKey | undefined);
+    req.onerror = () => reject(req.error);
+  });
+  if (existing) return existing;
+  const key = await crypto.subtle.generateKey(DRAFT_KEY_ALG, false, [
+    "encrypt",
+    "decrypt",
+  ]);
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(DRAFT_STORE, "readwrite");
+    tx.objectStore(DRAFT_STORE).put({ key }, draftKey(userId));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  return key;
+}
+
+async function saveDraft(userId: string, values: Record<string, string>) {
+  const key = await getDraftKey(userId);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(JSON.stringify(values));
+  const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+  const db = await openDraftDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(DRAFT_STORE, "readwrite");
+    tx.objectStore(DRAFT_STORE).put(
+      { iv: Array.from(iv), cipher: Array.from(new Uint8Array(cipher)) },
+      draftKey(userId),
+    );
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function loadDraft(userId: string): Promise<Record<string, string> | null> {
+  const db = await openDraftDb();
+  const record = await new Promise<{ iv: number[]; cipher: number[] } | undefined>(
+    (resolve, reject) => {
+      const tx = db.transaction(DRAFT_STORE, "readonly");
+      const req = tx.objectStore(DRAFT_STORE).get(draftKey(userId));
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    },
+  );
+  if (!record?.cipher) return null;
+  const key = await getDraftKey(userId);
+  try {
+    const plain = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: new Uint8Array(record.iv) },
+      key,
+      new Uint8Array(record.cipher),
+    );
+    return JSON.parse(new TextDecoder().decode(plain));
+  } catch {
+    return null;
+  }
+}
+
+async function clearDraft(userId: string) {
+  const db = await openDraftDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(DRAFT_STORE, "readwrite");
+    tx.objectStore(DRAFT_STORE).delete(draftKey(userId));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 export function ProfileForm({
   profile,
   userId,
+  signedPhotoUrl,
 }: {
   profile: ProfileRow | null;
   userId: string;
+  /**
+   * Issue #528: short-lived signed URL for the initial avatar preview,
+   * resolved server-side by the profile page. Null when no photo or
+   * signing failed. Passed to PhotoUploadField as initialUrl.
+   */
+  signedPhotoUrl?: string | null;
 }) {
   const [state, formAction, isPending] = useActionState(
     upsertProfile,
@@ -25,6 +127,9 @@ export function ProfileForm({
   );
 
   const [isDirtyState, setIsDirtyState] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
+  const [conflict, setConflict] = useState<Record<string, string> | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   // isDirty is true when the form has been changed AND the last action did not succeed
   const isDirty = isDirtyState && !state?.success;
@@ -41,14 +146,109 @@ export function ProfileForm({
     };
   }, [isDirty]);
 
+  // Restore any encrypted draft persisted for this user on mount.
+  useEffect(() => {
+    let cancelled = false;
+    loadDraft(userId).then((draft) => {
+      if (cancelled || !draft || !formRef.current) return;
+      for (const [name, value] of Object.entries(draft)) {
+        const field = formRef.current.elements.namedItem(name);
+        if (
+          field instanceof HTMLInputElement ||
+          field instanceof HTMLSelectElement ||
+          field instanceof HTMLTextAreaElement
+        ) {
+          field.value = value;
+        }
+      }
+      setIsDirtyState(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  // Track connectivity and replay queued drafts when back online.
+  useEffect(() => {
+    const update = () => setIsOffline(!navigator.onLine);
+    update();
+    const handleOnline = () => {
+      setIsOffline(false);
+      formRef.current?.requestSubmit();
+    };
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
+
+  // Clear drafts once a save succeeds.
+  useEffect(() => {
+    if (state?.success) {
+      clearDraft(userId).catch(() => {});
+      setConflict(null);
+    }
+  }, [state?.success, userId]);
+
+  // Surface revision conflicts as a field-level merge prompt.
+  useEffect(() => {
+    if (
+      state?.error?.includes(
+        "This profile was updated elsewhere since you loaded this page",
+      )
+    ) {
+      loadDraft(userId).then((draft) => {
+        if (draft) setConflict(draft);
+      });
+    }
+  }, [state?.error, userId]);
+
+  const handleChange = () => {
+    setIsDirtyState(true);
+    if (!formRef.current) return;
+    const values: Record<string, string> = {};
+    const data = new FormData(formRef.current);
+    for (const [name, value] of data.entries()) {
+      if (typeof value === "string") values[name] = value;
+    }
+    saveDraft(userId, values).catch(() => {});
+  };
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    if (isOffline) {
+      event.preventDefault();
+      handleChange();
+    }
+  };
+
   return (
-    <form action={formAction} onChange={() => setIsDirtyState(true)} data-dirty={isDirty ? "true" : undefined} className="flex flex-col gap-6">
+    <form
+      ref={formRef}
+      action={formAction}
+      onChange={handleChange}
+      onSubmit={handleSubmit}
+      data-dirty={isDirty ? "true" : undefined}
+      className="flex flex-col gap-6"
+    >
       {profile ? (
         <input
           type="hidden"
           name="expectedRevisionId"
           value={profile.current_revision_id ?? ""}
         />
+      ) : null}
+
+      {isOffline ? (
+        <p
+          role="status"
+          data-testid="profile-offline-status"
+          className="text-sm text-amber-600 dark:text-amber-400"
+        >
+          You are offline. Your edits are saved on this device and will sync
+          when you reconnect.
+        </p>
       ) : null}
 
       {state?.error &&
@@ -76,8 +276,17 @@ export function ProfileForm({
           <p className="font-medium">Conflict detected</p>
           <p className="mt-1">
             This profile was updated elsewhere since you loaded this page.
-            Reload and reapply your changes before saving.
+            Review your draft against the current values before saving.
           </p>
+          {conflict ? (
+            <ul className="mt-2 list-disc pl-5">
+              {Object.entries(conflict).map(([field, value]) => (
+                <li key={field}>
+                  <span className="font-medium">{field}</span>: {value}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
 
@@ -99,7 +308,7 @@ export function ProfileForm({
 
       <PhotoUploadField
         userId={userId}
-        initialUrl={profile?.photo_url ?? null}
+        initialUrl={signedPhotoUrl ?? null}
         error={state?.errors?.photoUrl}
       />
 
@@ -262,8 +471,15 @@ export function ProfileForm({
       <TagListField
         name="allergies"
         label="Allergies"
-        initialTags={profile?.allergies ?? []}
+        initialValues={profile?.allergies ?? []}
         error={state?.errors?.allergies}
+      />
+
+      <TagListField
+        name="conditions"
+        label="Medical conditions"
+        initialValues={profile?.conditions ?? []}
+        error={state?.errors?.conditions}
       />
 
       <EmergencyContactsField
@@ -271,41 +487,13 @@ export function ProfileForm({
         error={state?.errors?.emergencyContacts}
       />
 
-      <div>
-        <label
-          htmlFor="notes"
-          className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-        >
-          Notes
-        </label>
-        <textarea
-          id="notes"
-          name="notes"
-          rows={4}
-          defaultValue={profile?.notes ?? ""}
-          aria-invalid={state?.errors?.notes ? "true" : undefined}
-          aria-describedby={state?.errors?.notes ? "notes-error" : undefined}
-          className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-zinc-600"
-        />
-        {state?.errors?.notes ? (
-          <p
-            id="notes-error"
-            className="mt-1 text-sm text-red-600 dark:text-red-400"
-          >
-            {state.errors.notes}
-          </p>
-        ) : null}
-      </div>
-
-      <div className="flex items-center gap-3">
-        <button
-          type="submit"
-          disabled={isPending}
-          className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
-        >
-          {isPending ? "Saving…" : "Save profile"}
-        </button>
-      </div>
+      <button
+        type="submit"
+        disabled={isPending}
+        className="self-start rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+      >
+        {isPending ? "Saving…" : "Save profile"}
+      </button>
     </form>
   );
 }

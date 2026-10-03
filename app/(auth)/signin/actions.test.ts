@@ -2,11 +2,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { signIn } from "./actions";
 import { clearAllRateLimits } from "@/lib/rate-limit";
 import { redirect } from "next/navigation";
+import { SIGN_IN_TIMING_FLOOR_MS } from "@/lib/security/timing";
 
 // Mock functions hoisted before module imports are processed
-const { mockSignInWithPassword, mockHeaders } = vi.hoisted(() => ({
-  mockSignInWithPassword: vi.fn(),
-  mockHeaders: vi.fn(),
+const { mockSignInWithPassword, mockHeaders, mockWithTimingFloor, mockRpc } =
+  vi.hoisted(() => ({
+    mockSignInWithPassword: vi.fn(),
+    mockHeaders: vi.fn(),
+    mockWithTimingFloor: vi.fn(),
+    mockRpc: vi.fn(),
+  }));
+
+// The real floor is measured by bench/auth-enumeration; here it is recorded
+// but not waited on, so the lockout loops below stay fast.
+vi.mock("@/lib/security/timing", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/security/timing")>()),
+  withTimingFloor: mockWithTimingFloor,
 }));
 
 // Mock Supabase Server Client
@@ -15,6 +26,7 @@ vi.mock("@/lib/supabase/server", () => ({
     auth: {
       signInWithPassword: mockSignInWithPassword,
     },
+    rpc: mockRpc,
   })),
 }));
 
@@ -106,6 +118,10 @@ describe("signIn server action rate limiting", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     await clearAllRateLimits();
+    mockWithTimingFloor.mockImplementation(
+      (_floor: number, operation: () => Promise<unknown>) => operation(),
+    );
+    mockRpc.mockResolvedValue({ data: true, error: null });
 
     // Default headers mock returning client IP header
     mockHeaders.mockResolvedValue({
@@ -265,5 +281,154 @@ describe("signIn server action rate limiting", () => {
     const res = await signIn(undefined, formData6);
     expect(res.error).toContain("Too many failed sign-in attempts.");
     expect(mockSignInWithPassword).not.toHaveBeenCalled();
+  });
+});
+
+describe("signIn account-enumeration resistance (#527)", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await clearAllRateLimits();
+    mockWithTimingFloor.mockImplementation(
+      (_floor: number, operation: () => Promise<unknown>) => operation(),
+    );
+    mockRpc.mockResolvedValue({ data: true, error: null });
+    mockHeaders.mockResolvedValue({
+      get: (name: string) =>
+        name === "x-forwarded-for" ? "203.0.113.7" : null,
+    });
+  });
+
+  function form(email: string, password = "wrong-password") {
+    const formData = new FormData();
+    formData.append("email", email);
+    formData.append("password", password);
+    return formData;
+  }
+
+  it("returns an identical body for existing and unknown emails", async () => {
+    // Supabase's own errors differ by case; the action must not.
+    const supabaseErrors = [
+      { code: "invalid_credentials", message: "Invalid login credentials" }, // unknown email or wrong password
+      { code: "email_not_confirmed", message: "Email not confirmed" }, // existing, unconfirmed
+      { code: "user_banned", message: "User is banned" }, // existing, banned
+      {
+        code: "over_request_rate_limit",
+        message: "Request rate limit reached",
+      },
+    ];
+
+    const bodies = new Set<string>();
+    for (const [index, error] of supabaseErrors.entries()) {
+      mockSignInWithPassword.mockResolvedValueOnce({
+        data: { user: null, session: null },
+        error: Object.assign(new Error(error.message), { code: error.code }),
+      });
+      bodies.add(
+        JSON.stringify(await signIn(undefined, form(`p${index}@lafiya.com`))),
+      );
+    }
+
+    expect(bodies).toEqual(
+      new Set([JSON.stringify({ error: "Incorrect email or password." })]),
+    );
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("locks out an unknown email exactly like an existing one", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      data: null,
+      error: new Error("Invalid login credentials"),
+    });
+
+    const lockouts: string[] = [];
+    for (const email of ["exists@lafiya.com", "nobody@lafiya.com"]) {
+      for (let i = 0; i < 5; i++) await signIn(undefined, form(email));
+      lockouts.push((await signIn(undefined, form(email))).error ?? "");
+    }
+
+    expect(lockouts[0]).toBe(lockouts[1]);
+    expect(lockouts[0]).toBe(
+      "Too many failed sign-in attempts. Please try again in 30 seconds.",
+    );
+  });
+
+  it("pads every outcome, including a successful redirect, to the sign-in floor", async () => {
+    mockSignInWithPassword.mockResolvedValueOnce({
+      data: { user: {} },
+      error: null,
+    });
+    await signIn(undefined, form("exists@lafiya.com", "right-password"));
+    mockSignInWithPassword.mockResolvedValueOnce({
+      data: null,
+      error: new Error("Invalid login credentials"),
+    });
+    await signIn(undefined, form("nobody@lafiya.com"));
+
+    expect(mockWithTimingFloor).toHaveBeenCalledTimes(2);
+    for (const [floor] of mockWithTimingFloor.mock.calls) {
+      expect(floor).toBe(SIGN_IN_TIMING_FLOOR_MS);
+    }
+  });
+});
+
+describe("signIn session recording (#523)", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await clearAllRateLimits();
+    mockWithTimingFloor.mockImplementation(
+      (_floor: number, operation: () => Promise<unknown>) => operation(),
+    );
+    mockHeaders.mockResolvedValue({
+      get: (name: string) =>
+        name === "user-agent"
+          ? "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+          : null,
+    });
+  });
+
+  function form() {
+    const formData = new FormData();
+    formData.append("email", "patient@lafiya.com");
+    formData.append("password", "right-password");
+    return formData;
+  }
+
+  it("records only the coarse browser and OS family for a new session", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: {} },
+      error: null,
+    });
+    mockRpc.mockResolvedValue({ data: true, error: null });
+
+    await signIn(undefined, form());
+
+    expect(mockRpc).toHaveBeenCalledWith("touch_my_session", {
+      p_browser: "Chrome",
+      p_os: "Android",
+    });
+    expect(redirect).toHaveBeenCalledWith("/profile");
+  });
+
+  it("still signs in when recording the session fails", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: {} },
+      error: null,
+    });
+    mockRpc.mockResolvedValue({ data: null, error: new Error("db down") });
+
+    await signIn(undefined, form());
+
+    expect(redirect).toHaveBeenCalledWith("/profile");
+  });
+
+  it("does not record a session for a failed sign-in", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      data: null,
+      error: new Error("Invalid login credentials"),
+    });
+
+    await signIn(undefined, form());
+
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 });

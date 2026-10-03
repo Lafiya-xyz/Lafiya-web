@@ -56,6 +56,11 @@ function logLookupCompleted(
  * trivially by varying the hash every request. recordFailure is called on
  * every request (not just misses) — a single lucky guess must not reset an
  * attacker's counter the way a correct password does on sign-in.
+ *
+ * --- Ledger pinning (issue-561) ---
+ * getAttestation returns a LedgerPinnedResult so the observed Soroban
+ * ledger (and the RPC host that served it) is surfaced to consumers,
+ * letting them reason about freshness and cross-check against indexers.
  */
 export async function GET(
   _request: Request,
@@ -90,7 +95,8 @@ export async function GET(
 
     await recordFailure(rateLimitKey);
 
-    const attestation = await getAttestation(recordHash);
+    const pinned = await getAttestation(recordHash);
+    const attestation = pinned?.value ?? null;
     logLookupCompleted(
       attestation === null ? "not_found" : "verified",
       startedAt,
@@ -98,6 +104,8 @@ export async function GET(
     return NextResponse.json({
       verified: attestation !== null,
       attestation,
+      ledger: pinned?.ledger ?? null,
+      rpcHost: pinned?.rpcHost ?? null,
     });
   } catch {
     logError(

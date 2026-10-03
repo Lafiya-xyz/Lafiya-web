@@ -4,7 +4,7 @@ Endpoint: `GET /profile/export` (authenticated patients only)
 
 ## Response format (JSON)
 
-\`\`\`json
+```json
 {
 "exportedAt": "ISO 8601 timestamp",
 "schemaVersion": 2,
@@ -17,7 +17,16 @@ Endpoint: `GET /profile/export` (authenticated patients only)
 "storageObjects": [],
 "checksum": { "algorithm": "sha256", "value": "64 lowercase hex characters" }
 }
-\`\`\`
+```
+
+## FHIR R4 export
+
+The same endpoint also supports a FHIR R4 export via
+`GET /profile/export?format=fhir`, served with the content type
+`application/fhir+json` as a download. It returns a `collection` Bundle
+containing `Patient`, `AllergyIntolerance`, `MedicationStatement`, and
+`Condition` resources with stable in-bundle references. The field mapping
+is documented in [`fhir-mapping.md`](./fhir-mapping.md).
 
 ## `profile` field set
 

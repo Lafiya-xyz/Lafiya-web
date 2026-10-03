@@ -22,6 +22,48 @@ function getInitialTheme(): Theme {
   return "system";
 }
 
+function applyTheme(next: Theme) {
+  const root = document.documentElement;
+  const effective = next === "system" ? getSystemTheme() : next;
+  root.classList.remove("light", "dark");
+  root.classList.add(effective);
+}
+
+/**
+ * CSS-only theme control for public, zero-client-JS routes such as `/card/*`.
+ *
+ * This renders a native radio group that drives the `light`/`dark` classes on
+ * `<html>` via the `:has()` selector (see the theme stylesheet), so the card
+ * route ships no client component while still honouring the user's choice.
+ * The selection is persisted by the same `lafiya-theme` key used by
+ * `ThemeToggle`, so the two controls stay in sync across the app.
+ */
+export function ThemeToggleStatic() {
+  return (
+    <fieldset
+      className="theme-toggle-static flex items-center gap-1 rounded-full border border-zinc-200 p-1 dark:border-zinc-700"
+      aria-label="Theme"
+    >
+      <legend className="sr-only">Theme</legend>
+      {(["light", "system", "dark"] as Theme[]).map((option) => (
+        <label
+          key={option}
+          className="cursor-pointer rounded-full px-2 py-1 text-xs font-medium text-zinc-600 transition-colors hover:text-zinc-900 has-[:checked]:bg-zinc-900 has-[:checked]:text-white dark:text-zinc-400 dark:hover:text-zinc-100 dark:has-[:checked]:bg-white dark:has-[:checked]:text-zinc-900"
+        >
+          <input
+            type="radio"
+            name="theme"
+            value={option}
+            defaultChecked={option === "system"}
+            className="sr-only"
+          />
+          {option === "light" ? "Light" : option === "dark" ? "Dark" : "System"}
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
 export function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>("system");
   const [mounted, setMounted] = useState(false);
@@ -40,13 +82,6 @@ export function ThemeToggle() {
     mediaQuery.addEventListener("change", handleChange);
     return () => mediaQuery.removeEventListener("change", handleChange);
   }, []);
-
-  function applyTheme(next: Theme) {
-    const root = document.documentElement;
-    const effective = next === "system" ? getSystemTheme() : next;
-    root.classList.remove("light", "dark");
-    root.classList.add(effective);
-  }
 
   function handleChange(next: Theme) {
     setTheme(next);

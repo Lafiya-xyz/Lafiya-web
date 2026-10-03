@@ -18,6 +18,27 @@ import type {
 
 const RECORD_HASH_PATTERN = /^[0-9a-f]{64}$/;
 
+const TRUSTLINE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+export type TrustlineStatus =
+  | "healthy"
+  | "no_account"
+  | "no_trustline"
+  | "zero_limit"
+  | "unauthorized";
+
+export interface TrustlineCheck {
+  status: TrustlineStatus;
+  authorized: boolean;
+  limit: string | null;
+  balance: string | null;
+}
+
+interface CachedTrustlineCheck {
+  expiresAt: number;
+  check: TrustlineCheck;
+}
+
 export function recordHashFromMemo(
   memoType: string,
   memo: string,
@@ -120,16 +141,85 @@ export class SorobanAttestationSource implements AttestationSource {
 
 export class HorizonPayoutSource implements PayoutSource {
   private readonly server: Horizon.Server;
+  private readonly trustlineCache = new Map<string, CachedTrustlineCheck>();
 
   constructor(
     horizonUrl: string,
     private readonly poolAddress: string,
     private readonly usdcIssuer: string,
     private readonly pageSize = 100,
+    private readonly usdcAssetCode = "USDC",
   ) {
     this.server = new Horizon.Server(horizonUrl, {
       allowHttp: new URL(horizonUrl).protocol === "http:",
     });
+  }
+
+  /**
+   * Preflight a payout recipient's USDC trustline before settlement.
+   * Results are cached for 5 minutes to avoid hammering Horizon.
+   */
+  async checkTrustline(stellarAddress: string): Promise<TrustlineCheck> {
+    const cached = this.trustlineCache.get(stellarAddress);
+    if (cached && cached.expiresAt > Date.now()) return cached.check;
+
+    let check: TrustlineCheck;
+    try {
+      const account = await this.server.accounts().accountId(stellarAddress).call();
+      const trustline = account.balances.find(
+        (balance) =>
+          balance.asset_type !== "native" &&
+          balance.asset_code === this.usdcAssetCode &&
+          balance.asset_issuer === this.usdcIssuer,
+      );
+      if (!trustline) {
+        check = {
+          status: "no_trustline",
+          authorized: false,
+          limit: null,
+          balance: null,
+        };
+      } else {
+        const limit = trustline.limit ?? "0";
+        const authorized = trustline.is_authorized !== false;
+        let status: TrustlineStatus = "healthy";
+        if (!authorized) status = "unauthorized";
+        else if (Number(limit) <= 0) status = "zero_limit";
+        check = {
+          status,
+          authorized,
+          limit,
+          balance: trustline.balance ?? null,
+        };
+      }
+    } catch (error) {
+      const status = (error as { response?: { status?: number } })?.response
+        ?.status;
+      if (status === 404) {
+        check = {
+          status: "no_account",
+          authorized: false,
+          limit: null,
+          balance: null,
+        };
+      } else {
+        throw error;
+      }
+    }
+
+    this.trustlineCache.set(stellarAddress, {
+      expiresAt: Date.now() + TRUSTLINE_CACHE_TTL_MS,
+      check,
+    });
+    return check;
+  }
+
+  /**
+   * Returns true only when the recipient can receive USDC right now.
+   */
+  async canReceiveUsdc(stellarAddress: string): Promise<boolean> {
+    const check = await this.checkTrustline(stellarAddress);
+    return check.status === "healthy";
   }
 
   async read(
