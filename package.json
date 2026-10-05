@@ -50,8 +50,8 @@
     "db:drift": "node scripts/check-schema-drift.mjs"
   },
   "dependencies": {
-    "@sentry/nextjs": "^11.1.0",
-    "@stellar/stellar-sdk": "^17.2.0",
+    "@sentry/nextjs": "^11.2.0",
+    "@stellar/stellar-sdk": "^17.2.1",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.112.2",
     "libphonenumber-js": "^1.13.14",
@@ -89,13 +89,13 @@
     "vitest-axe": "^0.1.0"
   },
   "optionalDependencies": {
-    "@rolldown/binding-darwin-arm64": "1.2.11",
-    "@rolldown/binding-darwin-x64": "1.2.11",
-    "@rolldown/binding-linux-arm64-gnu": "1.2.11",
-    "@rolldown/binding-linux-arm64-musl": "1.2.11",
-    "@rolldown/binding-linux-x64-gnu": "1.2.11",
-    "@rolldown/binding-linux-x64-musl": "1.2.11",
-    "@rolldown/binding-win32-arm64-msvc": "1.2.11",
-    "@rolldown/binding-win32-x64-msvc": "1.2.11"
+    "@rolldown/binding-darwin-arm64": "1.2.12",
+    "@rolldown/binding-darwin-x64": "1.2.12",
+    "@rolldown/binding-linux-arm64-gnu": "1.2.12",
+    "@rolldown/binding-linux-arm64-musl": "1.2.12",
+    "@rolldown/binding-linux-x64-gnu": "1.2.12",
+    "@rolldown/binding-linux-x64-musl": "1.2.12",
+    "@rolldown/binding-win32-arm64-msvc": "1.2.12",
+    "@rolldown/binding-win32-x64-msvc": "1.2.12"
   }
 }
