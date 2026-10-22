@@ -17,6 +17,7 @@ import {
   type AppleWalletSigningConfig,
 } from "./config";
 import { buildApplePassJson, buildWalletPassContent } from "./passContent";
+import { passAuthToken } from "./updates";
 
 /**
  * Builds and signs a `.pkpass` archive for `capabilityUrl`.
@@ -30,16 +31,25 @@ import { buildApplePassJson, buildWalletPassContent } from "./passContent";
  */
 export async function generateApplePass(
   capabilityUrl: string,
+  opts: { voided?: boolean } = {},
 ): Promise<Buffer> {
   const config = getAppleWalletConfig();
   const content = buildWalletPassContent(capabilityUrl);
-  const passJson = buildApplePassJson(
-    content,
-    config.passTypeIdentifier,
-    config.teamIdentifier,
-  );
+  const passJson = {
+    ...buildApplePassJson(content, config.passTypeIdentifier, config.teamIdentifier),
+    // PassKit web service (issue #771): lets devices register for updates.
+    ...webServiceFields(content.serialNumber),
+    ...(opts.voided ? { voided: true } : {}),
+  };
 
   return signApplePass(passJson, config);
+}
+
+function webServiceFields(serial: string) {
+  const url = process.env.APPLE_WALLET_WEB_SERVICE_URL;
+  const secret = process.env.WALLET_PASS_AUTH_SECRET;
+  if (!url || !secret) return {};
+  return { webServiceURL: url, authenticationToken: passAuthToken(serial, secret) };
 }
 
 /**

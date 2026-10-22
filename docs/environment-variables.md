@@ -168,3 +168,11 @@ ATTESTATION_MODE=mock
 SENTRY_ENABLED=false
 PAYOUT_INDEXER_ENABLED=false
 ```
+
+## Wallet pass updates and NFC SUN spike
+
+| Variable                       | Purpose                                                              |
+| ------------------------------ | -------------------------------------------------------------------- |
+| `APPLE_WALLET_WEB_SERVICE_URL` | PassKit web service base URL written into passes (#771).             |
+| `WALLET_PASS_AUTH_SECRET`      | Secret for pass authentication tokens and barcode encryption (#771). |
+| `NFC_SUN_MASTER_KEY`           | 32-hex-char master key for the NTAG 424 SUN spike verifier (#772).   |

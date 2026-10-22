@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { EMERGENCY_FIELD_ALLOWLIST } from "@/lib/emergency/capability";
+import {
+  digestCapability,
+  EMERGENCY_FIELD_ALLOWLIST,
+} from "@/lib/emergency/capability";
 
 import {
   buildApplePassJson,
@@ -16,7 +19,9 @@ describe("buildWalletPassContent", () => {
   it("accepts a capability-share URL and derives a serial number from it", () => {
     const content = buildWalletPassContent(VALID_CAPABILITY_URL);
     expect(content.capabilityUrl).toBe(VALID_CAPABILITY_URL);
-    expect(content.serialNumber).toBe("lafiya_e1_" + "a".repeat(43));
+    expect(content.serialNumber).toBe(
+      digestCapability("lafiya_e1_" + "a".repeat(43)),
+    );
     expect(content.organizationName).toBe("Lafiya");
     expect(content.description).toBe("Medical information: scan");
   });

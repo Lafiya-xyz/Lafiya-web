@@ -28,6 +28,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError, logInfo, logWarn } from "@/lib/logging/logger";
 import { invalidateAttestationCache } from "@/lib/stellar/attestation-cache-invalidation";
+import { handleWalletCardChanged } from "@/lib/wallet-passes/updates-runtime";
 import type { OutboxHandler, OutboxHandlerRegistry, OutboxRow } from "./types";
 
 // ─── Built-in handlers ──────────────────────────────────────────────────────
@@ -60,6 +61,7 @@ const handleRecordSaved: OutboxHandler = async (row) => {
  */
 export const HANDLERS: OutboxHandlerRegistry = new Map<string, OutboxHandler>([
   ["record_revision:record_saved", handleRecordSaved],
+  ["wallet_pass:card_changed", handleWalletCardChanged],
 ]);
 
 // ─── Dispatcher core ────────────────────────────────────────────────────────

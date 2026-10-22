@@ -6,7 +6,11 @@ import {
   generateApplePass,
   WalletPassesNotConfiguredError,
 } from "@/lib/wallet-passes";
-import { InvalidCapabilityUrlError } from "@/lib/wallet-passes/passContent";
+import {
+  buildWalletPassContent,
+  InvalidCapabilityUrlError,
+} from "@/lib/wallet-passes/passContent";
+import { recordIssuedPass } from "@/lib/wallet-passes/updates-runtime";
 
 /**
  * ROUTE: POST /api/wallet/apple
@@ -63,6 +67,12 @@ export async function POST(request: Request) {
     }
 
     const pkpass = await generateApplePass(capabilityUrl);
+    if (process.env.WALLET_PASS_AUTH_SECRET) {
+      await recordIssuedPass(
+        buildWalletPassContent(capabilityUrl).serialNumber,
+        capabilityUrl,
+      );
+    }
 
     return new NextResponse(new Uint8Array(pkpass), {
       status: 200,
