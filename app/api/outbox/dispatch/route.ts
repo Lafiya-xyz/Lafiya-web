@@ -9,7 +9,12 @@
  * `OUTBOX_DISPATCH_SECRET` environment variable so the endpoint cannot be
  * triggered by arbitrary callers.
  *
- * Returns: { dispatched: number, lagMs: number | null, pendingCount: number }
+ * Returns: {
+ *   dispatched: number,
+ *   lagMs: number | null,
+ *   pendingCount: number,
+ *   deadCount: number
+ * }
  */
 
 import { NextResponse } from "next/server";

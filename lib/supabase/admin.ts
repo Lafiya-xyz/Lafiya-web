@@ -9,16 +9,19 @@ import type { Database } from "@/lib/supabase/types";
  * privileged access can be audited and reviewed.
  */
 export const ADMIN_PURPOSES = [
+  "internal",
   "rate-limit",
   "frequency-limit",
   "card-token",
+  "outbox",
+  "readiness",
 ] as const;
 
 export type AdminPurpose = (typeof ADMIN_PURPOSES)[number];
 
 export interface CreateAdminClientOptions {
   /** Call-site label describing why the service-role key is needed. */
-  purpose: AdminPurpose;
+  purpose?: AdminPurpose;
 }
 
 /**
@@ -31,7 +34,9 @@ export interface CreateAdminClientOptions {
  * `x-client-info` header (visible in API logs) and emitted as a structured
  * audit log entry. No PHI, capability tokens, or secrets are logged.
  */
-export function createAdminClient({ purpose }: CreateAdminClientOptions) {
+export function createAdminClient({
+  purpose = "internal",
+}: CreateAdminClientOptions = {}) {
   console.info(
     JSON.stringify({
       event: "supabase.admin_client.created",

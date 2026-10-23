@@ -117,6 +117,33 @@ export type AccountNotificationOutboxRow = {
   sent_at: string | null;
 };
 
+/** Issue #688: transactional outbox retry/dead-letter state. */
+export type OutboxRow = {
+  id: string;
+  aggregate: string;
+  event_type: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+  dispatched_at: string | null;
+  attempts: number;
+  next_attempt_at: string;
+  last_error: string | null;
+  status: "pending" | "dispatched" | "dead";
+  dead_at: string | null;
+};
+
+/** Issue #688: immutable operator requeue audit trail. Never contains payloads. */
+export type OutboxRequeueAuditRow = {
+  id: string;
+  outbox_id: string;
+  requeued_by: string;
+  reason: string;
+  previous_status: "dead";
+  previous_attempts: number;
+  previous_last_error: string | null;
+  requeued_at: string;
+};
+
 /** Issue #631: Argon2id hash of a capability's printed card PIN. */
 export type EmergencyCapabilityPinRow = {
   capability_id: string;
@@ -901,6 +928,19 @@ export type Database = {
         Update: Partial<Pick<AccountNotificationOutboxRow, "sent_at">>;
         Relationships: [];
       };
+      outbox: {
+        Row: OutboxRow;
+        Insert: Pick<OutboxRow, "aggregate" | "event_type"> &
+          Partial<OutboxRow>;
+        Update: Partial<Omit<OutboxRow, "id">>;
+        Relationships: [];
+      };
+      outbox_requeue_audit: {
+        Row: OutboxRequeueAuditRow;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       emergency_capability_pins: {
         Row: EmergencyCapabilityPinRow;
         Insert: Pick<EmergencyCapabilityPinRow, "capability_id" | "pin_hash"> &
@@ -961,6 +1001,30 @@ export type Database = {
       };
     };
     Functions: {
+      claim_outbox_batch: {
+        Args: { p_batch_size?: number };
+        Returns: OutboxRow[];
+      };
+      ack_outbox_row: {
+        Args: { p_id: string };
+        Returns: undefined;
+      };
+      defer_outbox_row: {
+        Args: {
+          p_id: string;
+          p_next_attempt_at: string;
+          p_last_error: string;
+        };
+        Returns: undefined;
+      };
+      dead_letter_outbox_row: {
+        Args: { p_id: string; p_last_error: string };
+        Returns: undefined;
+      };
+      requeue_dead_outbox_row: {
+        Args: { p_id: string; p_reason: string; p_operator?: string | null };
+        Returns: undefined;
+      };
       get_emergency_card: {
         Args: { p_card_id: string };
         Returns: EmergencyCardRow[];

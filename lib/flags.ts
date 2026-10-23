@@ -133,6 +133,13 @@ export async function getFlagSnapshot(): Promise<Record<string, { enabled: boole
   return snapshot;
 }
 
+/** Snapshot alias used by the readiness probe (flag-level only). */
+export async function getFlagStates(): Promise<
+  Record<string, { enabled: boolean; rolloutPct: number }>
+> {
+  return getFlagSnapshot();
+}
+
 /** Test helper: clear the in-memory cache. */
 export function clearFlagCache(): void {
   cache.clear();

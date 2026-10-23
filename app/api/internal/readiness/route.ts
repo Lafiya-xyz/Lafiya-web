@@ -2,16 +2,16 @@ import { rpc } from "@stellar/stellar-sdk";
 import { NextResponse } from "next/server";
 
 import { serverEnv } from "@/lib/env-server";
-import { getRuntimeConfig } from "@/lib/runtime-config";
+import { getFlagStates } from "@/lib/flags";
+import { getOutboxLag, type OutboxLag } from "@/lib/outbox/dispatcher";
+import { getRpcResolutionStatus, getRuntimeConfig } from "@/lib/runtime-config";
 import { getContractTrustState } from "@/lib/stellar/verification-indexer/trust-state";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getFlagStates } from "@/lib/flags";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type DependencyStatus = "ok" | "unreachable";
-type StellarStatus = DependencyStatus | "TESTNET_RESET_DETECTED";
 
 /**
  * Verification-indexer gap state. `GAP_DETECTED` means the checkpoint ledger
@@ -22,9 +22,15 @@ type StellarStatus = DependencyStatus | "TESTNET_RESET_DETECTED";
  */
 type IndexerGapStatus = "ok" | "GAP_DETECTED" | "unknown";
 
+/**
+ * Aggregate outbox health. Only counts/timing are exposed — never payloads,
+ * event data, or row identifiers.
+ */
+type OutboxStatus = "ok" | "degraded" | "unknown";
+
 async function checkSupabase(): Promise<DependencyStatus> {
   try {
-    const { error } = await createAdminClient()
+    const { error } = await createAdminClient({ purpose: "readiness" })
       .from("profiles")
       .select("user_id", { head: true, count: "exact" })
       .limit(1);
@@ -34,45 +40,9 @@ async function checkSupabase(): Promise<DependencyStatus> {
   }
 }
 
-/**
- * Detect a Stellar testnet reset. A reset wipes contracts and accounts, so the
- * ledger sequence regresses below our checkpoint, the network passphrase no
- * longer matches, or the configured contract is missing. This logic is
- * explicitly forbidden on mainnet: a mainnet deployment must never be marked
- * as reset, and any mismatch there is treated as unreachable instead.
- */
-async function checkStellar(): Promise<StellarStatus> {
-  const isMainnet = serverEnv.STELLAR_NETWORK === "mainnet";
+async function checkStellar(): Promise<DependencyStatus> {
   try {
-    const server = new rpc.Server(serverEnv.SOROBAN_RPC_URL);
-    await server.getHealth();
-
-    const latest = await server.getLatestLedger();
-    const checkpoint = serverEnv.STELLAR_LEDGER_CHECKPOINT;
-    if (
-      !isMainnet &&
-      typeof checkpoint === "number" &&
-      latest.sequence < checkpoint
-    ) {
-      return "TESTNET_RESET_DETECTED";
-    }
-
-    const contractId = serverEnv.SOROBAN_CONTRACT_ID;
-    if (!isMainnet && contractId) {
-      const entries = await server.getContractData(
-        contractId,
-        // A missing contract instance is a reset signal.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (await import("@stellar/stellar-sdk")).xdr.LedgerKey.contractData(
-          new (await import("@stellar/stellar-sdk")).Contract(contractId)
-            .getFootprint(),
-        ),
-      );
-      if (!entries) {
-        return "TESTNET_RESET_DETECTED";
-      }
-    }
-
+    await new rpc.Server(serverEnv.SOROBAN_RPC_URL).getHealth();
     return "ok";
   } catch {
     return "unreachable";
@@ -86,7 +56,7 @@ async function checkStellar(): Promise<StellarStatus> {
  */
 async function checkIndexerGap(): Promise<IndexerGapStatus> {
   try {
-    const { data, error } = await createAdminClient()
+    const { data, error } = await createAdminClient({ purpose: "readiness" })
       .from("indexer_gap_incidents")
       .select("id")
       .is("resolved_at", null)
@@ -95,6 +65,35 @@ async function checkIndexerGap(): Promise<IndexerGapStatus> {
     return data && data.length > 0 ? "GAP_DETECTED" : "ok";
   } catch {
     return "unknown";
+  }
+}
+
+/**
+ * Surface outbox backlog/dead rows without ever selecting payload data.
+ * Dead rows are operator-actionable (requeue or investigate) but do not make
+ * the process unready: healthy rows continue to be dispatched.
+ */
+async function checkOutbox(): Promise<{
+  status: OutboxStatus;
+  pendingCount: number | null;
+  deadCount: number | null;
+  lagMs: number | null;
+}> {
+  try {
+    const lag: OutboxLag = await getOutboxLag();
+    return {
+      status: lag.deadCount > 0 ? "degraded" : "ok",
+      pendingCount: lag.pendingCount,
+      deadCount: lag.deadCount,
+      lagMs: lag.lagMs,
+    };
+  } catch {
+    return {
+      status: "unknown",
+      pendingCount: null,
+      deadCount: null,
+      lagMs: null,
+    };
   }
 }
 
@@ -112,10 +111,20 @@ async function checkIndexerGap(): Promise<IndexerGapStatus> {
  */
 export async function GET() {
   const config = getRuntimeConfig();
-  const [supabase, stellar, attestationGovernance] = await Promise.all([
+  const [
+    supabase,
+    stellar,
+    verificationIndexer,
+    attestationGovernance,
+    flags,
+    outbox,
+  ] = await Promise.all([
     checkSupabase(),
     checkStellar(),
+    checkIndexerGap(),
     getContractTrustState(),
+    getFlagStates(),
+    checkOutbox(),
   ]);
 
   const ready =
@@ -141,6 +150,8 @@ export async function GET() {
         attestationGovernance,
         payoutIndexer: config.payoutIndexer.enabled ? "enabled" : "disabled",
         sentry: config.sentry.enabled ? "enabled" : "disabled",
+        // Issue #688: dead-letter count and backlog timing only.
+        outbox,
         // Validation results for SOROBAN_RPC_URL / STELLAR_HORIZON_URL --
         // the policy that was enforced and the boot-time DNS check outcome,
         // never the URLs or hosts themselves.

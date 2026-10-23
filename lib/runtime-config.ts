@@ -209,6 +209,13 @@ export type RuntimeConfig = {
     /** True when a transaction-mode pooler is configured. */
     poolerConfigured: boolean;
   };
+  /**
+   * How SOROBAN_RPC_URL / STELLAR_HORIZON_URL were validated -- never the
+   * URLs themselves. "allowlist": scheme, host class, and host allowlist were
+   * enforced; "permissive": a local/test deployment where any http(s) URL is
+   * accepted.
+   */
+  rpcEndpoints: { policy: "allowlist" | "permissive" };
 };
 
 /**
@@ -453,6 +460,16 @@ export function getRuntimeConfig(
     );
   }
 
+  validateRpcUrl("SOROBAN_RPC_URL", "rpc", config.SOROBAN_RPC_URL, deployment);
+  if (config.STELLAR_HORIZON_URL) {
+    validateRpcUrl(
+      "STELLAR_HORIZON_URL",
+      "horizon",
+      config.STELLAR_HORIZON_URL,
+      deployment,
+    );
+  }
+
   const approvedWasmHashes = (config.ATTESTATION_APPROVED_WASM_HASHES ?? "")
     .split(",")
     .map((hash) => hash.trim().toLowerCase())
@@ -545,5 +562,135 @@ export function getRuntimeConfig(
       directUrl: config.DIRECT_URL,
       poolerConfigured: Boolean(config.DATABASE_URL),
     },
+    rpcEndpoints: {
+      policy: ALLOWLISTED_DEPLOYMENTS.has(deployment)
+        ? "allowlist"
+        : "permissive",
+    },
   };
+}
+
+export const serverEnvSchema = rawServerEnvSchema;
+
+const privateAddresses = new BlockList();
+for (const [network, prefix] of [
+  ["0.0.0.0", 8], // "this" network
+  ["10.0.0.0", 8], // RFC 1918
+  ["100.64.0.0", 10], // carrier-grade NAT
+  ["127.0.0.0", 8], // loopback
+  ["169.254.0.0", 16], // link-local, incl. cloud metadata 169.254.169.254
+  ["172.16.0.0", 12], // RFC 1918
+  ["192.0.0.0", 24], // IETF protocol assignments
+  ["192.168.0.0", 16], // RFC 1918
+  ["198.18.0.0", 15], // benchmarking
+  ["224.0.0.0", 4], // multicast
+  ["240.0.0.0", 4], // reserved + broadcast
+] as const) {
+  privateAddresses.addSubnet(network, prefix, "ipv4");
+}
+for (const [network, prefix] of [
+  ["::", 128], // unspecified
+  ["::1", 128], // loopback
+  ["fc00::", 7], // unique local
+  ["fe80::", 10], // link-local
+  ["ff00::", 8], // multicast
+] as const) {
+  privateAddresses.addSubnet(network, prefix, "ipv6");
+}
+
+/** True for loopback, private, link-local, and other non-public addresses. */
+export function isPrivateAddress(address: string): boolean {
+  const family = isIP(address);
+  if (family === 4) return privateAddresses.check(address, "ipv4");
+  if (family === 6) {
+    // IPv4-mapped IPv6 (::ffff:a.b.c.d, or its hex form ::ffff:7f00:1) is
+    // judged by the IPv4 address it wraps.
+    const dotted = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address);
+    if (dotted) return privateAddresses.check(dotted[1], "ipv4");
+    const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(address);
+    if (hex) {
+      const high = parseInt(hex[1], 16);
+      const low = parseInt(hex[2], 16);
+      const ipv4 = [high >> 8, high & 0xff, low >> 8, low & 0xff].join(".");
+      return privateAddresses.check(ipv4, "ipv4");
+    }
+    return privateAddresses.check(address, "ipv6");
+  }
+  // Not an IP at all: refuse rather than guess.
+  return true;
+}
+
+export type RpcResolutionStatus = "verified" | "skipped" | "not_run";
+
+type LookupAll = (
+  hostname: string,
+) => Promise<ReadonlyArray<{ address: string }>>;
+
+const defaultLookup: LookupAll = (hostname) =>
+  dnsLookup(hostname, { all: true, verbatim: true });
+
+// Stored on globalThis rather than in module scope: Next may evaluate this
+// module separately for instrumentation and for route bundles.
+const RESOLUTION_STATUS_KEY = Symbol.for("lafiya.rpcResolutionStatus");
+type ResolutionStatusHolder = { [RESOLUTION_STATUS_KEY]?: RpcResolutionStatus };
+
+/** The outcome of the boot-time DNS check, for readiness output. */
+export function getRpcResolutionStatus(): RpcResolutionStatus {
+  return (
+    (globalThis as ResolutionStatusHolder)[RESOLUTION_STATUS_KEY] ?? "not_run"
+  );
+}
+
+/**
+ * Boot-time DNS check for the configured Stellar endpoints (called from
+ * instrumentation.ts before the server accepts traffic). In allowlisted
+ * deployments every address a host resolves to must be public, so a
+ * compromised or poisoned DNS record cannot aim server-side fetches at
+ * internal services or the cloud metadata endpoint at boot.
+ *
+ * Residual risk: this is a point-in-time check. A host that re-resolves to a
+ * private address after boot (DNS rebinding) is not caught here; that needs
+ * network-layer egress filtering, which is out of scope for app config.
+ * Resolution failure is treated as fatal (fail closed).
+ */
+export async function verifyRpcHostResolution(
+  env: NodeJS.ProcessEnv = process.env,
+  lookup: LookupAll = defaultLookup,
+): Promise<RpcResolutionStatus> {
+  const config = getRuntimeConfig(env);
+  const holder = globalThis as ResolutionStatusHolder;
+  if (config.rpcEndpoints.policy !== "allowlist") {
+    holder[RESOLUTION_STATUS_KEY] = "skipped";
+    return "skipped";
+  }
+
+  const endpoints = [
+    ["SOROBAN_RPC_URL", env.SOROBAN_RPC_URL],
+    ["STELLAR_HORIZON_URL", env.STELLAR_HORIZON_URL],
+  ] as const;
+  for (const [variable, value] of endpoints) {
+    if (!value || value.trim() === "") continue;
+    const hostname = normalizedHostname(new URL(value));
+    let addresses: ReadonlyArray<{ address: string }>;
+    try {
+      addresses = await lookup(hostname);
+    } catch {
+      throw new RuntimeConfigError(
+        "RPC_URL_UNRESOLVABLE",
+        `${variable} host did not resolve at startup`,
+      );
+    }
+    if (
+      addresses.length === 0 ||
+      addresses.some(({ address }) => isPrivateAddress(address))
+    ) {
+      throw new RuntimeConfigError(
+        "RPC_URL_RESOLVES_PRIVATE",
+        `${variable} host resolves to a private, loopback, or link-local address`,
+      );
+    }
+  }
+
+  holder[RESOLUTION_STATUS_KEY] = "verified";
+  return "verified";
 }
