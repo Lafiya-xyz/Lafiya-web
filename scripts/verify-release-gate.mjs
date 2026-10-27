@@ -1,6 +1,7 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
+import { evaluateErrorBudget } from "./error-budget.mjs";
 
 const evidencePath = process.argv[2];
 const resolvedEvidencePath = evidencePath && resolve(evidencePath);
@@ -121,6 +122,66 @@ if (!provenanceValid) {
   process.exit(1);
 }
 
+// ── Error-budget gate ─────────────────────────────────────────────────────────
+// If a metrics file is present at release-evidence/error-budget-metrics.json,
+// evaluate the error budget and block if the gate status is "blocked".
+// The metrics file is optional; absent metrics are treated as a warning only.
+
+const metricsPath = resolve(process.cwd(), "release-evidence", "error-budget-metrics.json");
+
+if (existsSync(metricsPath)) {
+  let metrics;
+  try {
+    metrics = JSON.parse(readFileSync(metricsPath, "utf8"));
+  } catch {
+    console.warn("Warning: error-budget-metrics.json is not valid JSON — skipping budget gate.");
+    metrics = null;
+  }
+
+  if (metrics) {
+    const budget = evaluateErrorBudget(metrics);
+
+    console.log(`\nError-budget status:`);
+    console.log(`  SLO target:        ${(budget.sloTarget * 100).toFixed(2)}%`);
+    console.log(`  Budget total:      ${budget.errorBudgetMinutes.toFixed(2)} minutes`);
+    console.log(`  Budget consumed:   ${budget.consumedMinutes.toFixed(2)} minutes (${(budget.consumedFraction * 100).toFixed(1)}%)`);
+    console.log(`  Budget remaining:  ${budget.remainingMinutes.toFixed(2)} minutes (${(budget.remainingFraction * 100).toFixed(1)}%)`);
+    console.log(`  Gate status:       ${budget.gateStatus.toUpperCase()}`);
+    console.log(`  Gate reason:       ${budget.gateReason}`);
+
+    if (budget.alerts.length > 0) {
+      console.log(`\nBurn-rate alerts:`);
+      for (const alert of budget.alerts) {
+        console.log(`  [${alert.severity.toUpperCase()}] ${alert.message}`);
+      }
+    }
+
+    // Check for explicit override in the gate evidence
+    const override = isObject(gateObject.errorBudgetOverride) ? gateObject.errorBudgetOverride : null;
+    if (budget.gateStatus === "blocked") {
+      if (override && typeof override.reason === "string" && override.reason.trim() && typeof override.actor === "string" && override.actor.trim()) {
+        console.warn(
+          `\nError-budget gate override applied by '${override.actor}': ${override.reason}`,
+        );
+        console.warn("Override is recorded in the release evidence — this action is auditable.");
+      } else {
+        console.error(
+          `\nMainnet release gate rejected: error budget is ${budget.gateStatus}. ${budget.gateReason}`,
+        );
+        console.error(
+          "To override, add an 'errorBudgetOverride' object to the release evidence with 'reason' and 'actor' fields.",
+        );
+        process.exit(1);
+      }
+    }
+  }
+} else {
+  console.warn(
+    "Warning: release-evidence/error-budget-metrics.json not found. " +
+    "Error-budget gate skipped. Add metrics for production releases.",
+  );
+}
+
 console.log(
-  "Mainnet release gate evidence is complete for this immutable build.",
+  "\nMainnet release gate evidence is complete for this immutable build.",
 );
