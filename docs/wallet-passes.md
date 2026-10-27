@@ -99,3 +99,36 @@ for exactly what call to make once real credentials exist.
   any real credential is ever set in a deployed environment.
 - Manual device verification (install on a real iPhone/Android device) once
   signing works.
+
+- Security review of key storage (explicitly called out in the issue) before
+  any real credential is ever set in a deployed environment.
+- Manual device verification (install on a real iPhone/Android device) once
+  signing works.
+
+## Automatic updates (issue #771)
+
+Passes include `webServiceURL` (`APPLE_WALLET_WEB_SERVICE_URL`, e.g.
+`https://<host>/api/wallet/apple`) and an `authenticationToken` (HMAC of the
+serial under `WALLET_PASS_AUTH_SECRET`) when both are set. The serial number is
+the capability digest, never the raw token.
+
+- Web service: `app/api/wallet/apple/v1/[...path]/route.ts` →
+  `lib/wallet-passes/updates.ts`; state in `wallet_passes` /
+  `wallet_pass_registrations` (service-role only).
+- Profile edits enqueue `wallet_pass:card_changed` outbox rows; the handler
+  pushes over APNs at most once per coalescing window (5 min) and defers the
+  rest via outbox retry.
+- Account deletion voids passes (`voided: true`), pushes once, and removes
+  registrations. `purge_voided_wallet_passes()` drops voided rows after 30 days.
+- Google Wallet objects are not patched yet: the Google save-link JWT flow has
+  no server-side REST credentials in this deployment.
+
+### PassKit web-service contract checklist
+
+Covered by `lib/wallet-passes/updates.test.ts`:
+
+1. `POST /v1/devices/{device}/registrations/{type}/{serial}` → 201 new, 200 existing, 401 bad `ApplePass` token, 400 bad `pushToken`.
+2. `GET /v1/devices/{device}/registrations/{type}?passesUpdatedSince=` → 200 `{serialNumbers, lastUpdated}` or 204.
+3. `GET /v1/passes/{type}/{serial}` → 200 `.pkpass` with `Last-Modified`, 304 on `If-Modified-Since`, 401 bad token.
+4. `DELETE /v1/devices/{device}/registrations/{type}/{serial}` → 200.
+5. `POST /v1/log` → 200.

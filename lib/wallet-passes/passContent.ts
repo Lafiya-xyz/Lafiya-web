@@ -19,6 +19,8 @@
  */
 import "server-only";
 
+import { digestCapability } from "@/lib/emergency/capability";
+
 /** Must resolve under the public capability-share route, never the legacy
  * permanent `/card/[id]` route — passes are meant to be revocable the same
  * way a capability-share QR is (see /card/c/[token]/page.tsx). */
@@ -64,9 +66,11 @@ export interface WalletPassContent {
   serialNumber: string;
 }
 
-/** Serial numbers are derived from the capability token itself (already
- * high-entropy, already revocable) rather than any patient/profile
- * identifier, so voiding a pass never requires looking up who it belongs
+/** Serial numbers are the capability's one-way digest (the same value
+ * stored as `emergency_capabilities.token_digest`) rather than any
+ * patient/profile identifier or the raw token, so the PassKit web service
+ * (issue #771) can persist and list serials without persisting a bearer
+ * capability, and voiding a pass never requires looking up who it belongs
  * to. */
 export function buildWalletPassContent(capabilityUrl: string): WalletPassContent {
   assertValidCapabilityUrl(capabilityUrl);
@@ -75,7 +79,7 @@ export function buildWalletPassContent(capabilityUrl: string): WalletPassContent
     organizationName: "Lafiya",
     description: "Medical information: scan",
     capabilityUrl,
-    serialNumber: token,
+    serialNumber: digestCapability(token),
   };
 }
 

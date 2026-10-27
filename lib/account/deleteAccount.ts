@@ -1,4 +1,5 @@
 import type { createAdminClient } from "@/lib/supabase/admin";
+import { voidWalletPasses } from "@/lib/wallet-passes/updates-runtime";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -124,6 +125,29 @@ export async function deleteAccountAndData(
       { cause: revokeError },
     );
   }
+
+  // 1b. Void wallet passes for those capabilities and drop their device
+  //     registrations (issue #771) so wallets stop showing a live card.
+  const { data: capabilityRows, error: capabilityListError } = await (
+    admin.from("emergency_capabilities") as unknown as {
+      select: (cols: string) => {
+        eq: (col: string, val: string) => Promise<{
+          data: { token_digest: string }[] | null;
+          error: { message: string } | null;
+        }>;
+      };
+    }
+  )
+    .select("token_digest")
+    .eq("user_id", userId);
+
+  if (capabilityListError) {
+    throw new Error(
+      `Failed to list capability shares: ${capabilityListError.message}`,
+      { cause: capabilityListError },
+    );
+  }
+  await voidWalletPasses((capabilityRows ?? []).map((r) => r.token_digest));
 
   // 2. Remove avatar storage objects. Supabase Storage does not cascade on
   //    auth user deletion, so this must be explicit.
