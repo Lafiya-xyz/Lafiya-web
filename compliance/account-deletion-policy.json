@@ -1,0 +1,122 @@
+{
+  "public.profiles": {
+    "action": "delete",
+    "handling": "Deleted by the auth.users cascade."
+  },
+  "public.profile_secrets": {
+    "action": "delete",
+    "handling": "Deleted with the owning auth user; the patient-specific secret is not retained."
+  },
+  "public.consent_logs_legacy": {
+    "action": "delete",
+    "handling": "Legacy consent rows are removed with the owning auth user."
+  },
+  "public.reattestation_requests": {
+    "action": "delete",
+    "handling": "Requests and their account-linked review metadata are deleted with the auth user."
+  },
+  "public.record_revisions": {
+    "action": "delete",
+    "handling": "Patient revisions and commitments are deleted with the auth user."
+  },
+  "public.consent_events": {
+    "action": "delete",
+    "handling": "Consent history is deleted with the auth user."
+  },
+  "public.chw_payouts": {
+    "action": "retain",
+    "legalBasis": "Financial and payment reconciliation records must remain auditable against the Stellar ledger.",
+    "minimization": "The auth user reference is set to NULL on account deletion; retain only payment and ledger reconciliation fields."
+  },
+  "public.chw_identities": {
+    "action": "retain",
+    "legalBasis": "Credential and verification status is retained for operational security and fraud prevention.",
+    "minimization": "Retain only the auth UUID, status, and verification timestamps; remove credential material and contact details."
+  },
+  "public.chw_address_bindings": {
+    "action": "delete",
+    "handling": "Current address bindings and verification proofs are removed with the CHW identity."
+  },
+  "public.emergency_capabilities": {
+    "action": "delete",
+    "handling": "Active shares are revoked before auth deletion; capability rows are deleted by cascade."
+  },
+  "public.card_access_events": {
+    "action": "delete",
+    "handling": "Access events are deleted with the user; the independent 90-day purge is an additional limit."
+  },
+  "public.card_access_events_2026_09": {
+    "action": "delete",
+    "handling": "Partitioned access-event rows inherit account deletion through the parent table."
+  },
+  "public.card_access_events_2026_10": {
+    "action": "delete",
+    "handling": "Partitioned access-event rows inherit account deletion through the parent table."
+  },
+  "public.card_access_events_2026_11": {
+    "action": "delete",
+    "handling": "Partitioned access-event rows inherit account deletion through the parent table."
+  },
+  "public.card_access_events_2026_12": {
+    "action": "delete",
+    "handling": "Partitioned access-event rows inherit account deletion through the parent table."
+  },
+  "public.card_access_events_default": {
+    "action": "delete",
+    "handling": "Partitioned access-event rows inherit account deletion through the parent table."
+  },
+  "public.patient_blocking_keys": {
+    "action": "delete",
+    "handling": "Keyed duplicate-detection hashes are deleted with the auth user."
+  },
+  "public.account_merge_requests": {
+    "action": "delete",
+    "handling": "In-progress merge requests are deleted with either participating auth user."
+  },
+  "public.account_merge_audit": {
+    "action": "retain",
+    "legalBasis": "A verified account merge requires an audit record for dispute resolution and fraud prevention.",
+    "minimization": "Retain only opaque account UUIDs, moved-field categories, and merge time; no names, contact details, or clinical values."
+  },
+  "public.account_notification_outbox": {
+    "action": "delete",
+    "handling": "Unsent notification metadata is deleted with the auth user."
+  },
+  "public.idempotency_keys": {
+    "action": "delete",
+    "handling": "Request replay keys are deleted with the auth user."
+  },
+  "public.break_glass_accesses": {
+    "action": "delete",
+    "handling": "Patient-specific emergency access records are deleted with the patient auth user."
+  },
+  "public.emergency_contact_notification_events": {
+    "action": "delete",
+    "handling": "Notification events are deleted with the auth user; a separate 90-day purge also applies."
+  },
+  "public.dependants": {
+    "action": "delete",
+    "handling": "Dependent profiles are deleted with the guardian auth user."
+  },
+  "public.guardianships": {
+    "action": "delete",
+    "handling": "Guardian relationships are deleted with the guardian auth user."
+  },
+  "public.guardian_audit_log": {
+    "action": "retain",
+    "legalBasis": "Safeguarding and access-accountability records are retained to investigate unauthorized dependent-data access.",
+    "minimization": "Retain event type, subject reference, and timestamp only; actor linkage must be removed when the account is erased."
+  },
+  "public.user_sessions": {
+    "action": "delete",
+    "handling": "Application session metadata is deleted with the auth user."
+  },
+  "public.chw_fraud_flags": {
+    "action": "delete",
+    "handling": "CHW-linked fraud findings are removed when the CHW account is erased."
+  },
+  "storage.objects": {
+    "action": "delete",
+    "handling": "Avatar objects under the account UUID prefix are explicitly removed through Supabase Storage before auth deletion."
+  }
+}

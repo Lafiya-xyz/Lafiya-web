@@ -255,7 +255,7 @@ export function ProfileForm({
       !state.error.includes(
         "This profile was updated elsewhere since you loaded this page",
       ) ? (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="text-sm text-[var(--color-danger-text)] dark:text-[var(--color-danger-text)]">
           {state.error}
         </p>
       ) : null}

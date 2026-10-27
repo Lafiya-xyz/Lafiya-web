@@ -10,6 +10,11 @@
  * A row whose handler throws is left with `dispatched_at = null` and an
  * incremented `attempts` counter so it will be retried on the next poll.
  *
+ * ## Schema registry (issue #790)
+ * Every event type with a registered schema is validated and upcasted before
+ * dispatch. A row whose payload has an unknown version is not retried — it
+ * is sent to dead-letter (the handler throws with reason "dead-letter").
+ *
  * ## Lag observability
  * `getOutboxLag()` returns the age of the oldest undispatched row so a
  * monitoring probe can alert on processing delays (satisfies the "lag is
@@ -28,8 +33,9 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError, logInfo, logWarn } from "@/lib/logging/logger";
 import { invalidateAttestationCache } from "@/lib/stellar/attestation-cache-invalidation";
-import { handleWalletCardChanged } from "@/lib/wallet-passes/updates-runtime";
+import { parseInboxPayload } from "@/lib/notifications/inbox";
 import type { OutboxHandler, OutboxHandlerRegistry, OutboxRow } from "./types";
+import { upcastPayload, validateOutboxPayload } from "./types";
 
 // ─── Built-in handlers ──────────────────────────────────────────────────────
 
@@ -43,7 +49,17 @@ import type { OutboxHandler, OutboxHandlerRegistry, OutboxRow } from "./types";
  * payload — no PHI, no user IDs, no capability tokens.
  */
 const handleRecordSaved: OutboxHandler = async (row) => {
-  const commitment = row.payload["commitment"];
+  const key = `${row.aggregate}:${row.event_type}`;
+  const upcast = upcastPayload(key, row.payload);
+  if (!upcast.ok) {
+    logWarn(
+      `outbox: ${key} payload failed upcast (${upcast.reason}) — sending to dead-letter`,
+      { outbox_id: row.id, reason: upcast.reason },
+    );
+    throw new Error(`dead-letter: ${upcast.reason}`);
+  }
+
+  const commitment = upcast.payload["commitment"];
   if (typeof commitment !== "string" || !/^[0-9a-f]{64}$/.test(commitment)) {
     logWarn("outbox: record_saved payload missing valid commitment — skipping", {
       outbox_id: row.id,
@@ -59,9 +75,31 @@ const handleRecordSaved: OutboxHandler = async (row) => {
  *
  * Key format: `${aggregate}:${event_type}`
  */
+/**
+ * Persists a PHI-free inbox notification (issue #764). Idempotent per
+ * event_key: record_user_notification ignores duplicates on retry.
+ */
+const handleUserNotification: OutboxHandler = async (row) => {
+  const payload = parseInboxPayload(row.payload);
+  if (!payload) {
+    logWarn("outbox: user_notification payload invalid — skipping", {
+      outbox_id: row.id,
+    });
+    return;
+  }
+  const admin = createAdminClient();
+  const { error } = await (admin as any).rpc("record_user_notification", {
+    p_card_public_id: payload.card_public_id,
+    p_type: payload.type,
+    p_body_key: payload.body_key,
+    p_event_key: payload.event_key,
+  });
+  if (error) throw error;
+};
+
 export const HANDLERS: OutboxHandlerRegistry = new Map<string, OutboxHandler>([
   ["record_revision:record_saved", handleRecordSaved],
-  ["wallet_pass:card_changed", handleWalletCardChanged],
+  ["user_notification:security_event", handleUserNotification],
 ]);
 
 // ─── Dispatcher core ────────────────────────────────────────────────────────
@@ -69,6 +107,11 @@ export const HANDLERS: OutboxHandlerRegistry = new Map<string, OutboxHandler>([
 /**
  * Runs one poll cycle: claims up to `batchSize` pending outbox rows,
  * dispatches each to its registered handler, and acknowledges successes.
+ *
+ * Before calling the handler, the payload is validated and upcasted to the
+ * current schema version. Rows with unknown versions go to dead-letter and
+ * will not be retried (they remain in the queue with incremented attempts
+ * until a manual intervention or a dead-letter sweep clears them).
  *
  * @returns The number of rows successfully dispatched in this cycle.
  */
@@ -133,6 +176,28 @@ export async function runDispatchCycle(
   return dispatched;
 }
 
+// ─── Write-time validation ───────────────────────────────────────────────────
+
+/**
+ * Validate a payload before inserting an outbox row.  Call this in the same
+ * transaction as the INSERT so an invalid payload is rejected before commit.
+ *
+ * Throws with a descriptive message if validation fails.
+ */
+export function assertValidOutboxPayload(
+  aggregate: string,
+  event_type: string,
+  payload: Record<string, unknown>,
+): void {
+  const key = `${aggregate}:${event_type}`;
+  const result = validateOutboxPayload(key, payload);
+  if (!result.ok) {
+    throw new Error(
+      `outbox: invalid payload for ${key}: ${result.error}`,
+    );
+  }
+}
+
 // ─── Observability ──────────────────────────────────────────────────────────
 
 export interface OutboxLag {
@@ -175,3 +240,6 @@ export async function getOutboxLag(): Promise<OutboxLag> {
     pendingCount: (data as unknown[]).length,
   };
 }
+
+// Re-export validateOutboxPayload for use by write-side callers.
+export { validateOutboxPayload };

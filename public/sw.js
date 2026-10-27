@@ -37,6 +37,11 @@ const PUSH_DEFAULT_PATH = "/";
 // offline card renderer routes.
 const CARD_ROUTE_PREFIX = "/cards/";
 
+// Nearest-facility directory shards (issue #763). Cached lazily on first use
+// in their own cache so app-shell version bumps do not evict them.
+const FACILITY_CACHE = "lafiya-facilities-v1";
+const FACILITY_PATH_PREFIX = "/facilities/";
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
@@ -168,6 +173,11 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  if (url.pathname.startsWith(FACILITY_PATH_PREFIX) && url.pathname.endsWith(".json")) {
+    event.respondWith(handleFacilityShard(request));
+    return;
+  }
+
   if (request.mode === "navigate" && url.pathname.startsWith(CARD_ROUTE_PREFIX)) {
     event.respondWith(handleCardNavigation(event));
     return;
@@ -189,3 +199,18 @@ self.addEventListener("fetch", (event) => {
     })(),
   );
 });
+
+// Network-first so fresh shards replace stale ones; falls back to the cached
+// shard when offline.
+async function handleFacilityShard(request) {
+  const cache = await caches.open(FACILITY_CACHE);
+  try {
+    const response = await fetch(request);
+    if (response.ok) await cache.put(request, response.clone());
+    return response;
+  } catch (error) {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    throw error;
+  }
+}

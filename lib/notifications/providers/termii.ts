@@ -15,6 +15,8 @@ export interface TermiiConfig {
   apiKey: string;
   senderId: string;
   baseUrl?: string;
+  /** Termii route: "dnd" (transactional) or "generic" (promotional). See routing.ts. */
+  channel?: string;
 }
 
 /**
@@ -39,7 +41,7 @@ export async function sendViaTerm(
         from: config.senderId,
         sms: body,
         type: "plain",
-        channel: "generic",
+        channel: config.channel ?? "dnd",
         api_key: config.apiKey,
         // Termii supports message_id for idempotency on retries.
         message_id: idempotencyKey,

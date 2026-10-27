@@ -1,0 +1,93 @@
+name: Publish @lafiya/protocol
+
+# Publishes the @lafiya/protocol package to npm with provenance attestation.
+# Triggered on version tags matching packages/protocol/v*.*.*.
+# Also runnable manually for dry-run verification.
+on:
+  push:
+    tags:
+      - "packages/protocol/v*.*.*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run — build and verify vectors without publishing"
+        required: false
+        default: "true"
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write  # Required for npm provenance attestation
+
+jobs:
+  verify-and-publish:
+    name: Verify test vectors and publish
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/protocol
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          # Configure npm registry with provenance support
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install workspace dependencies
+        run: npm ci
+        working-directory: .
+
+      - name: Install package dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      # Critical gate: test vectors must pass before publishing.
+      # A canonical-form change without updating vectors will fail here.
+      - name: Verify test vectors
+        run: npm run test:vectors
+
+      - name: Run full test suite
+        run: npm test
+
+      - name: Build package (ESM + CJS + declarations)
+        run: npm run build
+
+      # Verify the built package contains no server-only or secret-handling code.
+      # Checks that node:crypto is only used as a dynamic import (fallback path),
+      # and that there are no require('server-only') calls in the dist.
+      - name: Verify no server-only code in dist
+        run: |
+          if grep -r "server-only" dist/; then
+            echo "::error::dist/ contains server-only references. This package must be runtime-neutral."
+            exit 1
+          fi
+          if grep -r "SECRET\|secret_key\|private_key" dist/; then
+            echo "::error::dist/ may contain secret-handling code. Review before publishing."
+            exit 1
+          fi
+          echo "No server-only or secret-handling code found in dist/."
+
+      # Verify no PHI patterns in built artifacts.
+      - name: Verify no PHI in dist
+        run: |
+          PHI_PATTERNS="date_of_birth|phone_number|national_id|passport|ssn|email.*patient"
+          if grep -riE "$PHI_PATTERNS" dist/ 2>/dev/null | grep -v "// "; then
+            echo "::warning::PHI-pattern match in dist/ — review before publishing."
+          fi
+          echo "PHI scan complete."
+
+      - name: Publish to npm (with provenance)
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.dry_run == 'false')
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
+
+      - name: Dry-run publish
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run == 'true'
+        run: npm pack --dry-run

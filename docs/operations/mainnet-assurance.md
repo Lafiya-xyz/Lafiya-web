@@ -10,6 +10,8 @@ named owner approval recorded in the release evidence bundle.
 The supported toolchain is Node `24.14.0` and npm `11.9.0` (pinned in
 `.nvmrc` and `package.json`). The canonical clean-checkout sequence is:
 
+<!-- doctest -->
+
 ```bash
 npm ci
 npm run lint
@@ -93,6 +95,13 @@ build revision, expected schema compatibility, and component states. It never
 returns a database URL, credentials, contract/address, key, capability,
 record identifier, or patient-derived value. A database failure yields `503`;
 process liveness is not readiness.
+
+Readiness also verifies the Postgres major and extension versions against
+`supabase/extensions.manifest.json` (`components.databaseExtensions`); a
+mismatch yields `503`. Upgrades follow the
+[Postgres upgrade rehearsal runbook](postgres-upgrade-rehearsal.md).
+Dependency and repository health (OpenSSF Scorecard, new-dependency gates) is
+described in [Dependency and repository health](dependency-health.md).
 
 ## Environment topology and promotion
 

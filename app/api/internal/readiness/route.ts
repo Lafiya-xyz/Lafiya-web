@@ -1,11 +1,17 @@
 import { rpc } from "@stellar/stellar-sdk";
 import { NextResponse } from "next/server";
 
+import {
+  type ExtensionManifestStatus,
+  type ExtensionRow,
+  extensionManifestStatus,
+} from "@/lib/db/extension-manifest";
 import { serverEnv } from "@/lib/env-server";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 import { getContractTrustState } from "@/lib/stellar/verification-indexer/trust-state";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getFlagStates } from "@/lib/flags";
+import { smsDeliveryMetrics } from "@/lib/notifications";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,6 +37,23 @@ async function checkSupabase(): Promise<DependencyStatus> {
     return error ? "unreachable" : "ok";
   } catch {
     return "unreachable";
+  }
+}
+
+/**
+ * Issue #811: verifies Postgres major and extension versions against
+ * `supabase/extensions.manifest.json`. Only the status is returned, never the
+ * installed versions, so the probe does not advertise the database fingerprint.
+ */
+async function checkExtensions(): Promise<ExtensionManifestStatus> {
+  try {
+    const { data, error } = await createAdminClient().rpc(
+      "installed_extension_versions",
+    );
+    if (error) return "unknown";
+    return extensionManifestStatus(data as ExtensionRow[]);
+  } catch {
+    return "unknown";
   }
 }
 
@@ -112,15 +135,21 @@ async function checkIndexerGap(): Promise<IndexerGapStatus> {
  */
 export async function GET() {
   const config = getRuntimeConfig();
-  const [supabase, stellar, attestationGovernance] = await Promise.all([
+  const [supabase, stellar, attestationGovernance, smsDelivery] = await Promise.all([
     checkSupabase(),
     checkStellar(),
     getContractTrustState(),
+    // Issue #805: per-network (MTN/Airtel/Glo/9mobile) success rates.
+    // Aggregates only — no numbers or message ids. Informational; never
+    // fails readiness.
+    smsDeliveryMetrics().catch(() => null),
   ]);
+  const flags = await getFlagStates();
 
   const ready =
     supabase === "ok" &&
     stellar === "ok" &&
+    databaseExtensions !== "mismatch" &&
     verificationIndexer !== "GAP_DETECTED";
   return NextResponse.json(
     {
@@ -133,12 +162,14 @@ export async function GET() {
       components: {
         supabase,
         stellar,
+        databaseExtensions,
         verificationIndexer,
         attestation: config.attestation.mode,
         // Issue #629: "needs_review" means an unapproved contract upgrade was
         // observed and verified badges are degraded. Cards remain readable,
         // so this is surfaced to operators without failing readiness.
         attestationGovernance,
+        smsDelivery: smsDelivery ?? "unknown",
         payoutIndexer: config.payoutIndexer.enabled ? "enabled" : "disabled",
         sentry: config.sentry.enabled ? "enabled" : "disabled",
         // Validation results for SOROBAN_RPC_URL / STELLAR_HORIZON_URL --

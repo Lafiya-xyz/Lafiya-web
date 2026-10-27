@@ -57,3 +57,13 @@ Both pages are versioned with a visible `Version` and `Last updated` date (`v1.0
 ## Follow-up
 
 Cross-check the final policy copy against `lafiya-docs` for consistency before merging. When the consent-log feature lands, reference `privacy v1.0.0` explicitly in the consent record.
+
+## Nearest-facility directory and location (#763)
+
+The responder card can show a nearby health-facility list. The device's
+location is requested only when the responder taps "Sort by distance" and is
+processed **on-device only**: it is used in the browser to compute
+straight-line distances and is never sent to Lafiya or any third party. The
+facility shards themselves (`/facilities/<state>.json`) contain only public
+registry data and are cached by the service worker after first use so the list
+works offline. See `docs/facility-directory.md`.

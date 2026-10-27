@@ -9,10 +9,52 @@
  */
 
 @media print {
+  /* Semantic Design Tokens (Print Theme) */
+  :root {
+    --color-surface: #ffffff;
+    --color-surface-card: #ffffff;
+    --color-surface-muted: #ffffff;
+    --color-text: #000000;
+    --color-text-muted: #333333;
+    --color-text-inverse: #ffffff;
+    --color-danger-bg: #ffffff;
+    --color-danger-text: #000000;
+    --color-danger-border: #000000;
+    --color-verified-bg: #ffffff;
+    --color-verified-text: #000000;
+    --color-verified-border: #000000;
+    --color-warning-bg: #ffffff;
+    --color-warning-text: #000000;
+    --color-warning-border: #000000;
+  }
   /* ─── Reset browser print margins, ensure white page ──────────────────── */
   @page {
     margin: 16mm 14mm;
     size: A4 portrait;
+  }
+
+  /* ─── Semantic Print Tokens Configuration ─────────────────────────────── */
+  :root {
+    --color-surface-primary: #FFFFFF !important;
+    --color-surface-secondary: #FFFFFF !important;
+    --color-surface-muted: #F3F4F6 !important;
+    --color-surface-inverse: #000000 !important;
+    --color-text-primary: #000000 !important;
+    --color-text-secondary: #1F2937 !important;
+    --color-text-muted: #374151 !important;
+    --color-text-inverse: #FFFFFF !important;
+    --color-danger-base: #000000 !important;
+    --color-danger-surface: #FFFFFF !important;
+    --color-danger-text: #000000 !important;
+    --color-danger-border: #000000 !important;
+    --color-verified-base: #000000 !important;
+    --color-verified-surface: #FFFFFF !important;
+    --color-verified-text: #000000 !important;
+    --color-verified-border: #000000 !important;
+    --color-warning-base: #000000 !important;
+    --color-warning-surface: #FFFFFF !important;
+    --color-warning-text: #000000 !important;
+    --color-warning-border: #000000 !important;
   }
 
   /* ─── Force white background / black text throughout ──────────────────── */

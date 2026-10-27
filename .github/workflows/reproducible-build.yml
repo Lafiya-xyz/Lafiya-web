@@ -1,0 +1,56 @@
+name: Reproducible build
+
+# Issue #781: two clean builds of one commit must produce identical client
+# assets. The checkouts live at different absolute paths so leaked paths fail.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  rebuild-and-compare:
+    runs-on: ubuntu-latest
+    env:
+      LAFIYA_BUILD_ID: ${{ github.sha }}
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy
+      SUPABASE_SERVICE_ROLE_KEY: dummy
+      STELLAR_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
+      SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
+      LAFIYA_DEPLOYMENT_ENV: ci
+      ATTESTATION_MODE: mock
+      NEXT_TELEMETRY_DISABLED: "1"
+    strategy:
+      matrix:
+        build: [a, b]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: build-${{ matrix.build }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: build-${{ matrix.build }}/.nvmrc
+      - run: npm ci
+        working-directory: build-${{ matrix.build }}
+      - run: npm run build
+        working-directory: build-${{ matrix.build }}
+      - run: node scripts/verify-reproducible-build.mjs hash .next ../client-assets-${{ matrix.build }}.json
+        working-directory: build-${{ matrix.build }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: client-assets-${{ matrix.build }}
+          path: client-assets-${{ matrix.build }}.json
+
+  compare:
+    needs: rebuild-and-compare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: client-assets-*
+          merge-multiple: true
+      - run: node scripts/verify-reproducible-build.mjs compare client-assets-a.json client-assets-b.json

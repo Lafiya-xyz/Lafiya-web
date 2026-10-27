@@ -32,6 +32,34 @@ export interface FlagState {
   environments: string[];
 }
 
+export type FlagKind = 'kill_switch' | 'release' | 'experiment';
+
+export interface FlagMetadata {
+  owner: string;
+  kind: FlagKind;
+  /** ISO date (YYYY-MM-DD). Null only for permanent kill switches. */
+  expiresAt: string | null;
+}
+
+/**
+ * Lifecycle registry (issue #788). Every flag must have an owner and kind;
+ * release flags and experiments must carry an expiry date. Permanent kill
+ * switches are exempt from expiry. `scripts/check-flags.mjs` parses this
+ * object, so keep each entry on the single-line shape below.
+ */
+export const FLAG_REGISTRY: Record<FlagKey, FlagMetadata> = {
+  attestation_lookup: { owner: 'platform', kind: 'kill_switch', expiresAt: null },
+  payouts: { owner: 'payments', kind: 'kill_switch', expiresAt: null },
+  uploads: { owner: 'records', kind: 'kill_switch', expiresAt: null },
+  capability_sharing: { owner: 'emergency-access', kind: 'kill_switch', expiresAt: null },
+};
+
+/** True when a non-kill-switch flag is past its expiry date. */
+export function isFlagExpired(meta: FlagMetadata, now: Date = new Date()): boolean {
+  if (meta.kind === 'kill_switch' || !meta.expiresAt) return false;
+  return new Date(`${meta.expiresAt}T23:59:59Z`).getTime() < now.getTime();
+}
+
 /** Fail-safe default per flag: when the flag is missing or the store is
  * unreachable we fall back to this value. Risky subsystems default to off so
  * an outage cannot silently enable them. */
@@ -131,6 +159,22 @@ export async function getFlagSnapshot(): Promise<Record<string, { enabled: boole
     };
   }
   return snapshot;
+}
+
+/**
+ * Readiness-safe flag view: state plus lifecycle kind and expiry status.
+ * Owners and per-user bucketing are deliberately omitted.
+ */
+export async function getFlagStates(): Promise<
+  Record<string, { enabled: boolean; rolloutPct: number; kind: FlagKind; expired: boolean }>
+> {
+  const snapshot = await getFlagSnapshot();
+  const states: Record<string, { enabled: boolean; rolloutPct: number; kind: FlagKind; expired: boolean }> = {};
+  for (const key of Object.keys(FLAG_REGISTRY) as FlagKey[]) {
+    const meta = FLAG_REGISTRY[key];
+    states[key] = { ...snapshot[key], kind: meta.kind, expired: isFlagExpired(meta) };
+  }
+  return states;
 }
 
 /** Test helper: clear the in-memory cache. */

@@ -24,9 +24,14 @@ jobs:
 
       - run: npm run lint
 
+      - run: npm run tokens:check
+
       - run: npm run typecheck
 
       - run: npm test
+
+      - name: Verify design token contrast across themes
+        run: npm run tokens:check
 
   database-security:
     name: Database schema drift and RLS gates
@@ -45,6 +50,7 @@ jobs:
       - run: supabase db reset
       - run: npm run db:drift
       - run: npm run db:audit-rls
+      - run: npm run db:deletion-policy
       - run: supabase stop
         if: always()
 

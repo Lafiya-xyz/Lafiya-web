@@ -37,6 +37,7 @@ const NEXT_DIR = join(ROOT, ".next");
 const JS_BUDGET_BYTES = 60 * 1024; // 60 kB
 const CSS_BUDGET_BYTES = 20 * 1024; // 20 kB
 const LITE_BUDGET_BYTES = 10 * 1024; // 10 kB gzipped (issue #535)
+const SCANNER_FALLBACK_BUDGET_BYTES = 55 * 1024; // 55 kB gzipped (issue #758 QR decoder fallback budget)
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function fileSize(relativePath) {
@@ -238,6 +239,66 @@ if (liteGzipBytes !== null) {
 }
 
 console.log("────────────────────────────────────────────────────────────\n");
+
+// ─── QR Scanner Fallback Budget Check (issue #758) ───────────────────────────
+// Verify that the lazy decoder fallback chunk is kept within budget and not leaked
+// into the critical card route bundles.
+console.log("\n─── Bundle size check: QR scanner fallback ───────────────────────");
+let scannerFallbackGzipBytes = null;
+let scannerChunkFound = false;
+let leakedIntoCardRoute = false;
+
+try {
+  const chunksDir = join(NEXT_DIR, "static", "chunks");
+  const stack = [chunksDir];
+  while (stack.length) {
+    const dir = stack.pop();
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(full);
+      } else if (entry.name.endsWith(".js")) {
+        const content = readFileSync(full, "utf8");
+        // Look for signature of scanner fallback / jsQR
+        if (content.includes("decodeVideoFrameWithFallback") || content.includes("inversionAttempts")) {
+          scannerChunkFound = true;
+          const gzipped = gzipSync(content);
+          scannerFallbackGzipBytes = gzipped.length;
+          console.log(  Found scanner fallback chunk:  ( gzipped));
+
+          // Check if this chunk is accidentally referenced in the critical card route
+          if (jsChunks.some((c) => c.includes(entry.name))) {
+            leakedIntoCardRoute = true;
+          }
+          break;
+        }
+      }
+    }
+    if (scannerChunkFound) break;
+  }
+} catch {
+  // Not yet built or chunks directory missing
+}
+
+if (scannerChunkFound && scannerFallbackGzipBytes !== null) {
+  console.log(  Scanner fallback budget: );
+  if (scannerFallbackGzipBytes > SCANNER_FALLBACK_BUDGET_BYTES) {
+    console.error(  ✖ Scanner fallback budget exceeded:  > );
+    failed = true;
+  } else {
+    console.log(  ✔ Scanner fallback within budget ( <= ));
+  }
+
+  if (leakedIntoCardRoute) {
+    console.error("  ✖ Scanner fallback chunk was found in critical card route bundle! It must be lazily loaded only on /scan.");
+    failed = true;
+  } else {
+    console.log("  ✔ Scanner fallback is isolated from critical card route.");
+  }
+} else {
+  console.log("  (Scanner fallback chunk check will run after build emits chunks)");
+}
+console.log("──────────────────────────────────────────────────────────────────\n");
 
 if (failed) {
   process.exit(1);

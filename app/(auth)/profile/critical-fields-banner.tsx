@@ -44,7 +44,7 @@ export function CriticalFieldsBanner({
   return (
     <div
       role="alert"
-      className="rounded-md border border-red-500/40 bg-red-50 p-4 text-sm text-red-900 dark:border-red-400/40 dark:bg-red-950/30 dark:text-red-100"
+      className="rounded-md border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] p-4 text-sm text-[var(--color-danger-text)] dark:border-[var(--color-danger-border)] dark:bg-[var(--color-danger-bg)] dark:text-[var(--color-danger-text)]"
     >
       <div className="flex items-start justify-between gap-4">
         <div>

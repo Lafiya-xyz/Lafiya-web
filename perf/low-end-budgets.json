@@ -1,0 +1,59 @@
+{
+  "$comment": "Low-end Android perf lab budgets (issue #778). Read by scripts/perf-lab.mjs. Change only with a rationale; see docs/perf-lab.md.",
+  "version": 1,
+  "device": {
+    "rationale": "Approximates the entry-level Android phones (Moto E / Tecno Spark class) that CHWs and bystanders carry: ~4x slower than a dev laptop single-core, 2 GB RAM, slow-4G in peri-urban areas. 6x is the Lighthouse mobile convention on CI hardware.",
+    "cpuSlowdown": 6,
+    "viewport": { "width": 360, "height": 640 },
+    "deviceScaleFactor": 2,
+    "deviceMemoryGb": 2,
+    "jsHeapLimitMb": 512,
+    "network": {
+      "name": "slow-4G",
+      "latencyMs": 150,
+      "downloadKbps": 1600,
+      "uploadKbps": 750
+    }
+  },
+  "runs": 5,
+  "maxCoefficientOfVariation": 0.05,
+  "failMargin": 0.1,
+  "scenarios": {
+    "public-card": {
+      "path": "/card/11111111-1111-1111-1111-111111111111",
+      "offline": false,
+      "budgets": {
+        "longTaskCount": {
+          "max": 4,
+          "rationale": "Each long task delays tap response for a responder; the card is mostly static HTML."
+        },
+        "totalBlockingTimeMs": {
+          "max": 600,
+          "rationale": "Lighthouse 'good' TBT on mobile is 200 ms at 4x; 6x CPU scales that to ~600 ms."
+        },
+        "jsHeapUsedMb": {
+          "max": 12,
+          "rationale": "Keeps headroom on 2 GB devices where Chrome kills background tabs aggressively."
+        }
+      }
+    },
+    "offline-card": {
+      "path": "/card/11111111-1111-1111-1111-111111111111",
+      "offline": true,
+      "budgets": {
+        "longTaskCount": {
+          "max": 4,
+          "rationale": "Offline load is served by the service worker and must be no heavier than online."
+        },
+        "totalBlockingTimeMs": {
+          "max": 600,
+          "rationale": "Same bar as the online card: responders hit this with no signal."
+        },
+        "jsHeapUsedMb": {
+          "max": 12,
+          "rationale": "Same as online; the SW cache must not inflate page memory."
+        }
+      }
+    }
+  }
+}

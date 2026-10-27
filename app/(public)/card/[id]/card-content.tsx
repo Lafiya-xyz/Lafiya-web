@@ -5,8 +5,14 @@ import type { ReactNode } from "react";
 
 import { formatDateTime, formatRelativeTime } from "@/lib/format/datetime";
 import { formatPhoneDisplay, phoneHref } from "@/lib/format/phone";
+import {
+  CROSS_REACTIVITY_DISCLAIMER,
+  crossReactivityNotes,
+} from "@/lib/clinical/allergy-cross-reactivity";
 import { OfflineEnvelopeSource } from "@/lib/emergency/offline-source";
 import type { EmergencyCardRow } from "@/lib/supabase/types";
+
+import { FacilityDirectory } from "@/components/facility-directory";
 
 import { NotifyContactsForm } from "../c/[token]/notify-contacts-form";
 import { VerifiedBadge, type VerificationStatus } from "./verified-badge";
@@ -252,6 +258,23 @@ export function EmergencyCardContent({
           </p>
         ) : null}
 
+        {crossReactivityNotes(
+          (sortedAllergies ?? []).flatMap((entry) =>
+            entry.coded
+              ? [entry.substance_text, entry.coded.display]
+              : [entry.substance_text],
+          ),
+        ).map((note) => (
+          <p
+            key={note.relationId}
+            data-testid="card-allergy-cross-reactivity"
+            className="rounded-lg border border-amber-600 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500 dark:bg-amber-950 dark:text-amber-200"
+          >
+            {note.allergen} ({note.allergenClass}): consider avoiding{" "}
+            {note.considerAvoiding.join(", ")}. {CROSS_REACTIVITY_DISCLAIMER}
+          </p>
+        ))}
+
         <section aria-labelledby="critical-facts-heading">
           <h2
             id="critical-facts-heading"
@@ -422,6 +445,8 @@ export function EmergencyCardContent({
         {capabilityToken && card.emergency_contacts?.length ? (
           <NotifyContactsForm token={capabilityToken} />
         ) : null}
+
+        <FacilityDirectory />
 
         <OfflineEnvelopeSource
           cardId={card.id}

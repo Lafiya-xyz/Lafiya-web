@@ -20,8 +20,13 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { SignOutButton } from "../signout/sign-out-button";
 import { AttestationStatusBanner } from "./attestation-status-banner";
 import { AccessSummary } from "./access-summary";
+import { NotificationInbox } from "./notification-inbox";
+import { VerificationVisitPanel } from "./verification-visit-panel";
+import type { VisitRequest } from "@/lib/chw-protocol/visit-requests";
+import type { InboxNotification } from "@/lib/notifications/inbox";
 import { CapabilitySharePanel } from "./capability-share-panel";
 import { DeleteAccountButton } from "./delete-account-button";
+import { EmailChangePanel } from "./email-change-panel";
 import { MfaEnrollment } from "./mfa-enrollment";
 import { MissingSecretBanner } from "./missing-secret-banner";
 import { LastChangeNotice, type RevisionSnapshot } from "./last-change-notice";
@@ -29,6 +34,9 @@ import { ProfileForm } from "./profile-form";
 import { PrivacyControls } from "./privacy-controls";
 import { QrCardDisplay } from "./qr-card-display";
 import { SessionsPanel, type SessionListItem } from "./sessions-panel";
+import { NotificationPreferencesPanel } from "./notification-preferences-panel";
+import { fromRow as preferencesFromRow } from "@/lib/notifications/preferences";
+import { isEmailUnreachable } from "@/lib/notifications";
 
 export const metadata: Metadata = {
   title: "Your Profile · Lafiya",
@@ -159,6 +167,21 @@ async function ProfileContent() {
     return null;
   }
 
+  const { data: notifications } = await (supabase as any)
+    .from("user_notifications")
+    .select("id, type, body_key, created_at, read_at")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  const { data: visitRequest } = await (supabase as any)
+    .from("verification_requests")
+    .select(
+      "id, status, lga, preferred_language, contact_preference, contact_consent, contact_phone, matched_chw_id, created_at, updated_at",
+    )
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   const { data: profile } = await supabase
     .from("profiles")
     .select("*")
@@ -168,6 +191,15 @@ async function ProfileContent() {
   const { stale, pendingRequestExists, secretMissing } = profile
     ? await checkAttestationStaleness(supabase, profile)
     : { stale: false, pendingRequestExists: false, secretMissing: false };
+  const { data: notificationPrefsRow } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .from("notification_preferences" as any)
+    .select("timezone, quiet_start, quiet_end, channels, batch_low_priority")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const emailUnreachable = user.email
+    ? await isEmailUnreachable(user.email).catch(() => false)
+    : false;
   const { data: consentEvents } = await supabase
     .from("consent_events")
     .select("*")
@@ -279,6 +311,15 @@ async function ProfileContent() {
         />
       ) : null}
 
+      <VerificationVisitPanel
+        request={(visitRequest as VisitRequest | null) ?? null}
+      />
+
+      <NotificationInbox
+        userId={user.id}
+        initial={(notifications as InboxNotification[] | null) ?? []}
+      />
+
       <AccessSummary
         viewsLast30Days={accessSummary?.[0]?.views_last_30_days ?? 0}
         lastViewedAt={accessSummary?.[0]?.last_viewed_at ?? null}
@@ -309,7 +350,18 @@ async function ProfileContent() {
   );
 }
 
-      <SessionsPanel sessions={sessions} />
+      <div id="security-sessions">
+        <SessionsPanel sessions={sessions} />
+      </div>
+
+      <hr className="border-zinc-200 dark:border-zinc-800" />
+
+      <NotificationPreferencesPanel
+        preferences={preferencesFromRow(
+          notificationPrefsRow as Parameters<typeof preferencesFromRow>[0],
+        )}
+        emailUnreachable={emailUnreachable}
+      />
 
       <hr className="border-zinc-200 dark:border-zinc-800" />
 
@@ -317,7 +369,20 @@ async function ProfileContent() {
         <h2 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
           Security
         </h2>
+        <Link
+          href="/profile/security"
+          className="text-sm text-zinc-700 underline dark:text-zinc-300"
+        >
+          Open security center
+        </Link>
         <MfaEnrollment />
+      </div>
+
+      <div id="security-email">
+        <EmailChangePanel
+          currentEmail={user.email ?? ""}
+          hasPendingChange={Boolean(user.new_email)}
+        />
       </div>
 
       <PrivacyControls consentEvents={consentEvents ?? []} />

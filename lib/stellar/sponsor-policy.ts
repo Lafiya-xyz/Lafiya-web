@@ -1,4 +1,5 @@
 import { StrKey, Transaction, FeeBumpTransaction, Networks, TransactionBuilder, Operation, Asset, Keypair, SorobanDataBuilder, xdr } from '@stellar/stellar-sdk';
+import { BoundedMap } from '@/lib/bounded-map';
 
 /**
  * Sponsor policy engine for CHW fee-bump sponsorship (issue #558).
@@ -65,7 +66,8 @@ function utcDay(now: Date = new Date()): string {
 }
 
 class InMemoryQuotaStore implements QuotaStore {
-  private counts = new Map<string, number>();
+  // Keyed by day:chw, so without a bound it grows every day forever.
+  private counts = new BoundedMap<string, number>(10_000);
 
   getCount(chwPublicKey: string, day: string): number {
     return this.counts.get(`${day}:${chwPublicKey}`) ?? 0;

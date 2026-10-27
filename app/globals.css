@@ -3,16 +3,98 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Semantic Design Tokens (Light Theme) */
+  --color-surface: #ffffff;
+  --color-surface-card: #ffffff;
+  --color-surface-muted: #f4f4f5;
+
+  --color-text: #171717;
+  --color-text-muted: #52525b;
+  --color-text-inverse: #ffffff;
+
+  --color-danger-bg: #fef2f2;
+  --color-danger-text: #991b1b;
+  --color-danger-border: #ef4444;
+
+  --color-verified-bg: #d1fae5;
+  --color-verified-text: #065f46;
+  --color-verified-border: #059669;
+
+  --color-warning-bg: #fef3c7;
+  --color-warning-text: #78350f;
+  --color-warning-border: #d97706;
 }
 
 .dark {
   --background: #0a0a0a;
   --foreground: #ededed;
+
+  /* Semantic Design Tokens (Dark Theme) */
+  --color-surface: #0a0a0a;
+  --color-surface-card: #18181b;
+  --color-surface-muted: #27272a;
+
+  --color-text: #ededed;
+  --color-text-muted: #a1a1aa;
+  --color-text-inverse: #0a0a0a;
+
+  --color-danger-bg: #450a0a;
+  --color-danger-text: #fecaca;
+  --color-danger-border: #f87171;
+
+  --color-verified-bg: #022c22;
+  --color-verified-text: #6ee7b7;
+  --color-verified-border: #10b981;
+
+  --color-warning-bg: #451a03;
+  --color-warning-text: #fde68a;
+  --color-warning-border: #f59e0b;
+}
+
+@media (forced-colors: active) {
+  :root,
+  .dark {
+    --color-surface: Canvas;
+    --color-surface-card: Canvas;
+    --color-surface-muted: Canvas;
+
+    --color-text: CanvasText;
+    --color-text-muted: CanvasText;
+    --color-text-inverse: Canvas;
+
+    --color-danger-bg: Canvas;
+    --color-danger-text: CanvasText;
+    --color-danger-border: CanvasText;
+
+    --color-verified-bg: Canvas;
+    --color-verified-text: CanvasText;
+    --color-verified-border: CanvasText;
+
+    --color-warning-bg: Canvas;
+    --color-warning-text: CanvasText;
+    --color-warning-border: CanvasText;
+  }
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--color-surface);
+  --color-surface-card: var(--color-surface-card);
+  --color-surface-muted: var(--color-surface-muted);
+  --color-text-default: var(--color-text);
+  --color-text-muted: var(--color-text-muted);
+  --color-text-inverse: var(--color-text-inverse);
+  --color-danger-bg: var(--color-danger-bg);
+  --color-danger-text: var(--color-danger-text);
+  --color-danger-border: var(--color-danger-border);
+  --color-verified-bg: var(--color-verified-bg);
+  --color-verified-text: var(--color-verified-text);
+  --color-verified-border: var(--color-verified-border);
+  --color-warning-bg: var(--color-warning-bg);
+  --color-warning-text: var(--color-warning-text);
+  --color-warning-border: var(--color-warning-border);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -126,3 +208,23 @@ body {
     border: 1px solid Highlight;
   }
 }
+
+/* Component semantic token migrations */
+.verified-badge {
+  background-color: var(--color-verified-surface);
+  color: var(--color-verified-text);
+  border: 1px solid var(--color-verified-border);
+}
+
+.critical-fields-banner {
+  background-color: var(--color-danger-surface);
+  color: var(--color-danger-text);
+  border: 1px solid var(--color-danger-border);
+}
+
+.form-error {
+  color: var(--color-danger-text);
+  background-color: var(--color-danger-surface);
+  border-left: 3px solid var(--color-danger-base);
+}
+

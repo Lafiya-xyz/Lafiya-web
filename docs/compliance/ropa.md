@@ -17,6 +17,8 @@
 
 Table and column comments carry a JSON object describing the processing activity:
 
+<!-- doctest -->
+
 ```sql
 comment on column public.encounters.chief_complaint is
   '{"purpose":"emergency_care","basis":"consent","retention":"account_lifetime","recipients":["care_team"]}';

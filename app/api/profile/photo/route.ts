@@ -102,6 +102,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid file type" }, { status: 400 });
     }
 
+    // sharp() throws synchronously on an empty buffer, outside the decode
+    // try/catch below, so reject it up front.
+    if (file.size === 0) {
+      return NextResponse.json(
+        { error: "Invalid image data" },
+        { status: 400 },
+      );
+    }
+
     if (file.size > MAX_BYTES) {
       return NextResponse.json(
         { error: "Photo must be under 5 MB." },
@@ -261,7 +270,12 @@ export async function POST(request: Request) {
     // the client can show an immediate preview, and also return the canonical
     // storage path so the profile form stores the path (not a time-limited
     // signed URL) in profiles.photo_url.
-    const storagePath = path;
+    // The largest JPEG variant is the universally decodable canonical path.
+    const storagePath = variantPath(
+      user.id,
+      VARIANT_WIDTHS[VARIANT_WIDTHS.length - 1],
+      "jpeg",
+    );
     const signedUrl = await getAvatarSignedUrl(storagePath);
     if (!signedUrl) {
       return NextResponse.json(

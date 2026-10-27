@@ -98,6 +98,8 @@ the browser starts fetching it as soon as the HTML is parsed.
 
 ### Local (one-off check)
 
+<!-- doctest -->
+
 ```bash
 # 1. Build the app
 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321 \

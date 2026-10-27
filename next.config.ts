@@ -41,6 +41,16 @@ const nextConfig: NextConfig = {
    * See node_modules/next/dist/docs/ for the exact Next 16 API surface.
    */
   cacheComponents: true,
+  /**
+   * Deterministic build ID (issue #781). The default is random per build,
+   * which changes `_next/static/<buildId>/` paths and breaks hash equality
+   * between two builds of one commit. Falls back to Next's default locally.
+   */
+  generateBuildId: async () =>
+    process.env.LAFIYA_BUILD_ID ||
+    process.env.VERCEL_GIT_COMMIT_SHA ||
+    process.env.GITHUB_SHA ||
+    null,
   images: {
     remotePatterns: [
       // Derived from the configured Supabase origin (local dev + hosted).

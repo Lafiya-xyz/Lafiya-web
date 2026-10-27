@@ -5,15 +5,19 @@ on:
   push:
     branches: [main]
 
+# Scorecard Token-Permissions: least privilege at the top level, write scopes
+# granted only to the jobs that need them.
 permissions:
   contents: read
-  attestations: write
-  id-token: write
 
 jobs:
   verify:
     name: Dependency, action, secret, and provenance checks
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      attestations: write
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -29,6 +33,11 @@ jobs:
         with:
           path: ./
           extra_args: --only-verified
+      - name: Gate scanner findings against VEX
+        run: |
+          mkdir -p artifacts
+          npm audit --omit=dev --json > artifacts/npm-audit.json || true
+          npm run vex:gate
       - run: npm run sbom
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
@@ -37,5 +46,42 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: lafiya-web-sbom
-          path: artifacts/lafiya-web.sbom.cdx.json
+          path: |
+            artifacts/lafiya-web.sbom.cdx.json
+            artifacts/lafiya-web.vex.openvex.json
+            artifacts/npm-audit.json
           retention-days: 30
+
+  dependency-health:
+    name: New dependency health summary
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+      - id: health
+        run: node scripts/dependency-health.mjs --base "origin/${{ github.base_ref }}" --markdown dependency-health.md
+      - if: always()
+        run: cat dependency-health.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        if: always() && github.event.pull_request.head.repo.full_name == github.repository
+        with:
+          script: |
+            const body = require('fs').readFileSync('dependency-health.md', 'utf8');
+            if (body.includes('No dependencies to review.')) return;
+            const marker = '<!-- dependency-health -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const existing = comments.find((c) => c.body?.includes(marker));
+            const payload = { owner, repo, body: `${marker}\n${body}` };
+            if (existing) await github.rest.issues.updateComment({ ...payload, comment_id: existing.id });
+            else await github.rest.issues.createComment({ ...payload, issue_number });

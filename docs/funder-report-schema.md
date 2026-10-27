@@ -5,6 +5,8 @@ signed CSV/JSON reports of verified registrations and payouts per region.
 
 ## Schema (version 1)
 
+<!-- doctest -->
+
 ```json
 {
   "schemaVersion": 1,
@@ -109,3 +111,21 @@ live schema as part of this change.
 Automated emailing of reports to funders, and the real
 `loadSettlementRecordsForPeriod` database query, are out of scope for this
 change per the issue.
+
+## Fiat equivalents and FX rate snapshots (#806)
+
+Naira (or other fiat) equivalents are never computed from a live rate at
+render time. `lib/stellar/payout-indexer/fx-rates.ts` captures immutable
+snapshots into `fx_rate_snapshots` (source, pair, rate, observed_at,
+optional payout period) on a schedule and once per payout period. A report
+stores the `snapshot_id` it used and displays the rate source and
+timestamp; re-running a historical report loads that snapshot by ID and
+reproduces identical figures.
+
+- **Rounding:** rates are stored at 7 dp (half-up on ingest). Fiat =
+  USDC (7 dp) × rate (7 dp) in scaled integer arithmetic, rounded half-up
+  to 2 dp. No floating point.
+- **Outages:** if the rate source fails, the most recent stored snapshot is
+  reused and the figure is flagged `indicative: true`. A snapshot older than
+  24h relative to the report's as-of time is also flagged indicative.
+  Indicative figures must be visibly labelled in rendered reports.

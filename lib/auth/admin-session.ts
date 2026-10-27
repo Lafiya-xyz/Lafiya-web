@@ -11,8 +11,20 @@
 
 import type { NextRequest } from "next/server";
 
+import type { AdminRole } from "@/lib/audit/explorer";
+
 export interface AdminSession {
   adminId: string;
+  /**
+   * Issue #808: drives audit-explorer redaction. The placeholder token
+   * session takes its role from ADMIN_API_ROLE and defaults to the most
+   * restrictive role, so forgetting to set it never widens access.
+   */
+  role: AdminRole;
+}
+
+function resolveRole(value: string | undefined): AdminRole {
+  return value === "auditor" || value === "support" ? value : "analyst";
 }
 
 export async function requireAdminSession(request: NextRequest): Promise<AdminSession | null> {
@@ -23,5 +35,5 @@ export async function requireAdminSession(request: NextRequest): Promise<AdminSe
   const token = authHeader?.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : null;
   if (!token || token !== expectedToken) return null;
 
-  return { adminId: "admin-token-session" };
+  return { adminId: "admin-token-session", role: resolveRole(process.env.ADMIN_API_ROLE) };
 }

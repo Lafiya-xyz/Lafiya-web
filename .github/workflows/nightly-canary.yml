@@ -1,0 +1,128 @@
+name: Nightly Next.js / React canary
+
+# Issue #774: surface upcoming Next.js / React breaking changes before a
+# Dependabot bump lands. Canary packages are installed with --no-save in an
+# isolated job, so the lockfile on the default branch is never altered.
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      inject_breaking_change:
+        description: "Inject a type error to verify the failure summary"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: nightly-canary
+  cancel-in-progress: true
+
+env:
+  TRACKING_ISSUE_TITLE: "Nightly canary: Next.js / React compatibility"
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install Next.js and React canaries (lockfile untouched)
+        run: |
+          npm install --no-save --package-lock=false --legacy-peer-deps \
+            next@canary react@canary react-dom@canary
+          echo "NEXT_VERSION=$(node -p "require('next/package.json').version")" >> "$GITHUB_ENV"
+          echo "REACT_VERSION=$(node -p "require('react/package.json').version")" >> "$GITHUB_ENV"
+      - name: Inject breaking change (verification only)
+        if: inputs.inject_breaking_change
+        run: |
+          echo 'export const canaryInjected: number = "not a number";' > lib/canary-injected.ts
+      - id: lint
+        continue-on-error: true
+        run: npm run lint
+      - id: typecheck
+        continue-on-error: true
+        run: npm run typecheck
+      - id: unit
+        continue-on-error: true
+        run: npm test
+      - id: build
+        continue-on-error: true
+        run: npm run build
+      - id: smoke
+        continue-on-error: true
+        if: steps.build.outcome == 'success'
+        uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3
+      - id: smoke-run
+        continue-on-error: true
+        if: steps.build.outcome == 'success'
+        run: |
+          supabase start
+          npx playwright install --with-deps chromium
+          npx playwright test e2e/public-card-view.spec.ts e2e/card-no-javascript.spec.ts --project=chromium
+      - name: Assert lockfile unchanged
+        run: git diff --exit-code -- package.json package-lock.json
+      - name: Write summary
+        id: summary
+        env:
+          LINT: ${{ steps.lint.outcome }}
+          TYPECHECK: ${{ steps.typecheck.outcome }}
+          UNIT: ${{ steps.unit.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+          SMOKE: ${{ steps.smoke-run.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          failed=""
+          {
+            echo "## Canary run $(date -u +%Y-%m-%d)"
+            echo ""
+            echo "next@${NEXT_VERSION}, react@${REACT_VERSION} — [run]($RUN_URL)"
+            echo ""
+            echo "| Check | Result |"
+            echo "| --- | --- |"
+            for check in LINT TYPECHECK UNIT BUILD SMOKE; do
+              outcome="${!check}"
+              echo "| ${check,,} | ${outcome:-skipped} |"
+              if [ "$outcome" = "failure" ]; then
+                failed="$failed ${check,,}"
+              fi
+            done
+          } > canary-report.md
+          if [ -n "$failed" ]; then
+            printf '\n**New failures vs. last green canary:**%s\n' "$failed" >> canary-report.md
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+          else
+            printf '\nAll checks green.\n' >> canary-report.md
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+          fi
+          cat canary-report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Update rolling tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          number=$(gh issue list --state all --search "in:title \"$TRACKING_ISSUE_TITLE\"" \
+            --json number,title --jq "map(select(.title == env.TRACKING_ISSUE_TITLE)) | .[0].number // empty")
+          if [ -z "$number" ]; then
+            if [ "${{ steps.summary.outputs.failed }}" = "true" ]; then
+              gh issue create --title "$TRACKING_ISSUE_TITLE" --body-file canary-report.md
+            fi
+            exit 0
+          fi
+          gh issue edit "$number" --body-file canary-report.md
+          if [ "${{ steps.summary.outputs.failed }}" = "true" ]; then
+            gh issue reopen "$number" || true
+          else
+            gh issue close "$number" --comment "Canary is green again." || true
+          fi
+      - name: Fail on canary regressions
+        if: steps.summary.outputs.failed == 'true'
+        run: |
+          cat canary-report.md
+          exit 1

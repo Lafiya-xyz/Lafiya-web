@@ -94,7 +94,7 @@ export function PhoneOtpForm() {
           </div>
 
           {verifyState?.error ? (
-            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            <p role="alert" className="text-sm text-[var(--color-danger-text)] dark:text-[var(--color-danger-text)]">
               {verifyState.error}
             </p>
           ) : null}
@@ -152,7 +152,7 @@ export function PhoneOtpForm() {
       </div>
 
       {sendState?.error ? (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p role="alert" className="text-sm text-[var(--color-danger-text)] dark:text-[var(--color-danger-text)]">
           {sendState.error}
         </p>
       ) : null}

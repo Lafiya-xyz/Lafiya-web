@@ -50,6 +50,17 @@ itself. Resources that refer to the patient use
 
 `AllergyIntolerance.patient` references the `Patient` entry.
 
+### Drug-class cross-reactivity (#762)
+
+Responder cards add a non-prescriptive note ("related drugs may also be
+unsafe: confirm") for recorded allergens with a **high-evidence** drug-class
+relation. The mapping lives in `lib/clinical/allergy-cross-reactivity.ts`, is
+versioned (`CROSS_REACTIVITY_VERSION`) and cites a source per relation. It is
+matched against `AllergyIntolerance.code.text` and the coded display. Lower
+evidence relations (e.g. penicillin → carbapenems) are kept for review but
+never rendered. Evaluation is pure and offline; it is not exported to FHIR.
+Changes require sign-off by a named clinical reviewer in the PR.
+
 ## MedicationStatement
 
 | Profile field | FHIR element |

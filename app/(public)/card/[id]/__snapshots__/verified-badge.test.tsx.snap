@@ -3,7 +3,7 @@
 exports[`VerifiedBadge > shows the unverified state when no attestation exists 1`] = `
 <span
   aria-label="Not yet verified"
-  class="inline-flex w-fit items-center gap-1.5 rounded-full bg-zinc-500 px-3 py-1 text-sm font-medium text-white dark:bg-zinc-600 dark:text-white"
+  class="inline-flex w-fit items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium border-[var(--color-text-muted)] bg-[var(--color-surface-muted)] text-[var(--color-text)] dark:border-[var(--color-text-muted)] dark:bg-[var(--color-surface-muted)] dark:text-[var(--color-text)] forced-colors:border-[CanvasText] forced-colors:bg-[Canvas] forced-colors:text-[CanvasText]"
 >
   <svg
     aria-hidden="true"
@@ -34,7 +34,7 @@ exports[`VerifiedBadge > shows the unverified state when no attestation exists 1
 exports[`VerifiedBadge > shows the verified state when an attestation exists 1`] = `
 <span
   aria-label="Verified: Health-worker attestation finalized"
-  class="inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1 text-sm font-medium text-white dark:bg-emerald-600 dark:text-white"
+  class="inline-flex w-fit items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium border-[var(--color-verified-border)] bg-[var(--color-verified-bg)] text-[var(--color-verified-text)] dark:border-[var(--color-verified-border)] dark:bg-[var(--color-verified-bg)] dark:text-[var(--color-verified-text)] forced-colors:border-[CanvasText] forced-colors:bg-[Highlight] forced-colors:text-[HighlightText]"
 >
   <svg
     aria-hidden="true"

@@ -1,0 +1,60 @@
+{
+  "name": "@lafiya/protocol",
+  "version": "1.0.0",
+  "description": "Canonicalization, hashing, intent types and attestation schemas for the Lafiya protocol",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./schemas": {
+      "import": "./dist/schemas/index.js",
+      "require": "./dist/schemas/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:vectors": "vitest run src/canonicalization.test.ts src/recordHash.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "lafiya",
+    "health",
+    "protocol",
+    "attestation",
+    "canonicalization"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  },
+  "dependencies": {
+    "libphonenumber-js": "^1.11.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

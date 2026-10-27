@@ -4,6 +4,8 @@ Endpoint: `GET /profile/export` (authenticated patients only)
 
 ## Response format (JSON)
 
+<!-- doctest -->
+
 ```json
 {
 "exportedAt": "ISO 8601 timestamp",

@@ -1,0 +1,9 @@
+{
+  "$comment": "Direct production dependencies accepted below the health thresholds. Every entry needs a reason, an owner, and a review date; see docs/operations/dependency-health.md.",
+  "thresholds": {
+    "minScorecard": 5,
+    "maxDaysSincePublish": 365,
+    "minMaintainers": 2
+  },
+  "exceptions": []
+}

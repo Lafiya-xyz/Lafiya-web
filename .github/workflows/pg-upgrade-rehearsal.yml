@@ -1,0 +1,46 @@
+name: Postgres upgrade rehearsal
+
+# Issue #811. On-demand rehearsal of a Postgres major / extension upgrade
+# against the synthetic, PHI-free seed. See
+# docs/operations/postgres-upgrade-rehearsal.md.
+on:
+  workflow_dispatch:
+    inputs:
+      versions:
+        description: JSON array of Postgres major versions to rehearse
+        default: "[17, 15]"
+
+permissions:
+  contents: read
+
+jobs:
+  rehearse:
+    name: Rehearse on Postgres ${{ matrix.major }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        major: ${{ fromJSON(inputs.versions) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3
+      - name: Target Postgres ${{ matrix.major }}
+        run: sed -i -E 's/^major_version = [0-9]+/major_version = ${{ matrix.major }}/' supabase/config.toml
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - run: supabase start
+      # Replays every migration and loads supabase/seed.sql (synthetic only).
+      - run: supabase db reset
+      - name: Extension manifest and hot-path plans
+        run: npm run db:upgrade-rehearsal -- --target-major ${{ matrix.major }}
+      - run: npm run db:drift
+      - run: npm run db:audit-rls
+      - run: npm run test:integration
+      - run: supabase stop
+        if: always()

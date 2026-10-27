@@ -364,5 +364,23 @@ describe("account deletion revokes all active capability shares", () => {
     expect(afterError).toBeNull();
     expect(afterData![0]).toMatchObject({ access_state: "inactive" });
     expect(afterData![0].name).toBeNull();
+
+    const { data: capabilitiesAfter } = await adminClient
+      .from("emergency_capabilities")
+      .select("id")
+      .eq("user_id", user.id);
+    expect(capabilitiesAfter).toEqual([]);
+
+    const { data: consentsAfter } = await adminClient
+      .from("consent_events")
+      .select("id")
+      .eq("user_id", user.id);
+    expect(consentsAfter).toEqual([]);
+
+    const { data: accessEventsAfter } = await adminClient
+      .from("card_access_events")
+      .select("id")
+      .eq("user_id", user.id);
+    expect(accessEventsAfter).toEqual([]);
   });
 });

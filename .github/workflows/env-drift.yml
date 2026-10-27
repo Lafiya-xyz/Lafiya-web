@@ -1,0 +1,36 @@
+name: Environment variable drift
+
+on:
+  pull_request:
+    paths:
+      - "lib/runtime-config.ts"
+      - "lib/env.ts"
+      - "lib/env-server.ts"
+      - "docs/environment-variables.md"
+      - "scripts/env-drift.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      - name: Diff schema against docs and platform variable names
+        id: drift
+        run: node scripts/env-drift.mjs --check-doc --platform --report=drift-report.md
+      - name: Post report to PR
+        if: always() && github.event_name == 'pull_request' && hashFiles('drift-report.md') != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr comment "${{ github.event.pull_request.number }}" --body-file drift-report.md --edit-last --create-if-none

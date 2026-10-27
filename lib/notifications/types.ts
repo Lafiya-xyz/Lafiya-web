@@ -37,7 +37,19 @@ export interface SendRequest {
    * tracking table.
    */
   idempotencyKey: string;
+  /** Recipient account; when present, notification preferences apply (#804). */
+  userId?: string;
 }
+
+/** What `sendNotification` did with a request. */
+export type SendOutcome =
+  | "sent"
+  | "failed"
+  | "duplicate"
+  | "suppressed"
+  | "skipped"
+  | "deferred"
+  | "batched";
 
 /** Unified result returned by every provider adapter. */
 export type SendResult =

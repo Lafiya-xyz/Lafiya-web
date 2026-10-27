@@ -19,6 +19,8 @@ Previously, the indexer read attestation and payout state independently without 
 
 Each stream (`attestations` and `payments`) maintains a checkpoint in the `ledger_checkpoints` table:
 
+<!-- doctest -->
+
 ```sql
 CREATE TABLE ledger_checkpoints (
   stream TEXT PRIMARY KEY,
@@ -42,6 +44,8 @@ CREATE TABLE ledger_checkpoints (
 
 Records every accepted attestation with full ledger proof:
 
+<!-- doctest -->
+
 ```sql
 CREATE TABLE attestation_evidence (
   id UUID PRIMARY KEY,
@@ -59,6 +63,8 @@ CREATE TABLE attestation_evidence (
 #### payout_evidence
 
 Records every accepted payout with Horizon proof:
+
+<!-- doctest -->
 
 ```sql
 CREATE TABLE payout_evidence (
@@ -83,6 +89,8 @@ CREATE TABLE payout_evidence (
 ### 3. Conflict Detection
 
 The `conflicting_observations` table flags records observed in inconsistent states:
+
+<!-- doctest -->
 
 ```sql
 CREATE TABLE conflicting_observations (
@@ -141,6 +149,8 @@ Both `applyAttestation` and `applyPayout` record evidence and detect duplicates:
 
 Checkpoint updates only occur after entire page is applied:
 
+<!-- doctest syntax -->
+
 ```typescript
 for (const event of attestationPage.events) {
   const result = await store.applyAttestation(event);
@@ -183,6 +193,8 @@ The `ReconciliationEngine` runs independently to detect silently diverged record
 
 Compares attestation and payout state across all records:
 
+<!-- doctest syntax -->
+
 ```typescript
 const batch = await engine.reconcileAll();
 
@@ -196,6 +208,8 @@ batch.addressMismatchRecords // CHW address mismatch
 ### reconcileRecord(recordHash)
 
 Deep audit of a single record with evidence chain timeline:
+
+<!-- doctest syntax -->
 
 ```typescript
 const { record, evidenceChain, recommendedActions } = 
@@ -265,6 +279,8 @@ return {
 ### Periodic Reconciliation (Recommended)
 
 Run reconciliation independently on a cron schedule (e.g., hourly):
+
+<!-- doctest syntax -->
 
 ```typescript
 const engine = new ReconciliationEngine();
@@ -339,6 +355,8 @@ Existing public card flow is resilient:
 
 Check `conflicting_observations` regularly:
 
+<!-- doctest -->
+
 ```sql
 SELECT conflict_type, COUNT(*) 
 FROM conflicting_observations 
@@ -349,6 +367,8 @@ GROUP BY conflict_type;
 ### Manual Reconciliation
 
 For a suspicious record:
+
+<!-- doctest syntax -->
 
 ```typescript
 const { record, evidenceChain, recommendedActions } = 
@@ -362,6 +382,8 @@ const { record, evidenceChain, recommendedActions } =
 ### Emergency Recovery
 
 If widespread divergence is detected:
+
+<!-- doctest syntax -->
 
 ```typescript
 // 1. Log the batch of conflicts

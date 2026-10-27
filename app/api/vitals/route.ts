@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { BoundedMap } from '@/lib/bounded-map';
 
 export const runtime = 'nodejs';
 
@@ -31,8 +32,14 @@ interface AggregationBucket {
   samples: number[];
 }
 
-const rateLimitStore = new Map<string, number[]>();
-const aggregationStore = new Map<string, AggregationBucket>();
+// Both stores are bounded: rate-limit keys by IP cardinality, aggregation
+// buckets by day x route class x metric, and samples per bucket so a single
+// hot bucket cannot grow for the instance lifetime.
+const RATE_LIMIT_STORE_MAX = 10_000;
+const AGGREGATION_BUCKETS_MAX = 256;
+const MAX_SAMPLES_PER_BUCKET = 1_000;
+const rateLimitStore = new BoundedMap<string, number[]>(RATE_LIMIT_STORE_MAX);
+const aggregationStore = new BoundedMap<string, AggregationBucket>(AGGREGATION_BUCKETS_MAX);
 
 function isRouteClass(value: unknown): value is RouteClass {
   return typeof value === 'string' && (ROUTE_CLASSES as readonly string[]).includes(value);
@@ -97,6 +104,7 @@ function recordSample(payload: VitalsPayload): void {
     samples: [],
   };
   bucket.samples.push(payload.value);
+  if (bucket.samples.length > MAX_SAMPLES_PER_BUCKET) bucket.samples.shift();
   aggregationStore.set(key, bucket);
 }
 

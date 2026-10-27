@@ -9,6 +9,7 @@ import {
   xdr,
   StrKey,
 } from '@stellar/stellar-sdk';
+import { BoundedMap } from '@/lib/bounded-map';
 
 export const runtime = 'nodejs';
 
@@ -40,7 +41,12 @@ function getSponsorKeypair(): Keypair {
 
 // In-memory quota ledger keyed by CHW public key. In production this should be
 // backed by the audit table so quotas survive restarts and multiple instances.
-const quotaLedger = new Map<string, { day: string; count: number }>();
+// Bounded so the ledger cannot grow for the instance lifetime; an evicted
+// CHW restarts its in-memory count (the audit table remains authoritative).
+const QUOTA_LEDGER_MAX = 10_000;
+const quotaLedger = new BoundedMap<string, { day: string; count: number }>(
+  QUOTA_LEDGER_MAX,
+);
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);

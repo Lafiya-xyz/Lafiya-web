@@ -27,6 +27,8 @@ Supabase RPC round-trip:
 
 ## Step 1 — Seed the database
 
+<!-- doctest -->
+
 ```bash
 # Start a local Supabase instance and reset to a clean state.
 supabase start
@@ -55,6 +57,8 @@ The seed script also exports the generated `card_public_id` values to
 
 ## Step 2 — Build and start the app
 
+<!-- doctest -->
+
 ```bash
 npm run build
 npm run start &
@@ -63,6 +67,8 @@ npx wait-on --timeout 60000 http://localhost:3000
 ```
 
 ## Step 3 — Run the load test
+
+<!-- doctest -->
 
 ```bash
 BASE_URL=http://localhost:3000 \

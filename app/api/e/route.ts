@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash, randomBytes } from "crypto";
+import { BoundedMap } from "@/lib/bounded-map";
+
+import { gcraConsume, limiterHeaders } from "@/lib/gcra-limit";
 
 /**
  * First-party, cookieless product analytics ingestion endpoint.
@@ -25,10 +28,14 @@ const ALLOWED_EVENTS = new Set<string>([
 // Maximum accepted request body size (bytes).
 const MAX_BODY_BYTES = 2048;
 
-// Simple in-memory rate limiter: max requests per window per daily hash.
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX = 60;
-const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+/**
+ * GCRA rate-limit policy for this route (issue #793).
+ * 60 requests per 60-second window per daily-hashed IP — identical to the
+ * previous in-memory fixed-window policy, now enforced atomically in Postgres
+ * so all Vercel instances share the same quota.
+ */
+const ANALYTICS_BURST = 60;
+const ANALYTICS_PERIOD_SECONDS = 60;
 
 // Daily-rotating salt. Regenerated each UTC day so hashes cannot be linked
 // across days. Kept in memory only; never persisted or logged.
@@ -52,18 +59,6 @@ function isBot(userAgent: string | null): boolean {
 
 function dailyHash(value: string): string {
   return createHash("sha256").update(getDailySalt()).update(value).digest("hex").slice(0, 32);
-}
-
-function checkRateLimit(key: string): boolean {
-  const now = Date.now();
-  const bucket = rateBuckets.get(key);
-  if (!bucket || now > bucket.resetAt) {
-    rateBuckets.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return true;
-  }
-  if (bucket.count >= RATE_LIMIT_MAX) return false;
-  bucket.count += 1;
-  return true;
 }
 
 // Strip anything that could carry PHI or capability tokens. Only a small set
@@ -121,9 +116,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Derive a daily-rotating, non-reversible key from the IP for rate limiting
   // only. The IP itself is never logged or stored.
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  const rateKey = dailyHash(ip);
-  if (!checkRateLimit(rateKey)) {
-    return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
+  const rateKey = `analytics:${dailyHash(ip)}`;
+
+  // GCRA check (issue #793): replaces the former in-memory fixed-window limiter.
+  const limit = await gcraConsume(rateKey, ANALYTICS_BURST, ANALYTICS_PERIOD_SECONDS);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { ok: false, error: "rate_limited" },
+      {
+        status: 429,
+        headers: limiterHeaders(limit, ANALYTICS_BURST),
+      },
+    );
   }
 
   const props = sanitizeProps((body as { props?: unknown })?.props);
@@ -131,10 +135,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Persistence is intentionally delegated to the storage layer (Supabase
   // table with a 90-day retention job). This route never logs the IP or any
   // raw identifier; only the sanitized event and props are forwarded.
-  // The daily hash is used solely for coarse dedupe and is not a persistent id.
   void props;
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json(
+    { ok: true },
+    { headers: limiterHeaders(limit, ANALYTICS_BURST) },
+  );
 }
 
 export async function GET(): Promise<NextResponse> {

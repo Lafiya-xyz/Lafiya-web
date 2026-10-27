@@ -31,6 +31,20 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node scripts/verify-release-gate.mjs "${{ inputs.evidence_path }}"
+      # A new critical CVE without a VEX entry (or an assessed CVE past its
+      # SLA) blocks the release; the validated VEX ships with the SBOM.
+      - name: Gate scanner findings against VEX
+        run: |
+          mkdir -p artifacts
+          npm audit --omit=dev --json > artifacts/npm-audit.json || true
+          npm run vex:gate
+      - run: npm run sbom
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: lafiya-web-release-sbom-vex
+          path: |
+            artifacts/lafiya-web.sbom.cdx.json
+            artifacts/lafiya-web.vex.openvex.json
       # Verify the signed SLSA build provenance for the artefact before any
       # promotion. A missing or mismatched attestation fails the gate.
       - name: Verify build provenance

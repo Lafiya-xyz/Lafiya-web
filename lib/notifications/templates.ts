@@ -160,6 +160,9 @@ const TEMPLATES: TemplateMap = {
 
 export type TemplateId = keyof typeof TEMPLATES;
 
+/** All registered template IDs (used by startup routing validation, #805). */
+export const TEMPLATE_IDS = Object.keys(TEMPLATES) as TemplateId[];
+
 // ─── Renderer ───────────────────────────────────────────────────────────────
 
 /**

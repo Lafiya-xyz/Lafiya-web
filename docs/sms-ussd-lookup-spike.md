@@ -119,6 +119,8 @@ should go into the sandbox validation step in §7 before a vendor is chosen.
 
 `lib/emergency/capability.ts` defines the web bearer credential as:
 
+<!-- doctest -->
+
 ```ts
 export const CAPABILITY_PREFIX = "lafiya_e1_";
 export const CAPABILITY_TOKEN_PATTERN = /^lafiya_e1_[A-Za-z0-9_-]{43}$/;
@@ -215,6 +217,8 @@ much smaller field set) and conflating it with the existing purpose enum's
 180-day ceiling, etc., enforced in
 `supabase/migrations/20260821170000_emergency_access_capabilities.sql`)
 would weaken those invariants for the web path too. Sketch:
+
+<!-- doctest -->
 
 ```sql
 create table public.sms_lookup_codes (

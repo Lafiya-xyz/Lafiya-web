@@ -10,5 +10,8 @@ export async function register() {
       await import("./lib/runtime-config");
     getRuntimeConfig();
     await verifyRpcHostResolution();
+    // Issue #805: fail boot if any template lacks an approved SMS route.
+    const { validateSmsRouting } = await import("./lib/notifications/routing");
+    validateSmsRouting();
   }
 }

@@ -1,0 +1,8 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/Lafiya-xyz/Lafiya-web/security/vex.openvex.json",
+  "author": "Lafiya security",
+  "timestamp": "2026-10-22T00:00:00Z",
+  "version": 1,
+  "statements": []
+}

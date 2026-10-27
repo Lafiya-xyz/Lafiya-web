@@ -15,6 +15,7 @@ import type {
   PayoutEvent,
   PayoutSource,
 } from "./types";
+import { BoundedMap } from "@/lib/bounded-map";
 
 const RECORD_HASH_PATTERN = /^[0-9a-f]{64}$/;
 
@@ -141,7 +142,10 @@ export class SorobanAttestationSource implements AttestationSource {
 
 export class HorizonPayoutSource implements PayoutSource {
   private readonly server: Horizon.Server;
-  private readonly trustlineCache = new Map<string, CachedTrustlineCheck>();
+  // TTL-checked on read; bounded so expired entries cannot accumulate.
+  private readonly trustlineCache = new BoundedMap<string, CachedTrustlineCheck>(
+    10_000,
+  );
 
   constructor(
     horizonUrl: string,
