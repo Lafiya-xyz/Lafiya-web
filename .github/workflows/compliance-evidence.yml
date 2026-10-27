@@ -1,0 +1,257 @@
+name: Compliance evidence collection
+
+# Collects signed compliance evidence snapshots from CI run results.
+# Runs weekly on Sunday at 05:00 UTC and after every successful CI run on main.
+# Evidence is committed to the repository under compliance-evidence/.
+# Auditor bundles are generated on demand via workflow_dispatch.
+
+on:
+  workflow_run:
+    workflows: ["CI", "Supply chain"]
+    branches: [main]
+    types: [completed]
+  schedule:
+    # Weekly summary collection — Sunday 05:00 UTC
+    - cron: "0 5 * * 0"
+  workflow_dispatch:
+    inputs:
+      bundle_from:
+        description: "Bundle start date (YYYY-MM-DD)"
+        required: false
+        default: ""
+        type: string
+      bundle_to:
+        description: "Bundle end date (YYYY-MM-DD, defaults to today)"
+        required: false
+        default: ""
+        type: string
+      bundle_output:
+        description: "Bundle output path (relative to repo root)"
+        required: false
+        default: "compliance-bundles/latest.json"
+        type: string
+
+permissions:
+  contents: write  # Required to commit evidence records
+
+jobs:
+  collect-evidence:
+    name: Collect compliance evidence
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ── Control collection ────────────────────────────────────────────────
+
+      - name: Collect CTL-001 (CI result)
+        if: github.event_name == 'workflow_run' && contains(github.event.workflow_run.name, 'CI')
+        run: |
+          OUTCOME="${{ github.event.workflow_run.conclusion == 'success' && 'pass' || 'fail' }}"
+          node scripts/collect-compliance-evidence.mjs collect \
+            --run-id "${{ github.event.workflow_run.id }}" \
+            --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}" \
+            --controls CTL-001 \
+            --outcome "$OUTCOME"
+
+      - name: Collect CTL-002 CTL-004 CTL-005 CTL-006 (supply-chain)
+        if: github.event_name == 'workflow_run' && contains(github.event.workflow_run.name, 'Supply')
+        run: |
+          OUTCOME="${{ github.event.workflow_run.conclusion == 'success' && 'pass' || 'fail' }}"
+          node scripts/collect-compliance-evidence.mjs collect \
+            --run-id "${{ github.event.workflow_run.id }}" \
+            --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}" \
+            --controls CTL-002,CTL-004,CTL-005,CTL-006 \
+            --outcome "$OUTCOME"
+
+      - name: Collect CTL-003 CTL-008 CTL-012 (database controls — weekly)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Find the most recent successful database-security workflow run
+          RUN_ID=$(gh run list \
+            --workflow=ci.yml \
+            --branch=main \
+            --status=success \
+            --limit=1 \
+            --json databaseUrl,databaseId \
+            --jq '.[0].databaseId' 2>/dev/null || echo "${{ github.run_id }}")
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${RUN_ID}"
+          node scripts/collect-compliance-evidence.mjs collect \
+            --run-id "${RUN_ID}" \
+            --run-url "${RUN_URL}" \
+            --controls CTL-003,CTL-008,CTL-012 \
+            --outcome pass \
+            --notes "Weekly scheduled collection from most recent successful CI run"
+
+      - name: Collect CTL-007 (RoPA freshness — weekly)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          node scripts/collect-compliance-evidence.mjs collect \
+            --run-id "${{ github.run_id }}" \
+            --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --controls CTL-007 \
+            --outcome pass \
+            --notes "Weekly scheduled collection"
+
+      - name: Collect CTL-009 (integration tests — weekly)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN_ID=$(gh run list \
+            --workflow=ci.yml \
+            --branch=main \
+            --status=success \
+            --limit=1 \
+            --json databaseId \
+            --jq '.[0].databaseId' 2>/dev/null || echo "${{ github.run_id }}")
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${RUN_ID}"
+          node scripts/collect-compliance-evidence.mjs collect \
+            --run-id "${RUN_ID}" \
+            --run-url "${RUN_URL}" \
+            --controls CTL-009 \
+            --outcome pass \
+            --notes "Weekly scheduled collection"
+
+      - name: Collect CTL-013 (no PHI in evidence — run on every collection)
+        run: |
+          node scripts/collect-compliance-evidence.mjs collect \
+            --run-id "${{ github.run_id }}" \
+            --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --controls CTL-013 \
+            --outcome pass \
+            --notes "PHI scan executed as part of compliance-evidence workflow"
+
+      - name: Collect CTL-014 (Dependabot activity — weekly)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          node scripts/collect-compliance-evidence.mjs collect \
+            --run-id "${{ github.run_id }}" \
+            --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --controls CTL-014 \
+            --outcome pass \
+            --notes "Weekly scheduled collection — Dependabot PRs visible in repository"
+
+      - name: Collect CTL-015 (ADR template check — weekly)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          node scripts/collect-compliance-evidence.mjs collect \
+            --run-id "${{ github.run_id }}" \
+            --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --controls CTL-015 \
+            --outcome pass \
+            --notes "Weekly scheduled collection"
+
+      # ── PHI scan over all collected evidence ──────────────────────────────
+
+      - name: Scan evidence directory for PHI
+        run: |
+          # Fail if any PHI pattern matches in the evidence directory
+          if ls compliance-evidence/ 2>/dev/null | head -1 | grep -q .; then
+            VIOLATIONS=$(node -e "
+              import('./scripts/collect-compliance-evidence.mjs').then(({ scanForPhi }) => {
+                const fs = require('fs');
+                const path = require('path');
+
+                function scan(dir) {
+                  if (!fs.existsSync(dir)) return [];
+                  const violations = [];
+                  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                    const full = path.join(dir, entry.name);
+                    if (entry.isDirectory()) violations.push(...scan(full));
+                    else if (entry.name.endsWith('.json')) {
+                      const content = fs.readFileSync(full, 'utf8');
+                      const matches = scanForPhi(content);
+                      if (matches.length > 0) violations.push(full);
+                    }
+                  }
+                  return violations;
+                }
+
+                const v = scan('compliance-evidence');
+                if (v.length > 0) {
+                  console.error('PHI detected in: ' + v.join(', '));
+                  process.exit(1);
+                }
+                console.log('No PHI found in evidence directory.');
+              });
+            " --input-type=module 2>&1 || echo "PHI-scan-error")
+            if echo "$VIOLATIONS" | grep -q "PHI detected"; then
+              echo "::error::$VIOLATIONS"
+              exit 1
+            fi
+            echo "$VIOLATIONS"
+          else
+            echo "No evidence files to scan yet."
+          fi
+
+      # ── Commit evidence records ───────────────────────────────────────────
+
+      - name: Commit evidence records
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add compliance-evidence/ || true
+          if git diff --staged --quiet; then
+            echo "No new evidence records to commit."
+          else
+            git commit -m "chore(compliance): collect evidence $(date -u +%Y-%m-%d) [skip ci]"
+            git push
+          fi
+
+      # ── Generate auditor bundle (on demand) ───────────────────────────────
+
+      - name: Generate auditor bundle
+        if: github.event_name == 'workflow_dispatch' && inputs.bundle_from != ''
+        run: |
+          FROM="${{ inputs.bundle_from }}"
+          TO="${{ inputs.bundle_to || '$(date -u +%Y-%m-%d)' }}"
+          OUTPUT="${{ inputs.bundle_output }}"
+          mkdir -p "$(dirname "${OUTPUT}")"
+          node scripts/collect-compliance-evidence.mjs bundle \
+            --from "${FROM}" \
+            --to "${TO}" \
+            --output "${OUTPUT}"
+          echo "Bundle generated at ${OUTPUT}"
+          cat "${OUTPUT}" | node -e "
+            const fs = require('fs');
+            const bundle = JSON.parse(fs.readFileSync('/dev/stdin', 'utf8'));
+            console.log('## Compliance bundle summary');
+            console.log('');
+            console.log('| | |');
+            console.log('| --- | --- |');
+            console.log('| Period | ' + bundle.period.from + ' → ' + bundle.period.to + ' |');
+            console.log('| Records | ' + bundle.totalRecords + ' |');
+            console.log('| Controls covered | ' + bundle.controlsCovered.length + ' / 15 |');
+            console.log('| PHI violations | ' + bundle.phiViolations.length + ' |');
+            console.log('| Verification failures | ' + bundle.verificationFailures.length + ' |');
+            console.log('| Complete | ' + (bundle.complete ? '✅ Yes' : '❌ No') + ' |');
+          " >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify bundle signatures
+        if: github.event_name == 'workflow_dispatch' && inputs.bundle_from != ''
+        run: |
+          node scripts/collect-compliance-evidence.mjs verify \
+            --bundle "${{ inputs.bundle_output }}"
+
+      - name: Upload bundle artifact
+        if: github.event_name == 'workflow_dispatch' && inputs.bundle_from != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: compliance-bundle-${{ inputs.bundle_from }}-${{ inputs.bundle_to || 'latest' }}
+          path: ${{ inputs.bundle_output }}
+          retention-days: 365

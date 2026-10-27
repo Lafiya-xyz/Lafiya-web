@@ -93,3 +93,6 @@ ehthumbs.db
 
 # Sentry
 .sentryclirc
+
+# compliance bundles (generated on demand, not committed — only evidence records are committed)
+/compliance-bundles/
