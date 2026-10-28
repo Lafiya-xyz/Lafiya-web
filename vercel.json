@@ -1,0 +1,27 @@
+{
+  "crons": [
+    {
+      "path": "/api/internal/payout-indexer",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/internal/purge-expired-limits",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/outbox/dispatch",
+      "schedule": "* * * * *"
+    }
+  ],
+  "functions": {
+    "app/api/internal/payout-indexer/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/internal/purge-expired-limits/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/outbox/dispatch/route.ts": {
+      "maxDuration": 30
+    }
+  }
+}

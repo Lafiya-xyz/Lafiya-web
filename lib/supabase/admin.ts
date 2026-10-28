@@ -15,6 +15,7 @@ export const ADMIN_PURPOSES = [
   "fx-rates",
   "audit-explorer",
   "partner-api",
+  "job-lease",
 ] as const;
 
 export type AdminPurpose = (typeof ADMIN_PURPOSES)[number];

@@ -15,6 +15,7 @@
 import { NextResponse } from "next/server";
 import { runDispatchCycle, getOutboxLag } from "@/lib/outbox/dispatcher";
 import { logError } from "@/lib/logging/logger";
+import { recordJobSuccess } from "@/lib/jobs/schedule-health";
 
 export const runtime = "nodejs";
 // Disable static caching — this is a mutating internal API.
@@ -38,6 +39,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     const dispatched = await runDispatchCycle();
     const lag = await getOutboxLag();
+    await recordJobSuccess("outbox-dispatch");
     return NextResponse.json({ dispatched, ...lag });
   } catch (err) {
     logError("outbox dispatch route: unhandled error", err);

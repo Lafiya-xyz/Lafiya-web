@@ -1,3 +1,4 @@
+import { type LeaseRunner, unleasedRunner } from "@/lib/jobs/lease-runner";
 import { logError, logInfo, logWarn } from "@/lib/logging/logger";
 
 import type {
@@ -50,6 +51,7 @@ export class PayoutIndexer {
     private readonly startLedger: number,
     private readonly startPaymentCursor = "0",
     private readonly queue?: IndexerQueue,
+    private readonly runLeased: LeaseRunner = unleasedRunner,
   ) {}
 
   /**
@@ -129,7 +131,15 @@ export class PayoutIndexer {
     }
   }
 
-  async runOnce(): Promise<PayoutIndexerSummary> {
+  /**
+   * Run one indexing pass while holding the `payout-indexer` lease (Issue
+   * #694), so concurrent invocations never process the same window.
+   */
+  runOnce(): Promise<PayoutIndexerSummary> {
+    return this.runLeased("payout-indexer", () => this.runOnceUnleased());
+  }
+
+  private async runOnceUnleased(): Promise<PayoutIndexerSummary> {
     try {
       // Read both checkpoints before processing to enable reorg detection
       const [attestationCheckpoint, paymentCheckpoint, attestationCursor, paymentCursor] =

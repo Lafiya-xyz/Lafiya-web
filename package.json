@@ -46,6 +46,8 @@
     "migration:lint": "node scripts/lint-migrations.mjs",
     "types:verify": "node scripts/verify-supabase-types.mjs",
     "flags:check": "node scripts/check-flags.mjs",
+    "schedules:generate": "node scripts/schedules.mjs",
+    "schedules:check": "node scripts/schedules.mjs --check",
     "env:drift": "node scripts/env-drift.mjs --check-doc",
     "ops": "node lib/ops/cli.ts",
     "secrets:scan": "node scripts/scan-secrets.mjs",

@@ -11,6 +11,7 @@ import { getRuntimeConfig } from "@/lib/runtime-config";
 import { getContractTrustState } from "@/lib/stellar/verification-indexer/trust-state";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getFlagStates } from "@/lib/flags";
+import { getScheduledJobHealth } from "@/lib/jobs/schedule-health";
 import { smsDeliveryMetrics } from "@/lib/notifications";
 
 export const runtime = "nodejs";
@@ -135,7 +136,7 @@ async function checkIndexerGap(): Promise<IndexerGapStatus> {
  */
 export async function GET() {
   const config = getRuntimeConfig();
-  const [supabase, stellar, attestationGovernance, smsDelivery] = await Promise.all([
+  const [supabase, stellar, attestationGovernance, smsDelivery, scheduledJobs] = await Promise.all([
     checkSupabase(),
     checkStellar(),
     getContractTrustState(),
@@ -143,6 +144,9 @@ export async function GET() {
     // Aggregates only — no numbers or message ids. Informational; never
     // fails readiness.
     smsDeliveryMetrics().catch(() => null),
+    // Issue #693: per-job "last successful run" age. Informational; a stale
+    // job is surfaced to on-call without failing readiness.
+    getScheduledJobHealth(),
   ]);
   const flags = await getFlagStates();
 
@@ -170,6 +174,7 @@ export async function GET() {
         // so this is surfaced to operators without failing readiness.
         attestationGovernance,
         smsDelivery: smsDelivery ?? "unknown",
+        scheduledJobs,
         payoutIndexer: config.payoutIndexer.enabled ? "enabled" : "disabled",
         sentry: config.sentry.enabled ? "enabled" : "disabled",
         // Validation results for SOROBAN_RPC_URL / STELLAR_HORIZON_URL --

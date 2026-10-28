@@ -1,3 +1,4 @@
+import { type LeaseRunner, unleasedRunner } from "@/lib/jobs/lease-runner";
 import { logError, logInfo } from "@/lib/logging/logger";
 
 import type {
@@ -61,9 +62,23 @@ export class VerificationIndexer {
     private readonly store: VerificationEvidenceStore,
     private readonly source: VerificationEventSource,
     private readonly backfill?: BackfillAdapter,
+    private readonly runLeased: LeaseRunner = unleasedRunner,
   ) {}
 
-  async runOnce(): Promise<{
+  /**
+   * Run one indexing pass while holding the `verification-indexer` lease
+   * (Issue #694), so concurrent invocations never process the same window.
+   */
+  runOnce(): Promise<{
+    applied: number;
+    quarantined: number;
+    cursor: string;
+    gapDetected: boolean;
+  }> {
+    return this.runLeased("verification-indexer", () => this.runOnceUnleased());
+  }
+
+  private async runOnceUnleased(): Promise<{
     applied: number;
     quarantined: number;
     cursor: string;
