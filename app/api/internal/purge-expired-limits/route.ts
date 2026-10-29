@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { serverEnv } from "@/lib/env-server";
+import { recordJobSuccess } from "@/lib/jobs/schedule-health";
 import { logInfo, logError } from "@/lib/logging/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -56,6 +57,8 @@ export async function POST(request: Request) {
       break;
     }
   }
+
+  await recordJobSuccess("purge-expired-limits");
 
   logInfo("purge_expired_limits_completed", {
     rateLimitsPurged: totalRateLimitsPurged,

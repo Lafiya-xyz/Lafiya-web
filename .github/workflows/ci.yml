@@ -24,6 +24,8 @@ jobs:
 
       - run: npm run lint
 
+      - run: npm run schedules:check
+
       - run: npm run tokens:check
 
       - run: npm run typecheck

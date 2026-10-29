@@ -12,6 +12,7 @@ import { unstable_cache } from "next/cache";
 import type { Attestation } from "@/lib/attestation/types";
 import { getProtocolRuntimeConfig } from "@/lib/chw-protocol/config";
 import { serverEnv } from "@/lib/env-server";
+import { Singleflight } from "@/lib/singleflight";
 import { decodeAttestationResult } from "@/lib/stellar/generated/attestation";
 
 /**
@@ -195,22 +196,68 @@ export const attestationBreaker = new CircuitBreaker({
   cooldownMs: 30000,
 });
 
+/** Raised when the Soroban RPC call exceeds its deadline. */
+export class AttestationTimeoutError extends Error {
+  constructor() {
+    super("Attestation RPC timeout");
+    this.name = "AttestationTimeoutError";
+  }
+}
+
+/** Raised when the contract simulation itself reports an error. */
+export class AttestationContractError extends Error {
+  constructor(detail: string) {
+    super(`Attestation simulation failed: ${detail}`);
+    this.name = "AttestationContractError";
+  }
+}
+
+export type AttestationErrorKind = "timeout" | "contract" | "breaker_open" | "network";
+
+/**
+ * Classify a lookup failure so the circuit breaker / callers can tell a
+ * timeout from a network fault or a contract error (Issue #691).
+ */
+export function classifyAttestationError(error: unknown): AttestationErrorKind {
+  if (error instanceof AttestationTimeoutError) return "timeout";
+  if (error instanceof AttestationContractError) return "contract";
+  if (error instanceof Error && error.message === "Circuit breaker is OPEN") {
+    return "breaker_open";
+  }
+  return "network";
+}
+
 /**
  * Wrap an async operation with a hard timeout.
- * Rejects with "Attestation RPC timeout" if the operation doesn't complete
- * within ATTESTATION_TIMEOUT_MS.
+ * Rejects with `AttestationTimeoutError` if the operation doesn't complete
+ * within `timeoutMs`, and aborts the `AbortSignal` handed to the operation so
+ * the losing network request is cancelled rather than left running.
+ *
+ * The timer is a clearable `setTimeout` (not `AbortSignal.timeout`, which
+ * cannot be cancelled) and is always cleared in `finally`, so no timer is
+ * left pending on either the success or failure path (Issue #691).
  *
  * Exported for testing.
  */
 export async function withTimeout<T>(
-  operation: () => Promise<T>,
+  operation: (signal: AbortSignal) => Promise<T>,
   timeoutMs: number,
 ): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error("Attestation RPC timeout")), timeoutMs);
+    timer = setTimeout(() => {
+      const error = new AttestationTimeoutError();
+      controller.abort(error);
+      reject(error);
+    }, timeoutMs);
   });
 
-  return Promise.race([operation(), timeoutPromise]);
+  try {
+    return await Promise.race([operation(controller.signal), timeoutPromise]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -273,13 +320,18 @@ async function fetchAttestationUncached(
       .setTimeout(30)
       .build();
 
-    const simulation = await withTimeout(
-      () => server.simulateTransaction(tx),
-      ATTESTATION_TIMEOUT_MS,
-    );
+    const simulation = await withTimeout((signal) => {
+      // Thread the abort signal into the underlying HTTP request so a
+      // timed-out simulation is cancelled, not merely ignored.
+      server.httpClient.interceptors.request.use((config) => {
+        (config as { signal?: AbortSignal }).signal = signal;
+        return config;
+      });
+      return server.simulateTransaction(tx);
+    }, ATTESTATION_TIMEOUT_MS);
 
     if (rpc.Api.isSimulationError(simulation)) {
-      throw new Error(`Attestation simulation failed: ${simulation.error}`);
+      throw new AttestationContractError(simulation.error);
     }
 
     const returnValue = simulation.result?.retval;
@@ -294,10 +346,24 @@ async function fetchAttestationUncached(
 }
 
 /**
+ * Coalesces concurrent cache-miss lookups for the same record hash into one
+ * Soroban read (Issue #692). Attestations are public and keyed only by
+ * `recordHash`, so sharing a result across viewers is safe.
+ */
+export const attestationFlight = new Singleflight({
+  maxKeys: 1000,
+  ttlMs: ATTESTATION_TIMEOUT_MS * 2,
+});
+
+function fetchAttestationCoalesced(recordHash: string): Promise<Attestation | null> {
+  return attestationFlight.do(recordHash, () => fetchAttestationUncached(recordHash));
+}
+
+/**
  * Cached attestation lookup. See module docs for caching rationale.
  */
 export const getAttestation = unstable_cache(
-  fetchAttestationUncached,
+  fetchAttestationCoalesced,
   ["attestation"],
   {
     revalidate: ATTESTATION_CACHE_TTL_SECONDS,

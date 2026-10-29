@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { serverEnv } from "@/lib/env-server";
+import { leasedRunner } from "@/lib/jobs/lease";
 import { getRuntimeConfig } from "@/lib/runtime-config";
 import { verifyBearer } from "@/lib/security/bearer";
 import { PayoutIndexer } from "@/lib/stellar/payout-indexer/indexer";
@@ -80,6 +81,8 @@ export async function POST(request: Request) {
     ),
     config.startLedger,
     serverEnv.PAYOUT_INDEXER_START_PAYMENT_CURSOR,
+    undefined,
+    leasedRunner,
   );
 }
 

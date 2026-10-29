@@ -1,0 +1,39 @@
+{
+  "$comment": "Issue #693: declarative schedule manifest. Source of truth for vercel.json crons (npm run schedules:generate). Every route under app/api/internal or app/api/outbox must appear here, either scheduled or manualOnly. CI runs npm run schedules:check.",
+  "jobs": [
+    {
+      "name": "payout-indexer",
+      "path": "/api/internal/payout-indexer",
+      "schedule": "*/5 * * * *",
+      "owner": "payments",
+      "maxDurationSeconds": 60,
+      "idempotency": "Batches keyed by checkpoint event ID; lease-guarded (job_leases).",
+      "maxStalenessSeconds": 1800
+    },
+    {
+      "name": "purge-expired-limits",
+      "path": "/api/internal/purge-expired-limits",
+      "schedule": "*/5 * * * *",
+      "owner": "platform",
+      "maxDurationSeconds": 60,
+      "idempotency": "Deletes only already-expired rows; safe to re-run.",
+      "maxStalenessSeconds": 1800
+    },
+    {
+      "name": "outbox-dispatch",
+      "path": "/api/outbox/dispatch",
+      "schedule": "* * * * *",
+      "owner": "notifications",
+      "maxDurationSeconds": 30,
+      "idempotency": "Outbox rows claimed with SKIP LOCKED; deliveries keyed by event ID.",
+      "maxStalenessSeconds": 600
+    },
+    {
+      "name": "readiness",
+      "path": "/api/internal/readiness",
+      "manualOnly": true,
+      "owner": "platform",
+      "reason": "Probe endpoint polled by the platform health checker, not a scheduled job."
+    }
+  ]
+}

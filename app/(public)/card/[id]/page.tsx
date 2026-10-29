@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
 import { after } from "next/server";
 
 import { withholdPinGatedFields } from "@/lib/emergency/card-pin";
@@ -8,6 +9,7 @@ import { logError } from "@/lib/logging/logger";
 import { isAttestationTrustDegraded } from "@/lib/stellar/verification-indexer/trust-state";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { Singleflight } from "@/lib/singleflight";
 import { getAvatarSignedUrl } from "@/lib/storage/avatar";
 import { EmergencyCardContent } from "./card-content";
 
@@ -59,6 +61,11 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+// Supabase SSR session cookies: `sb-<project-ref>-auth-token` (optionally chunked).
+const SUPABASE_AUTH_COOKIE = /^sb-.+-auth-token/;
+
+const cardLookupFlight = new Singleflight({ maxKeys: 1000, ttlMs: 5000 });
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -74,9 +81,17 @@ export default async function PublicCardPage({
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_emergency_card", {
-    p_card_id: id,
-  });
+  const lookupCard = () => supabase.rpc("get_emergency_card", { p_card_id: id });
+  // Issue #692: a card scanned in bulk coalesces concurrent identical lookups.
+  // Only anonymous viewers share a result — they all run under the same
+  // `anon` authorization context — so a signed-in viewer's lookup is never
+  // shared with anyone else.
+  const isAnonymous = !(await cookies())
+    .getAll()
+    .some((cookie) => SUPABASE_AUTH_COOKIE.test(cookie.name));
+  const { data, error } = isAnonymous
+    ? await cardLookupFlight.do(`card:${id}`, lookupCard)
+    : await lookupCard();
 
   if (error) {
     // Public card IDs are bearer-like capabilities: keep them out of logs,
