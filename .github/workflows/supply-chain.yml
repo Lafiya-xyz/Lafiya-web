@@ -29,7 +29,7 @@ jobs:
       - run: npm ci
       - run: npm run ci:check-action-pins
       - run: npm audit --omit=dev --audit-level=high
-      - uses: trufflesecurity/trufflehog@4dd8831c5f12599465d4d45c3c447b4018a34c85 # v3.97.9
+      - uses: trufflesecurity/trufflehog@ea68ca03c865c5f324e86e849ced20ed3cf9dbbb # v3.99.8
         with:
           path: ./
           extra_args: --only-verified
