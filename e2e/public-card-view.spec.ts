@@ -222,3 +222,137 @@ test.describe("Public card view: unauthenticated responder sees only disclosed f
     },
   );
 });
+
+// ---------------------------------------------------------------------------
+// Service-worker integrity suite
+//
+// Issue #967: a malicious or unintended service worker must not be able to
+// persist silently. The page compares the active worker's reported build hash
+// with the expected hash served by the app and reports mismatches; a server
+// kill switch (`Clear-Site-Data: "storage"` + no-op replacement worker) must
+// remove the worker and its caches.
+//
+// Chromium is automated here. Safari has no Playwright automation for
+// Clear-Site-Data / SW teardown in CI, so the same steps are documented for a
+// manual pass (see the `test.fixme` block at the bottom).
+// ---------------------------------------------------------------------------
+
+test.describe("Service worker integrity: mismatch detection and kill switch", () => {
+  test("detects an unexpected worker version and reports the mismatch", async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+
+    // Collect any mismatch reports the page emits (privacy-safe: no PII).
+    const reports: Array<Record<string, unknown>> = [];
+    await page.exposeFunction("__reportSwMismatch", (payload: unknown) => {
+      reports.push(payload as Record<string, unknown>);
+    });
+
+    // Intercept the mismatch reporting endpoint so nothing leaves the test.
+    await page.route("**/api/sw/mismatch", async (route) => {
+      const body = route.request().postDataJSON();
+      reports.push(body as Record<string, unknown>);
+      await route.fulfill({ status: 204, body: "" });
+    });
+
+    await page.goto("/");
+
+    // Wait for the app to register its worker and expose the expected hash.
+    const expectedHash = await page.evaluate(async () => {
+      const res = await fetch("/api/sw/expected-version", {
+        cache: "no-store",
+      });
+      if (!res.ok) return null;
+      const json = (await res.json()) as { hash?: string };
+      return json.hash ?? null;
+    });
+    expect(expectedHash).toBeTruthy();
+
+    // Simulate an unexpected worker: register a script that reports a bogus
+    // build hash, then ask the page to run its comparison against it.
+    const detected = await page.evaluate(async (expected) => {
+      const bogusHash = "deadbeef".repeat(8);
+      const reported = await (
+        window as unknown as {
+          __lafiyaCompareSwVersion?: (
+            expected: string,
+            actual: string,
+          ) => Promise<boolean>;
+        }
+      ).__lafiyaCompareSwVersion?.(expected as string, bogusHash);
+      return { reported: reported === true, bogusHash };
+    }, expectedHash);
+
+    expect(detected.reported).toBe(true);
+
+    // The page must have reported the mismatch (either via the exposed
+    // function or the reporting endpoint).
+    await expect
+      .poll(() => reports.length, { timeout: 10_000 })
+      .toBeGreaterThan(0);
+    const report = reports[0];
+    expect(report).toMatchObject({ kind: "sw-version-mismatch" });
+    // Privacy-safe: the report must not contain any patient data fields.
+    expect(JSON.stringify(report)).not.toMatch(/email|name|dob|allerg/i);
+  });
+
+  test("kill switch removes the worker and caches", async ({ page }) => {
+    test.setTimeout(60_000);
+
+    await page.goto("/");
+
+    // Ensure a worker is registered and a cache exists before the kill switch.
+    await page.evaluate(async () => {
+      if ("serviceWorker" in navigator) {
+        await navigator.serviceWorker.ready.catch(() => undefined);
+      }
+      if ("caches" in window) {
+        const cache = await caches.open("lafiya-e2e-probe");
+        await cache.put("/__probe__", new Response("probe"));
+      }
+    });
+
+    const before = await page.evaluate(async () => {
+      const regs = "serviceWorker" in navigator
+        ? await navigator.serviceWorker.getRegistrations()
+        : [];
+      const cacheKeys = "caches" in window ? await caches.keys() : [];
+      return { registrations: regs.length, caches: cacheKeys.length };
+    });
+    expect(before.caches).toBeGreaterThan(0);
+
+    // Trigger the server-controlled kill switch. The endpoint responds with
+    // `Clear-Site-Data: "storage"` and serves the no-op replacement worker.
+    const res = await page.request.post("/api/sw/kill-switch");
+    expect(res.ok()).toBeTruthy();
+    expect(res.headers()["clear-site-data"] ?? "").toContain("storage");
+
+    // Reload so the browser applies Clear-Site-Data and the no-op worker.
+    await page.reload();
+
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(async () => {
+            const regs = "serviceWorker" in navigator
+              ? await navigator.serviceWorker.getRegistrations()
+              : [];
+            const cacheKeys = "caches" in window ? await caches.keys() : [];
+            return { registrations: regs.length, caches: cacheKeys.length };
+          }),
+        { timeout: 15_000 },
+      )
+      .toMatchObject({ registrations: 0, caches: 0 });
+  });
+
+  // Safari: Clear-Site-Data "storage" and SW teardown are not automatable in
+  // CI. Manual verification steps:
+  //   1. Open the app in Safari, confirm a worker is active (Develop > Service
+  //      Workers) and that a cache exists (Storage tab).
+  //   2. POST /api/sw/kill-switch (or hit the admin kill-switch UI).
+  //   3. Reload. Confirm the worker is gone and caches are empty.
+  test.fixme("kill switch removes worker and caches (Safari, manual)", async () => {
+    // Documented above; no automated assertion on Safari.
+  });
+});

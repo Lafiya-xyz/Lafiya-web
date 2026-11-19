@@ -2,6 +2,7 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import noWildcardPhiSelect from "./eslint-rules/no-wildcard-phi-select.js";
+import noHardcodedJurisdiction from "./eslint-rules/no-hardcoded-jurisdiction.js";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -51,6 +52,29 @@ const eslintConfig = defineConfig([
         "error",
         {
           phiTables: ["profiles", "record_revisions", "profile_secrets"],
+        },
+      ],
+    },
+  },
+  {
+    // Issue #969: jurisdiction-specific constants (country code "NG", phone
+    // prefix "+234") must live in the Nigeria country pack only, so a second
+    // deployment (e.g. Ghana) doesn't require forking call sites. The pack
+    // file itself is exempted below.
+    files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
+    plugins: {
+      local: {
+        rules: {
+          "no-hardcoded-jurisdiction": noHardcodedJurisdiction,
+        },
+      },
+    },
+    rules: {
+      "local/no-hardcoded-jurisdiction": [
+        "error",
+        {
+          bannedValues: ["NG", "+234"],
+          allowedFiles: ["lib/country-packs/nigeria.ts"],
         },
       ],
     },
