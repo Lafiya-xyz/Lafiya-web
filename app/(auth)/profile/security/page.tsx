@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { deriveSecurityPosture } from "@/lib/account/security-posture";
 import { createClient } from "@/lib/supabase/server";
+import { SafetyModeCard } from "./safety-mode-card";
 
 export const metadata: Metadata = {
   title: "Security center · Lafiya",
@@ -20,9 +21,17 @@ export default async function SecurityCenterPage() {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const [{ data: factors }, { data: sessions }] = await Promise.all([
+  const [{ data: factors }, { data: sessions }, { data: safetyAudit }] = await Promise.all([
     supabase.auth.mfa.listFactors(),
     supabase.from("user_sessions").select("last_seen_at").eq("user_id", user.id),
+    // Issue #977: patient-only audit trail. RLS on safety_mode_audit restricts
+    // rows to the owning patient, so caregiver/shared views never see them.
+    supabase
+      .from("safety_mode_audit")
+      .select("id, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(5),
   ]);
 
   const posture = deriveSecurityPosture({
@@ -65,6 +74,12 @@ export default async function SecurityCenterPage() {
           </li>
         ))}
       </ul>
+      <SafetyModeCard
+        activations={(safetyAudit ?? []).map((row) => ({
+          id: row.id as string,
+          createdAt: row.created_at as string,
+        }))}
+      />
       <Link href="/profile" className="text-sm underline">
         Back to profile
       </Link>

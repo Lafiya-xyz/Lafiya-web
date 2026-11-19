@@ -11,6 +11,26 @@ import {
   validateQrPayload,
   QrValidationResult,
 } from "../../lib/qr/scanner";
+import {
+  computePrintedCheckCode,
+  normalizePrintedField,
+  PRINTED_CHECK_FIELDS,
+  PrintedCheckField,
+} from "../../lib/qr/printedCheckCode";
+
+type CheckCodeStatus = "idle" | "pass" | "fail" | "incomplete" | "error";
+
+const CHECK_FIELD_LABELS: Record<PrintedCheckField, string> = {
+  bloodGroup: "Blood group",
+  genotype: "Genotype",
+  allergies: "Allergies",
+};
+
+const CHECK_FIELD_PLACEHOLDERS: Record<PrintedCheckField, string> = {
+  bloodGroup: "e.g. O+",
+  genotype: "e.g. AA",
+  allergies: "e.g. Penicillin, or NONE",
+};
 
 export function ScannerView() {
   const router = useRouter();
@@ -26,6 +46,22 @@ export function ScannerView() {
   const [detectedResult, setDetectedResult] = useState<QrValidationResult | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
   const [usingNative, setUsingNative] = useState<boolean>(false);
+
+  // Offline printed-card check-code verification state
+  const [showVerifyPanel, setShowVerifyPanel] = useState<boolean>(false);
+  const [checkFieldValues, setCheckFieldValues] = useState<Record<PrintedCheckField, string>>({
+    bloodGroup: "",
+    genotype: "",
+    allergies: "",
+  });
+  const [enteredCheckCode, setEnteredCheckCode] = useState<string>("");
+  const [checkStatus, setCheckStatus] = useState<CheckCodeStatus>("idle");
+  const [ocrAvailable, setOcrAvailable] = useState<boolean>(false);
+  const [ocrBusy, setOcrBusy] = useState<boolean>(false);
+  const [ocrMessage, setOcrMessage] = useState<string | null>(null);
+  const checkCodeInputRef = useRef<HTMLInputElement | null>(null);
+  const verifyHeadingRef = useRef<HTMLHeadingElement | null>(null);
+=======
 
   const stopStream = useCallback(() => {
     if (streamRef.current) {
@@ -84,6 +120,20 @@ export function ScannerView() {
     };
   }, [facingMode, startCamera, stopStream]);
 
+  // Detect optional OCR capability (TextDetector) for assisted field capture
+  useEffect(() => {
+    setOcrAvailable(
+      typeof window !== "undefined" && "TextDetector" in window
+    );
+  }, []);
+
+  // Move focus to the verification heading when the panel opens (a11y)
+  useEffect(() => {
+    if (showVerifyPanel) {
+      verifyHeadingRef.current?.focus();
+    }
+  }, [showVerifyPanel]);
+
   // Continuous frame scanning loop
   useEffect(() => {
     let animationFrameId: number;
@@ -134,7 +184,101 @@ export function ScannerView() {
   const handleResumeScan = () => {
     setDetectedResult(null);
     setCopied(false);
+    setShowVerifyPanel(false);
+    setCheckStatus("idle");
+    setOcrMessage(null);
     scanningRef.current = true;
+  };
+
+  const handleCheckFieldChange = (field: PrintedCheckField, value: string) => {
+    setCheckFieldValues((prev) => ({ ...prev, [field]: value }));
+    setCheckStatus("idle");
+  };
+
+  const handleCheckCodeChange = (value: string) => {
+    setEnteredCheckCode(value);
+    setCheckStatus("idle");
+  };
+
+  const handleVerifyPrintedCard = async () => {
+    const normalizedCode = enteredCheckCode.trim().toUpperCase().replace(/[^0-9A-Z]/g, "");
+    if (!normalizedCode) {
+      setCheckStatus("incomplete");
+      return;
+    }
+
+    const missing = PRINTED_CHECK_FIELDS.filter(
+      (field) => normalizePrintedField(checkFieldValues[field]).length === 0
+    );
+    if (missing.length > 0) {
+      setCheckStatus("incomplete");
+      return;
+    }
+
+    try {
+      const expected = await computePrintedCheckCode({
+        bloodGroup: checkFieldValues.bloodGroup,
+        genotype: checkFieldValues.genotype,
+        allergies: checkFieldValues.allergies,
+      });
+      setCheckStatus(expected === normalizedCode ? "pass" : "fail");
+    } catch {
+      setCheckStatus("error");
+    }
+  };
+
+  const handleOcrCapture = async () => {
+    if (!videoRef.current || !ocrAvailable) {
+      return;
+    }
+    setOcrBusy(true);
+    setOcrMessage(null);
+    try {
+      const DetectorCtor = (
+        window as unknown as {
+          TextDetector: new () => { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>> };
+        }
+      ).TextDetector;
+      const detector = new DetectorCtor();
+      const results = await detector.detect(videoRef.current);
+      const texts = results
+        .map((r) => (r.rawValue || "").trim())
+        .filter((t) => t.length > 0);
+
+      if (texts.length === 0) {
+        setOcrMessage("No text detected. Hold the printed card steady in the frame and try again, or enter the fields manually.");
+        return;
+      }
+
+      // Best-effort: fill fields from detected text tokens without overwriting user input.
+      const next: Record<PrintedCheckField, string> = { ...checkFieldValues };
+      const bloodGroupMatch = texts
+        .map((t) => t.toUpperCase().match(/\b(AB|A|B|O)\s*([+-])\b/))
+        .find((m) => m !== null);
+      if (bloodGroupMatch && !next.bloodGroup) {
+        next.bloodGroup = `${bloodGroupMatch[1]}${bloodGroupMatch[2]}`;
+      }
+      const genotypeMatch = texts
+        .map((t) => t.toUpperCase().match(/\b(AA|AS|SS|AC|SC)\b/))
+        .find((m) => m !== null);
+      if (genotypeMatch && !next.genotype) {
+        next.genotype = genotypeMatch[1];
+      }
+      const codeMatch = texts
+        .map((t) => t.toUpperCase().replace(/[^0-9A-Z]/g, ""))
+        .find((t) => t.length >= 6 && t.length <= 12);
+      if (codeMatch && !enteredCheckCode) {
+        setEnteredCheckCode(codeMatch);
+      }
+
+      setCheckFieldValues(next);
+      setCheckStatus("idle");
+      setOcrMessage("Captured text from the card. Please review and correct the fields before verifying.");
+    } catch {
+      setOcrMessage("OCR capture failed. Please enter the fields manually.");
+    } finally {
+      setOcrBusy(false);
+    }
   };
 
   const handleCopyText = async () => {
@@ -287,6 +431,146 @@ export function ScannerView() {
                   Scan Another
                 </button>
               </div>
+
+              <button
+                type="button"
+                onClick={() => setShowVerifyPanel((prev) => !prev)}
+                aria-expanded={showVerifyPanel}
+                aria-controls="printed-card-verify-panel"
+                className="mt-3 w-full py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg font-medium text-sm"
+              >
+                {showVerifyPanel ? "Hide printed card check" : "Verify printed card"}
+              </button>
+
+              {showVerifyPanel && (
+                <section
+                  id="printed-card-verify-panel"
+                  aria-labelledby="printed-card-verify-heading"
+                  className="mt-4 border-t border-zinc-800 pt-4"
+                >
+                  <h3
+                    id="printed-card-verify-heading"
+                    ref={verifyHeadingRef}
+                    tabIndex={-1}
+                    className="text-sm font-semibold text-white mb-1 outline-none"
+                  >
+                    Verify printed card (offline)
+                  </h3>
+                  <p className="text-xs text-zinc-400 mb-3">
+                    Enter the critical fields exactly as printed on the card, then enter the short check code printed near the QR. This works without a network connection.
+                  </p>
+
+                  <div className="space-y-3">
+                    {PRINTED_CHECK_FIELDS.map((field) => {
+                      const inputId = `printed-check-${field}`;
+                      return (
+                        <div key={field}>
+                          <label
+                            htmlFor={inputId}
+                            className="block text-xs font-medium text-zinc-300 mb-1"
+                          >
+                            {CHECK_FIELD_LABELS[field]}
+                          </label>
+                          <input
+                            id={inputId}
+                            type="text"
+                            inputMode="text"
+                            autoComplete="off"
+                            spellCheck={false}
+                            value={checkFieldValues[field]}
+                            onChange={(e) => handleCheckFieldChange(field, e.target.value)}
+                            placeholder={CHECK_FIELD_PLACEHOLDERS[field]}
+                            aria-describedby={`${inputId}-hint`}
+                            className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                          <p id={`${inputId}-hint`} className="sr-only">
+                            Enter the {CHECK_FIELD_LABELS[field].toLowerCase()} exactly as printed on the card.
+                          </p>
+                        </div>
+                      );
+                    })}
+
+                    <div>
+                      <label
+                        htmlFor="printed-check-code"
+                        className="block text-xs font-medium text-zinc-300 mb-1"
+                      >
+                        Check code (printed near the QR)
+                      </label>
+                      <input
+                        id="printed-check-code"
+                        ref={checkCodeInputRef}
+                        type="text"
+                        inputMode="text"
+                        autoComplete="off"
+                        autoCapitalize="characters"
+                        spellCheck={false}
+                        value={enteredCheckCode}
+                        onChange={(e) => handleCheckCodeChange(e.target.value)}
+                        placeholder="e.g. 7K2M9Q"
+                        aria-describedby="printed-check-code-hint"
+                        className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-700 text-sm font-mono tracking-widest text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                      <p id="printed-check-code-hint" className="text-xs text-zinc-500 mt-1">
+                        Case-insensitive. Spaces and dashes are ignored.
+                      </p>
+                    </div>
+                  </div>
+
+                  {ocrAvailable && (
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        onClick={handleOcrCapture}
+                        disabled={ocrBusy}
+                        className="w-full py-2 px-4 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 text-zinc-200 rounded-lg font-medium text-xs"
+                      >
+                        {ocrBusy ? "Reading card…" : "Assist with camera (OCR)"}
+                      </button>
+                      {ocrMessage && (
+                        <p role="status" className="text-xs text-zinc-400 mt-2">
+                          {ocrMessage}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleVerifyPrintedCard}
+                    className="mt-3 w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium text-sm"
+                  >
+                    Check code
+                  </button>
+
+                  <div aria-live="polite" className="mt-3">
+                    {checkStatus === "pass" && (
+                      <p className="text-sm text-emerald-400 font-medium">
+                        Check code matches. The printed fields appear unaltered since printing.
+                      </p>
+                    )}
+                    {checkStatus === "fail" && (
+                      <p className="text-sm text-red-400 font-medium">
+                        Check code does NOT match. The printed fields may have been altered — do not rely on this card.
+                      </p>
+                    )}
+                    {checkStatus === "incomplete" && (
+                      <p className="text-sm text-amber-400 font-medium">
+                        Please fill in all fields and the check code.
+                      </p>
+                    )}
+                    {checkStatus === "error" && (
+                      <p className="text-sm text-amber-400 font-medium">
+                        Unable to compute the check code on this device.
+                      </p>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-zinc-500 mt-3">
+                    A matching code only shows that the printed fields were not altered since printing. It does not prove the card is genuine, nor that the patient is who the card says. Always confirm identity through other means.
+                  </p>
+                </section>
+              )}
             </div>
           ) : (
             <div>
