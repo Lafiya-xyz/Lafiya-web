@@ -1,9 +1,17 @@
 import { NextResponse } from "next/server";
 import { STEP_UP_REQUIRED } from "@/lib/auth/assurance";
+import {
+  buildExportBundle,
+  buildIpsComposition,
+} from "@/lib/phi/export-bundle";
 import { exportMyProfileData } from "../actions";
 
 // Schema documentation: docs/data-export-schema.md — update that file whenever
 // the shape returned by exportMyProfileData() changes.
+//
+// Issue #972: this route no longer reads or maps PHI columns directly. The
+// export-bundle projection in lib/phi/ is the only module allowed to touch
+// PHI tables; this route just serialises the projection it returns.
 export async function GET(request: Request) {
   const result = await exportMyProfileData();
 
@@ -26,15 +34,7 @@ export async function GET(request: Request) {
   const format = new URL(request.url).searchParams.get("format");
 
   if (format === "ips") {
-    const composition = buildIpsComposition(
-      result.data as Record<string, unknown>,
-    );
-    const bundle = {
-      resourceType: "Bundle",
-      type: "document",
-      timestamp: new Date().toISOString(),
-      entry: [{ resource: composition }],
-    };
+    const bundle = buildExportBundle(result.data, "ips");
 
     const ipsFilename = `lafiya-ips-${new Date()
       .toISOString()

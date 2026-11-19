@@ -16,6 +16,7 @@ import { NextResponse } from "next/server";
 import { runDispatchCycle, getOutboxLag } from "@/lib/outbox/dispatcher";
 import { logError } from "@/lib/logging/logger";
 import { recordJobSuccess } from "@/lib/jobs/schedule-health";
+import { OUTBOX_DISPATCH_JOB } from "@/lib/jobs/manifest";
 
 export const runtime = "nodejs";
 // Disable static caching — this is a mutating internal API.
@@ -39,8 +40,14 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     const dispatched = await runDispatchCycle();
     const lag = await getOutboxLag();
-    await recordJobSuccess("outbox-dispatch");
-    return NextResponse.json({ dispatched, ...lag });
+    await recordJobSuccess(OUTBOX_DISPATCH_JOB.id);
+    return NextResponse.json({
+      dispatched,
+      ...lag,
+      // Surface the scheduled jobs this dispatch cycle is responsible for so
+      // operators can confirm the AsyncAPI catalog job (#971) is wired up.
+      jobs: OUTBOX_DISPATCH_JOB.scheduledJobs.map((job) => job.id),
+    });
   } catch (err) {
     logError("outbox dispatch route: unhandled error", err);
     return NextResponse.json({ error: "Internal error." }, { status: 500 });

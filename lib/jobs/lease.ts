@@ -5,6 +5,24 @@ import { logInfo, logWarn } from "@/lib/logging/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
+ * Durable workflow activity executor (Issue #970).
+ *
+ * The durable engine (see `lib/chw-protocol/workflow.ts`) drives long-running
+ * workflows step by step. Each step is executed as an *activity* under the
+ * same lease that gates the legacy cron jobs, so a function restart mid-flight
+ * releases the lease (or lets it expire) and the next invocation takes it over
+ * and resumes the workflow from its last checkpoint.
+ */
+export interface WorkflowActivityExecutor {
+  /**
+   * Execute the next activity of `workflowId` and return its result. The
+   * executor must be idempotent: the engine may re-run an activity after a
+   * takeover if the previous attempt did not checkpoint.
+   */
+  runActivity<T>(workflowId: string, activity: () => Promise<T>): Promise<T>;
+}
+
+/**
  * Leased job runner (Issue #694).
  *
  * Long-running jobs (payout indexing, verification indexing) acquire a
@@ -168,3 +186,33 @@ export async function runWithLease<T>(
 /** Production runner backed by `public.job_leases`. */
 export const leasedRunner: LeaseRunner = (jobName, work) =>
   runWithLease(jobName, work);
+
+export interface RunWorkflowWithLeaseOptions extends RunWithLeaseOptions {
+  /** Durable engine activity executor; defaults to running the activity inline. */
+  executor?: WorkflowActivityExecutor;
+}
+
+/**
+ * Drive a durable workflow activity under the job lease (Issue #970).
+ *
+ * Acquires the lease for `jobName`, delegates the activity to the workflow
+ * engine's executor, and releases the lease on completion or crash. If the
+ * function restarts mid-flight the lease is either released by the `finally`
+ * block or expires after its TTL; the next invocation logs a
+ * `job_lease.takeover` and resumes the workflow from its last checkpoint.
+ */
+export function runWorkflowWithLease<T>(
+  jobName: string,
+  workflowId: string,
+  activity: () => Promise<T>,
+  { executor, ...leaseOptions }: RunWorkflowWithLeaseOptions = {},
+): Promise<T> {
+  return runWithLease(
+    jobName,
+    () =>
+      executor
+        ? executor.runActivity(workflowId, activity)
+        : activity(),
+    leaseOptions,
+  );
+}

@@ -2,6 +2,7 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import noWildcardPhiSelect from "./eslint-rules/no-wildcard-phi-select.js";
+import noDirectPhiTableAccess from "./eslint-rules/no-direct-phi-table-access.js";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -51,6 +52,38 @@ const eslintConfig = defineConfig([
         "error",
         {
           phiTables: ["profiles", "record_revisions", "profile_secrets"],
+        },
+      ],
+    },
+  },
+  {
+    // Issue #972: lib/phi/ is the only module allowed to read PHI columns.
+    // Every other module must consume purpose-specific projections exported
+    // from lib/phi/ instead of querying PHI-bearing tables directly. This
+    // rule flags direct table access (e.g. supabase.from("profiles"),
+    // .from("record_revisions"), .from("verification_requests")) outside
+    // lib/phi/**, keeping the PHI blast radius to a single reviewable
+    // boundary. The table list should be kept in sync with the RoPA
+    // annotations and the no-wildcard-phi-select rule above.
+    files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
+    plugins: {
+      local: {
+        rules: {
+          "no-direct-phi-table-access": noDirectPhiTableAccess,
+        },
+      },
+    },
+    rules: {
+      "local/no-direct-phi-table-access": [
+        "error",
+        {
+          phiTables: [
+            "profiles",
+            "record_revisions",
+            "profile_secrets",
+            "verification_requests",
+          ],
+          allowedPaths: ["lib/phi/"],
         },
       ],
     },

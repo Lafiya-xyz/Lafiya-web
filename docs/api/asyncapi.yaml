@@ -1,0 +1,581 @@
+asyncapi: 3.0.0
+info:
+  title: CareBridge Domain Event Catalog
+  version: 1.0.0
+  description: |
+    Human-readable catalog of domain events emitted through the transactional
+    outbox and delivered to partner webhooks.
+
+    This document is generated from the event schema registry
+    (`lib/outbox/types.ts` and `lib/notifications/events.ts`) and is validated
+    in CI. Every event type emitted by the platform MUST appear here; an
+    undocumented event type fails the build.
+
+    ## PHI classification
+    Each payload field carries an `x-phi-classification` extension:
+
+    - `none` — not personal or health information.
+    - `identifier` — an identifier that can be linked to a person (e.g. ids).
+    - `phi` — protected health information; must be encrypted at rest and in
+      transit, and access must be audited.
+    - `sensitive` — sensitive personal data that is not strictly PHI but
+      requires restricted handling.
+
+    Consumers receiving `phi` or `sensitive` fields must enforce the
+    corresponding data-handling controls.
+  contact:
+    name: CareBridge Platform Team
+    url: https://carebridge.example.com
+  license:
+    name: Proprietary
+    url: https://carebridge.example.com/terms
+
+defaultContentType: application/json
+
+servers:
+  outbox:
+    host: internal-outbox
+    protocol: kafka
+    description: |
+      Internal transactional outbox topic. Events are written to the outbox in
+      the same transaction as the domain change and relayed to consumers.
+  partnerWebhook:
+    host: partners.example.com
+    protocol: https
+    description: |
+      Partner webhook delivery endpoint. Payloads are signed and delivered with
+      at-least-once semantics; consumers must be idempotent.
+
+channels:
+  appointment.created:
+    address: carebridge.appointments.created
+    title: Appointment Created
+    description: Emitted when a new appointment is scheduled.
+    messages:
+      AppointmentCreated:
+        $ref: '#/components/messages/AppointmentCreated'
+    bindings:
+      kafka:
+        topic: carebridge.appointments.created
+
+  appointment.cancelled:
+    address: carebridge.appointments.cancelled
+    title: Appointment Cancelled
+    description: Emitted when an appointment is cancelled.
+    messages:
+      AppointmentCancelled:
+        $ref: '#/components/messages/AppointmentCancelled'
+    bindings:
+      kafka:
+        topic: carebridge.appointments.cancelled
+
+  patient.created:
+    address: carebridge.patients.created
+    title: Patient Created
+    description: Emitted when a new patient record is created.
+    messages:
+      PatientCreated:
+        $ref: '#/components/messages/PatientCreated'
+    bindings:
+      kafka:
+        topic: carebridge.patients.created
+
+  patient.updated:
+    address: carebridge.patients.updated
+    title: Patient Updated
+    description: Emitted when a patient record is updated.
+    messages:
+      PatientUpdated:
+        $ref: '#/components/messages/PatientUpdated'
+    bindings:
+      kafka:
+        topic: carebridge.patients.updated
+
+  notification.requested:
+    address: carebridge.notifications.requested
+    title: Notification Requested
+    description: |
+      Emitted when a notification (email/SMS/push) is requested. Consumed by
+      the notification dispatcher.
+    messages:
+      NotificationRequested:
+        $ref: '#/components/messages/NotificationRequested'
+    bindings:
+      kafka:
+        topic: carebridge.notifications.requested
+
+  notification.delivered:
+    address: carebridge.notifications.delivered
+    title: Notification Delivered
+    description: Emitted when a notification has been successfully delivered.
+    messages:
+      NotificationDelivered:
+        $ref: '#/components/messages/NotificationDelivered'
+    bindings:
+      kafka:
+        topic: carebridge.notifications.delivered
+
+  payout.initiated:
+    address: carebridge.payouts.initiated
+    title: Payout Initiated
+    description: Emitted when a payout to a provider is initiated.
+    messages:
+      PayoutInitiated:
+        $ref: '#/components/messages/PayoutInitiated'
+    bindings:
+      kafka:
+        topic: carebridge.payouts.initiated
+
+  payout.completed:
+    address: carebridge.payouts.completed
+    title: Payout Completed
+    description: Emitted when a payout has settled.
+    messages:
+      PayoutCompleted:
+        $ref: '#/components/messages/PayoutCompleted'
+    bindings:
+      kafka:
+        topic: carebridge.payouts.completed
+
+operations:
+  onAppointmentCreated:
+    action: send
+    channel:
+      $ref: '#/channels/appointment.created'
+    summary: Publish appointment.created to the outbox.
+    traits:
+      - $ref: '#/components/operationTraits/outboxProducer'
+
+  onAppointmentCancelled:
+    action: send
+    channel:
+      $ref: '#/channels/appointment.cancelled'
+    summary: Publish appointment.cancelled to the outbox.
+    traits:
+      - $ref: '#/components/operationTraits/outboxProducer'
+
+  onPatientCreated:
+    action: send
+    channel:
+      $ref: '#/channels/patient.created'
+    summary: Publish patient.created to the outbox.
+    traits:
+      - $ref: '#/components/operationTraits/outboxProducer'
+
+  onPatientUpdated:
+    action: send
+    channel:
+      $ref: '#/channels/patient.updated'
+    summary: Publish patient.updated to the outbox.
+    traits:
+      - $ref: '#/components/operationTraits/outboxProducer'
+
+  onNotificationRequested:
+    action: send
+    channel:
+      $ref: '#/channels/notification.requested'
+    summary: Publish notification.requested to the outbox.
+    traits:
+      - $ref: '#/components/operationTraits/outboxProducer'
+
+  receiveNotificationRequested:
+    action: receive
+    channel:
+      $ref: '#/channels/notification.requested'
+    summary: Notification dispatcher consumes notification.requested.
+    traits:
+      - $ref: '#/components/operationTraits/notificationDispatcherConsumer'
+
+  onNotificationDelivered:
+    action: send
+    channel:
+      $ref: '#/channels/notification.delivered'
+    summary: Publish notification.delivered to the outbox.
+    traits:
+      - $ref: '#/components/operationTraits/outboxProducer'
+
+  onPayoutInitiated:
+    action: send
+    channel:
+      $ref: '#/channels/payout.initiated'
+    summary: Publish payout.initiated to the outbox.
+    traits:
+      - $ref: '#/components/operationTraits/outboxProducer'
+
+  onPayoutCompleted:
+    action: send
+    channel:
+      $ref: '#/channels/payout.completed'
+    summary: Publish payout.completed to the outbox.
+    traits:
+      - $ref: '#/components/operationTraits/outboxProducer'
+
+  receivePartnerWebhook:
+    action: receive
+    channel:
+      $ref: '#/channels/appointment.created'
+    summary: Partner webhook consumer receives appointment events.
+    traits:
+      - $ref: '#/components/operationTraits/partnerWebhookConsumer'
+
+components:
+  operationTraits:
+    outboxProducer:
+      description: |
+        Producer writes the event to the transactional outbox within the same
+        database transaction as the domain change.
+    notificationDispatcherConsumer:
+      description: |
+        Consumer is the internal notification dispatcher service.
+    partnerWebhookConsumer:
+      description: |
+        Consumer is an external partner receiving signed webhook deliveries.
+        Must be idempotent and verify signatures.
+
+  messages:
+    AppointmentCreated:
+      name: AppointmentCreated
+      title: Appointment Created
+      summary: A new appointment was scheduled.
+      contentType: application/json
+      traits:
+        - $ref: '#/components/messageTraits/eventEnvelope'
+      payload:
+        $ref: '#/components/schemas/AppointmentCreatedPayload'
+
+    AppointmentCancelled:
+      name: AppointmentCancelled
+      title: Appointment Cancelled
+      summary: An appointment was cancelled.
+      contentType: application/json
+      traits:
+        - $ref: '#/components/messageTraits/eventEnvelope'
+      payload:
+        $ref: '#/components/schemas/AppointmentCancelledPayload'
+
+    PatientCreated:
+      name: PatientCreated
+      title: Patient Created
+      summary: A new patient record was created.
+      contentType: application/json
+      traits:
+        - $ref: '#/components/messageTraits/eventEnvelope'
+      payload:
+        $ref: '#/components/schemas/PatientCreatedPayload'
+
+    PatientUpdated:
+      name: PatientUpdated
+      title: Patient Updated
+      summary: A patient record was updated.
+      contentType: application/json
+      traits:
+        - $ref: '#/components/messageTraits/eventEnvelope'
+      payload:
+        $ref: '#/components/schemas/PatientUpdatedPayload'
+
+    NotificationRequested:
+      name: NotificationRequested
+      title: Notification Requested
+      summary: A notification was requested for delivery.
+      contentType: application/json
+      traits:
+        - $ref: '#/components/messageTraits/eventEnvelope'
+      payload:
+        $ref: '#/components/schemas/NotificationRequestedPayload'
+
+    NotificationDelivered:
+      name: NotificationDelivered
+      title: Notification Delivered
+      summary: A notification was successfully delivered.
+      contentType: application/json
+      traits:
+        - $ref: '#/components/messageTraits/eventEnvelope'
+      payload:
+        $ref: '#/components/schemas/NotificationDeliveredPayload'
+
+    PayoutInitiated:
+      name: PayoutInitiated
+      title: Payout Initiated
+      summary: A payout to a provider was initiated.
+      contentType: application/json
+      traits:
+        - $ref: '#/components/messageTraits/eventEnvelope'
+      payload:
+        $ref: '#/components/schemas/PayoutInitiatedPayload'
+
+    PayoutCompleted:
+      name: PayoutCompleted
+      title: Payout Completed
+      summary: A payout was settled.
+      contentType: application/json
+      traits:
+        - $ref: '#/components/messageTraits/eventEnvelope'
+      payload:
+        $ref: '#/components/schemas/PayoutCompletedPayload'
+
+  messageTraits:
+    eventEnvelope:
+      headers:
+        type: object
+        properties:
+          id:
+            type: string
+            format: uuid
+            description: Unique event id (idempotency key).
+          type:
+            type: string
+            description: Event type discriminator.
+          source:
+            type: string
+            description: Producing service.
+          time:
+            type: string
+            format: date-time
+            description: Event creation timestamp.
+          traceparent:
+            type: string
+            description: W3C trace context for distributed tracing.
+        required:
+          - id
+          - type
+          - source
+          - time
+
+  schemas:
+    EventEnvelope:
+      type: object
+      description: Common envelope shared by all domain events.
+      properties:
+        id:
+          type: string
+          format: uuid
+          x-phi-classification: none
+        type:
+          type: string
+          x-phi-classification: none
+        source:
+          type: string
+          x-phi-classification: none
+        time:
+          type: string
+          format: date-time
+          x-phi-classification: none
+        data:
+          type: object
+          x-phi-classification: none
+      required:
+        - id
+        - type
+        - source
+        - time
+        - data
+
+    AppointmentCreatedPayload:
+      type: object
+      description: Payload for appointment.created.
+      properties:
+        appointmentId:
+          type: string
+          format: uuid
+          x-phi-classification: identifier
+        patientId:
+          type: string
+          format: uuid
+          x-phi-classification: identifier
+        providerId:
+          type: string
+          format: uuid
+          x-phi-classification: identifier
+        scheduledAt:
+          type: string
+          format: date-time
+          x-phi-classification: phi
+        reason:
+          type: string
+          x-phi-classification: phi
+      required:
+        - appointmentId
+        - patientId
+        - providerId
+        - scheduledAt
+
+    AppointmentCancelledPayload:
+      type: object
+      description: Payload for appointment.cancelled.
+      properties:
+        appointmentId:
+          type: string
+          format: uuid
+          x-phi-classification: identifier
+        cancelledBy:
+          type: string
+          x-phi-classification: identifier
+        cancelledAt:
+          type: string
+          format: date-time
+          x-phi-classification: none
+        reason:
+          type: string
+          x-phi-classification: phi
+      required:
+        - appointmentId
+        - cancelledAt
+
+    PatientCreatedPayload:
+      type: object
+      description: Payload for patient.created.
+      properties:
+        patientId:
+          type: string
+          format: uuid
+          x-phi-classification: identifier
+        firstName:
+          type: string
+          x-phi-classification: phi
+        lastName:
+          type: string
+          x-phi-classification: phi
+        dateOfBirth:
+          type: string
+          format: date
+          x-phi-classification: phi
+        email:
+          type: string
+          format: email
+          x-phi-classification: sensitive
+        phone:
+          type: string
+          x-phi-classification: sensitive
+      required:
+        - patientId
+
+    PatientUpdatedPayload:
+      type: object
+      description: Payload for patient.updated.
+      properties:
+        patientId:
+          type: string
+          format: uuid
+          x-phi-classification: identifier
+        changedFields:
+          type: array
+          items:
+            type: string
+          x-phi-classification: none
+        updatedAt:
+          type: string
+          format: date-time
+          x-phi-classification: none
+      required:
+        - patientId
+        - changedFields
+        - updatedAt
+
+    NotificationRequestedPayload:
+      type: object
+      description: Payload for notification.requested.
+      properties:
+        notificationId:
+          type: string
+          format: uuid
+          x-phi-classification: identifier
+        recipientId:
+          type: string
+          format: uuid
+          x-phi-classification: identifier
+        channel:
+          type: string
+          enum:
+            - email
+            - sms
+            - push
+          x-phi-classification: none
+        template:
+          type: string
+          x-phi-classification: none
+        variables:
+          type: object
+          additionalProperties: true
+          x-phi-classification: phi
+      required:
+        - notificationId
+        - recipientId
+        - channel
+        - template
+
+    NotificationDeliveredPayload:
+      type: object
+      description: Payload for notification.delivered.
+      properties:
+        notificationId:
+          type: string
+          format: uuid
+          x-phi-classification: identifier
+        deliveredAt:
+          type: string
+          format: date-time
+          x-phi-classification: none
+        channel:
+          type: string
+          enum:
+            - email
+            - sms
+            - push
+          x-phi-classification: none
+      required:
+        - notificationId
+        - deliveredAt
+        - channel
+
+    PayoutInitiatedPayload:
+      type: object
+      description: Payload for payout.initiated.
+      properties:
+        payoutId:
+          type: string
+          format: uuid
+          x-phi-classification: identifier
+        providerId:
+          type: string
+          format: uuid
+          x-phi-classification: identifier
+        amountCents:
+          type: integer
+          minimum: 0
+          x-phi-classification: none
+        currency:
+          type: string
+          x-phi-classification: none
+        initiatedAt:
+          type: string
+          format: date-time
+          x-phi-classification: none
+      required:
+        - payoutId
+        - providerId
+        - amountCents
+        - currency
+        - initiatedAt
+
+    PayoutCompletedPayload:
+      type: object
+      description: Payload for payout.completed.
+      properties:
+        payoutId:
+          type: string
+          format: uuid
+          x-phi-classification: identifier
+        settledAt:
+          type: string
+          format: date-time
+          x-phi-classification: none
+        status:
+          type: string
+          enum:
+            - completed
+            - failed
+          x-phi-classification: none
+      required:
+        - payoutId
+        - settledAt
+        - status

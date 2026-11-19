@@ -34,6 +34,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logError, logInfo, logWarn } from "@/lib/logging/logger";
 import { invalidateAttestationCache } from "@/lib/stellar/attestation-cache-invalidation";
 import { parseInboxPayload } from "@/lib/notifications/inbox";
+import {
+  assertDocumentedEvent,
+  isDocumentedEvent,
+} from "@/lib/events/registry";
+import {
+  isWorkflowOwnedStep,
+  signalWorkflowStep,
+} from "@/lib/chw-protocol/workflow";
 import type { OutboxHandler, OutboxHandlerRegistry, OutboxRow } from "./types";
 import { upcastPayload, validateOutboxPayload } from "./types";
 
@@ -102,6 +110,17 @@ export const HANDLERS: OutboxHandlerRegistry = new Map<string, OutboxHandler>([
   ["user_notification:security_event", handleUserNotification],
 ]);
 
+/**
+ * Event types emitted by the built-in handlers above.  Each must be present
+ * in the event registry (and therefore in the generated AsyncAPI catalog,
+ * issue #971) with producer/consumer metadata.  Kept in sync with HANDLERS
+ * by the `outbox:handlers-documented` CI check.
+ */
+export const BUILT_IN_EVENT_TYPES = [
+  "record_revision:record_saved",
+  "user_notification:security_event",
+] as const;
+
 // ─── Dispatcher core ────────────────────────────────────────────────────────
 
 /**
@@ -143,6 +162,41 @@ export async function runDispatchCycle(
 
   for (const row of rows as OutboxRow[]) {
     const key = `${row.aggregate}:${row.event_type}`;
+
+    // Issue #971: reject event types that are not in the documented catalog.
+    // An undocumented type is a programming error, not a transient failure —
+    // acknowledge it so it does not clog the queue, but log loudly.
+    if (!isDocumentedEvent(key)) {
+      logError(
+        "outbox: undocumented event type — acknowledging (add it to the event registry)",
+        new Error(`undocumented event type: ${key}`),
+        { key, outbox_id: row.id },
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (admin as any).rpc("ack_outbox_row", { p_id: row.id });
+      continue;
+    }
+
+    // Issue #970: when a durable workflow owns this step, hand the event to
+    // the workflow engine instead of running the handler inline.  The
+    // workflow performs the (idempotent) activity and its own retries; the
+    // outbox row is acknowledged once the signal is accepted.
+    if (isWorkflowOwnedStep(key)) {
+      try {
+        await signalWorkflowStep(key, row);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (admin as any).rpc("ack_outbox_row", { p_id: row.id });
+        dispatched++;
+      } catch (err) {
+        logError("outbox: workflow signal failed — row will be retried", err, {
+          key,
+          outbox_id: row.id,
+          attempts: row.attempts,
+        });
+      }
+      continue;
+    }
+
     const handler = handlers.get(key);
 
     if (!handler) {
@@ -190,6 +244,9 @@ export function assertValidOutboxPayload(
   payload: Record<string, unknown>,
 ): void {
   const key = `${aggregate}:${event_type}`;
+  // Issue #971: every emitted event type must be documented in the registry
+  // (and thus the AsyncAPI catalog) before it can be written to the outbox.
+  assertDocumentedEvent(key);
   const result = validateOutboxPayload(key, payload);
   if (!result.ok) {
     throw new Error(
