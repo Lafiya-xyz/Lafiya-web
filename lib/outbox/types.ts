@@ -72,6 +72,106 @@ export function registerOutboxSchema(entry: OutboxSchemaEntry): void {
   OUTBOX_SCHEMA_REGISTRY.set(entry.key, entry);
 }
 
+// ─── Domain event catalog (issue #971) ──────────────────────────────────────
+
+/**
+ * Data classification for a single payload field. Drives the AsyncAPI
+ * `x-data-classification` extension and the PHI review checklist.
+ *
+ * - `public`     — safe to expose in partner webhooks and public docs.
+ * - `internal`   — non-PHI operational data; not for external consumers.
+ * - `pii`        — personally identifiable information (not health data).
+ * - `phi`        — protected health information; never leaves the trust
+ *                  boundary unredacted.
+ * - `secret`     — capability tokens, keys, commitment preimages.
+ */
+export type DataClassification =
+  | "public"
+  | "internal"
+  | "pii"
+  | "phi"
+  | "secret";
+
+/** Per-field classification, keyed by payload field name. */
+export type FieldClassification = Record<string, DataClassification>;
+
+/** A named producer or consumer of an event (service or subsystem). */
+export interface EventParticipant {
+  /** Stable identifier, e.g. `outbox-dispatcher`, `partner-webhooks`. */
+  id: string;
+  /** Human-readable description used in generated docs. */
+  description?: string;
+}
+
+/**
+ * Catalog metadata for one event type. This is the single source of truth
+ * consumed by the AsyncAPI generator (`scripts/generate-asyncapi.ts`) and the
+ * CI documentation check (`scripts/check-event-catalog.ts`).
+ */
+export interface EventCatalogEntry {
+  /** Event key, `${aggregate}:${event_type}` — must match the schema registry. */
+  key: string;
+  /** AsyncAPI channel name, e.g. `record_revision/record_saved`. */
+  channel: string;
+  /** Short human-readable summary of when the event is emitted. */
+  summary: string;
+  /** Service/subsystem that writes the event to the outbox. */
+  producer: EventParticipant;
+  /** Services/subsystems that consume the event. */
+  consumers: EventParticipant[];
+  /** Per-field PHI/PII classification for the current payload version. */
+  classification: FieldClassification;
+}
+
+/**
+ * The global event catalog: maps event key → catalog entry.
+ * Every key in `OUTBOX_SCHEMA_REGISTRY` must have a matching entry here;
+ * the CI check fails otherwise.
+ */
+export const EVENT_CATALOG = new Map<string, EventCatalogEntry>();
+
+/**
+ * Register catalog metadata for an event key. Call this next to
+ * `registerOutboxSchema` so the two registries stay in sync.
+ */
+export function registerEventCatalogEntry(entry: EventCatalogEntry): void {
+  EVENT_CATALOG.set(entry.key, entry);
+}
+
+/**
+ * Return the catalog entry for an event key, or `undefined` if the event is
+ * undocumented. Used by the AsyncAPI generator and the CI check.
+ */
+export function getEventCatalogEntry(
+  key: string,
+): EventCatalogEntry | undefined {
+  return EVENT_CATALOG.get(key);
+}
+
+/**
+ * List event keys that are emitted (present in the schema registry) but have
+ * no catalog entry. An empty array means the catalog is complete.
+ */
+export function findUndocumentedEventKeys(): string[] {
+  const undocumented: string[] = [];
+  for (const key of OUTBOX_SCHEMA_REGISTRY.keys()) {
+    if (!EVENT_CATALOG.has(key)) undocumented.push(key);
+  }
+  return undocumented.sort();
+}
+
+/**
+ * List catalog entries that reference an event key with no registered schema.
+ * An empty array means the catalog is consistent with the registry.
+ */
+export function findOrphanedCatalogKeys(): string[] {
+  const orphaned: string[] = [];
+  for (const key of EVENT_CATALOG.keys()) {
+    if (!OUTBOX_SCHEMA_REGISTRY.has(key)) orphaned.push(key);
+  }
+  return orphaned.sort();
+}
+
 // ─── Built-in schemas ────────────────────────────────────────────────────────
 
 /**
@@ -118,6 +218,32 @@ registerOutboxSchema({
       // No upcaster on the current version.
     },
   ],
+});
+
+registerEventCatalogEntry({
+  key: "record_revision:record_saved",
+  channel: "record_revision/record_saved",
+  summary:
+    "Emitted when a record revision is persisted; carries only opaque identifiers.",
+  producer: {
+    id: "record-revisions",
+    description: "Record revision write path (outbox producer).",
+  },
+  consumers: [
+    {
+      id: "outbox-dispatcher",
+      description: "Delivers the event to downstream handlers.",
+    },
+    {
+      id: "partner-webhooks",
+      description: "Forwards the event to subscribed partner webhooks.",
+    },
+  ],
+  classification: {
+    schema_version: "public",
+    commitment: "secret",
+    revision_id: "internal",
+  },
 });
 
 // ─── Upcast helpers ──────────────────────────────────────────────────────────

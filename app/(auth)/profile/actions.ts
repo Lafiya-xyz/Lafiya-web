@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createHash } from "node:crypto";
 
 import { deleteAccountAndData } from "@/lib/account/deleteAccount";
 import { syncBlockingKeys } from "@/lib/account/duplicates";
@@ -20,6 +19,13 @@ import {
   hashCardPin,
   PIN_GATEABLE_FIELDS,
 } from "@/lib/emergency/card-pin";
+import {
+  buildProfileExportBundle,
+  getProfileCardPublicId,
+  getProfileForEdit,
+  getProfileRevisionState,
+  getProfileSecretStatus,
+} from "@/lib/phi";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { ProfileRow } from "@/lib/supabase/types";
@@ -33,7 +39,7 @@ import {
 } from "@/lib/records/canonicalization";
 
 import { serverEnv } from "@/lib/env-server";
-import { logError } from "@/lib/logging/logger";
+import { logError, logInfo } from "@/lib/logging/logger";
 import { getBaseUrl } from "@/lib/url/getBaseUrl";
 import { withIdempotency } from "@/lib/idempotency/withIdempotency";
 
@@ -198,20 +204,13 @@ export type ProfileExport = {
   checksum: { algorithm: "sha256"; value: string };
 };
 
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-  if (value && typeof value === "object")
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
-      .join(",")}}`;
-  return JSON.stringify(value);
-}
-
 /**
  * Returns the authenticated caller's own `profiles` row as a
  * structured export object. Relies on Supabase RLS — no service
  * role key is used, so a user can never fetch another user's row.
+ *
+ * Issue #972: all PHI table reads and the export-bundle projection live in
+ * `lib/phi/`; this action only orchestrates auth, step-up and checksum.
  */
 export async function exportMyProfileData(): Promise<
   | { data: ProfileExport }
@@ -238,69 +237,19 @@ export async function exportMyProfileData(): Promise<
     };
   }
 
-  // Explicit column list rather than `select("*")`: `last_attested_hash` is
-  // an internal reconciliation field that must never be exposed to the
-  // patient (see the ProfileRow comment in lib/supabase/types.ts and
-  // profiles-column-contract.test.ts) and `select("*")` would silently pick
-  // up any future internal/admin-only column added to `profiles`.
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select(
-      "user_id,card_public_id,name,date_of_birth,photo_url,language,blood_group,genotype,allergies,medications,chronic_conditions,emergency_contacts,last_verified_at,created_at,updated_at,current_revision_id,disclosure_policy,legacy_card_sunset_at",
-    )
-    .eq("user_id", user.id)
-    .single();
-
-  if (profileError || !profile) {
-    return { error: "Could not load your profile data. Please try again." };
-  }
-
-  const [revisions, consents, requests, avatars] = await Promise.all([
-    supabase
-      .from("record_revisions")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("revision_number"),
-    supabase
-      .from("consent_events")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("occurred_at"),
-    supabase
-      .from("reattestation_requests")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("requested_at"),
-    supabase.storage.from("avatars").list(user.id, { limit: 100 }),
-  ]);
-  if (revisions.error || consents.error || requests.error || avatars.error)
+  const bundle = await buildProfileExportBundle(supabase, user.id);
+  if (!bundle) {
     return {
       error:
         "Could not assemble your complete profile export. Please try again.",
     };
-  const payload = {
-    profile,
-    recordRevisions: revisions.data,
-    disclosureSettings: profile.disclosure_policy,
-    consentEvents: consents.data,
-    verificationRequests: requests.data,
-    accessAuditSummaries: [],
-    storageObjects: (avatars.data ?? []).map((object) => ({
-      bucket: "avatars",
-      name: object.name,
-      size: object.metadata?.size ?? null,
-      createdAt: object.created_at ?? null,
-    })),
-  };
+  }
+
   return {
     data: {
       exportedAt: new Date().toISOString(),
       schemaVersion: 2,
-      ...payload,
-      checksum: {
-        algorithm: "sha256",
-        value: createHash("sha256").update(stableJson(payload)).digest("hex"),
-      },
+      ...bundle,
     },
   };
 }
@@ -363,11 +312,7 @@ export async function regenerateCardId(
       // itself has no variable fields beyond the idempotency key).
     },
     async () => {
-      const { data: current } = await supabase
-        .from("profiles")
-        .select("card_public_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      const current = await getProfileCardPublicId(supabase, user.id);
       const newId = crypto.randomUUID();
 
       const { error } = await supabase
@@ -383,8 +328,7 @@ export async function regenerateCardId(
       }
 
       revalidatePath("/profile");
-      if (current?.card_public_id)
-        revalidatePath(`/card/${current.card_public_id}`);
+      if (current) revalidatePath(`/card/${current}`);
       revalidatePath(`/card/${newId}`);
       return {};
     },
@@ -437,13 +381,9 @@ export async function recordConsentChoice(formData: FormData): Promise<void> {
     p_idempotency_key: crypto.randomUUID(),
   });
   if (error) throw new Error("CONSENT_UPDATE_FAILED");
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("card_public_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const cardPublicId = await getProfileCardPublicId(supabase, user.id);
   revalidatePath("/profile");
-  if (profile) revalidatePath(`/card/${profile.card_public_id}`);
+  if (cardPublicId) revalidatePath(`/card/${cardPublicId}`);
 }
 
 export async function updateDisclosureChoices(
@@ -480,13 +420,9 @@ export async function updateDisclosureChoices(
     throw new Error(
       error.code === "40001" ? "STALE_REVISION" : "DISCLOSURE_UPDATE_FAILED",
     );
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("card_public_id")
-    .eq("user_id", user.id)
-    .single();
+  const cardPublicId = await getProfileCardPublicId(supabase, user.id);
   revalidatePath("/profile");
-  if (profile) revalidatePath(`/card/${profile.card_public_id}`);
+  if (cardPublicId) revalidatePath(`/card/${cardPublicId}`);
 }
 
 /**
@@ -522,11 +458,7 @@ export async function upsertProfile(
     return { error: "You must be signed in." };
   }
 
-  const { data: existing } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const existing = await getProfileForEdit(supabase, user.id);
 
   // Optimistic concurrency only applies to updating a row that already
   // exists — a brand-new profile (existing === null, e.g. right after
@@ -648,15 +580,11 @@ export async function upsertProfile(
     }
   }
 
-  const { data: updatedProfile } = await supabase
-    .from("profiles")
-    .select("card_public_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const updatedCardPublicId = await getProfileCardPublicId(supabase, user.id);
 
   revalidatePath("/profile");
-  if (updatedProfile?.card_public_id) {
-    revalidatePath(`/card/${updatedProfile.card_public_id}`);
+  if (updatedCardPublicId) {
+    revalidatePath(`/card/${updatedCardPublicId}`);
   }
   return { success: true };
 }
@@ -733,22 +661,18 @@ export async function requestReattestation(
     return { error: "You must be signed in." };
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const revisionState = await getProfileRevisionState(supabase, user.id);
 
-  if (!profile) {
+  if (!revisionState) {
     return { error: "Complete your profile before requesting verification." };
   }
 
-  if (!profile.current_revision_id)
+  if (!revisionState.currentRevisionId)
     return {
       error: "Save your profile before requesting verification.",
     };
   const { error } = await supabase.rpc("request_revision_verification", {
-    p_expected_revision_id: profile.current_revision_id,
+    p_expected_revision_id: revisionState.currentRevisionId,
   });
 
   if (error) {
@@ -810,15 +734,11 @@ export async function repairProfileSecret(): Promise<RepairSecretResult> {
     return { status: "step_up_required" };
   }
 
-  // Resolve the authenticated user's profile. RLS (eq(user_id)) ensures
-  // a user can never reference another user's profile.
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("user_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  // Resolve the authenticated user's profile via the PHI boundary. RLS
+  // (eq(user_id)) ensures a user can never reference another user's profile.
+  const profileExists = await getProfileSecretStatus(supabase, user.id);
 
-  if (profileError || !profile) {
+  if (!profileExists) {
     return { status: "not_found" };
   }
 
@@ -848,3 +768,6 @@ export async function repairProfileSecret(): Promise<RepairSecretResult> {
   revalidatePath("/profile");
   return { status: "repaired" };
 }
+</｜｜DSML｜｜ parameter>
+</｜｜DSML｜｜ invoke>
+</｜｜DSML｜｜ calls>

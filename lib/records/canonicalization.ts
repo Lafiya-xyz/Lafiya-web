@@ -6,7 +6,6 @@ import type {
   BloodGroup,
   EmergencyContact,
   Genotype,
-  ProfileRow,
 } from "@/lib/supabase/types";
 
 export const RECORD_SCHEMA_VERSION = 1 as const;
@@ -121,20 +120,14 @@ export function computeRevisionCommitment(
     .digest("hex");
 }
 
+/**
+ * @deprecated PHI columns must only be read inside `lib/phi/`. Obtain an
+ * `EmergencyRecordData` from the `lib/phi/` emergency-envelope projection and
+ * pass it to `normalizeEmergencyRecord`/`canonicalizeEmergencyRecord` instead.
+ * This helper is retained only for the `lib/phi/` projection implementation.
+ */
 export function profileToEmergencyRecord(
-  profile: Pick<
-    ProfileRow,
-    | "name"
-    | "date_of_birth"
-    | "photo_url"
-    | "language"
-    | "blood_group"
-    | "genotype"
-    | "allergies"
-    | "medications"
-    | "chronic_conditions"
-    | "emergency_contacts"
-  >,
+  profile: EmergencyRecordData,
 ): EmergencyRecordData {
   return normalizeEmergencyRecord(profile);
 }

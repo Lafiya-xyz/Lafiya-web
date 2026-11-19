@@ -16,10 +16,21 @@
  * budget) before revealing anything, exactly like the QR path.
  *
  * See docs/wallet-passes.md for the full design and current status.
+ *
+ * ## PHI boundary (issue #972)
+ * Pass content is a *projection* of the `lib/phi/` pass-content boundary
+ * (`lib/phi/projections/passContent.ts`), which is the only place allowed
+ * to touch PHI tables. That projection deliberately emits no
+ * patient-derived fields, so this module never reads PHI directly — it
+ * only consumes the projection's non-PHI output and re-validates it.
  */
 import "server-only";
 
 import { digestCapability } from "@/lib/emergency/capability";
+import {
+  projectPassContent,
+  type PassContentProjection,
+} from "@/lib/phi/projections/passContent";
 
 /** Must resolve under the public capability-share route, never the legacy
  * permanent `/card/[id]` route — passes are meant to be revocable the same
@@ -75,11 +86,18 @@ export interface WalletPassContent {
 export function buildWalletPassContent(capabilityUrl: string): WalletPassContent {
   assertValidCapabilityUrl(capabilityUrl);
   const token = capabilityUrl.slice(capabilityUrl.lastIndexOf("/") + 1);
-  return {
-    organizationName: "Lafiya",
-    description: "Medical information: scan",
+  const projection: PassContentProjection = projectPassContent({
     capabilityUrl,
-    serialNumber: digestCapability(token),
+    tokenDigest: digestCapability(token),
+  });
+  // The projection is the PHI boundary; re-assert the no-PHI contract here
+  // so a future change to the projection cannot silently leak into a pass.
+  assertValidCapabilityUrl(projection.capabilityUrl);
+  return {
+    organizationName: projection.organizationName,
+    description: projection.description,
+    capabilityUrl: projection.capabilityUrl,
+    serialNumber: projection.serialNumber,
   };
 }
 
