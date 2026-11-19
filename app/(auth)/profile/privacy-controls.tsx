@@ -1,9 +1,17 @@
 import { PIN_GATEABLE_FIELDS } from "@/lib/emergency/card-pin";
 import { formatDateTime } from "@/lib/format/datetime";
 import { buildEmergencyContactMessage } from "@/lib/emergency/notify-contacts";
-import type { ConsentEventRow, DisclosurePolicy } from "@/lib/supabase/types";
+import type {
+  ConsentEventRow,
+  DisclosurePolicy,
+  EmergencyContactRow,
+} from "@/lib/supabase/types";
 
-import { recordConsentChoice, updateDisclosureChoices } from "./actions";
+import {
+  enableSafetyMode,
+  recordConsentChoice,
+  updateDisclosureChoices,
+} from "./actions";
 
 const purposes = [
   ["emergency_public_disclosure", "Public emergency card"],
@@ -59,14 +67,29 @@ const clinicalDisclosureFields = [
   },
 ] as const;
 
+/** Issue #977: fields hidden from the public card when safety mode is on.
+ * Kept in sync with the server action's SAFETY_MODE_HIDDEN_FIELDS. */
+const safetyModeHiddenFields = [
+  "photo_url",
+  "blood_group",
+  "genotype",
+  "chronic_conditions",
+  "emergency_contacts",
+  "advance_directives",
+  "implanted_devices",
+  "transfusion_restrictions",
+] as const;
+
 export function PrivacyControls({
   revisionId,
   policy,
   events,
+  emergencyContacts = [],
 }: {
   revisionId: string;
   policy: DisclosurePolicy;
   events: ConsentEventRow[];
+  emergencyContacts?: Pick<EmergencyContactRow, "id" | "name">[];
 }) {
   const latest = new Map<string, ConsentEventRow>();
   for (const event of events)
@@ -190,6 +213,67 @@ export function PrivacyControls({
             </li>
           ))}
         </ol>
+      </div>
+      <div
+        data-testid="safety-mode"
+        className="flex flex-col gap-3 rounded-lg border border-zinc-300 p-4 dark:border-zinc-700"
+      >
+        <div>
+          <h3 className="font-medium">Quick privacy lock</h3>
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            Use this if someone else may be viewing your phone or your card.
+            It hides sensitive details from your public card, signs out other
+            devices, and pauses messages to the contacts you select. It does
+            not change your medical record.
+          </p>
+        </div>
+        <form
+          action={enableSafetyMode}
+          data-testid="safety-mode-form"
+          className="flex flex-col gap-3"
+        >
+          <input type="hidden" name="expectedRevisionId" value={revisionId} />
+          <fieldset>
+            <legend className="font-medium">
+              Details to hide from the public card
+            </legend>
+            <ul className="mt-2 grid gap-1 text-sm sm:grid-cols-2">
+              {safetyModeHiddenFields.map((field) => (
+                <li key={field}>{field.replaceAll("_", " ")}</li>
+              ))}
+            </ul>
+          </fieldset>
+          <fieldset>
+            <legend className="font-medium">
+              Pause messages to these contacts
+            </legend>
+            {emergencyContacts.length === 0 ? (
+              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                No contacts to pause.
+              </p>
+            ) : (
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {emergencyContacts.map((contact) => (
+                  <label key={contact.id} className="flex gap-2">
+                    <input
+                      type="checkbox"
+                      name={`pause:${contact.id}`}
+                      defaultChecked
+                      className="focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 dark:focus:ring-zinc-600"
+                    />
+                    <span>{contact.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </fieldset>
+          <button
+            className="min-h-11 self-start rounded-full bg-zinc-950 px-5 py-2 text-white focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:bg-zinc-50 dark:text-zinc-950 dark:focus:ring-zinc-600"
+            type="submit"
+          >
+            Apply privacy lock
+          </button>
+        </form>
       </div>
     </section>
   );
