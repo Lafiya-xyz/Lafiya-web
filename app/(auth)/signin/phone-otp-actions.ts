@@ -36,8 +36,14 @@ import type { CountryCode } from "libphonenumber-js";
 
 import { checkAndIncrementFrequency } from "@/lib/frequency-limit";
 import { getClientIp } from "@/lib/rate-limit";
-import { logError } from "@/lib/logging/logger";
+import { logError, logInfo } from "@/lib/logging/logger";
 import { createClient } from "@/lib/supabase/server";
+import {
+  evaluateSimSwapRisk,
+  hashPhoneForLogs,
+  SIM_SWAP_BLOCK_MESSAGE,
+} from "@/lib/account/sim-swap";
+import { notifySimSwapBlocked } from "@/lib/notifications/routing";
 
 // --- Throttle constants ---
 
@@ -165,6 +171,21 @@ export async function sendPhoneOtp(
     };
   }
 
+  // Issue #968: SIM-swap risk check before trusting phone OTP.
+  // Fail-open on send: a provider outage must not lock patients out of
+  // requesting a code. The verify step re-checks and fails closed there.
+  const simSwap = await evaluateSimSwapRisk(e164, { flow: "signin-send" });
+  if (simSwap.recentSwap) {
+    logInfo("SIM-swap detected during OTP send; blocking OTP-only sign-in", {
+      route: "/signin (phone-otp sendPhoneOtp)",
+      phoneHash: hashPhoneForLogs(e164),
+      swapAgeHours: simSwap.swapAgeHours,
+      decision: "block",
+    });
+    await notifySimSwapBlocked({ phoneHash: hashPhoneForLogs(e164), flow: "signin" });
+    return { error: SIM_SWAP_BLOCK_MESSAGE };
+  }
+
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithOtp({
     phone: e164,
@@ -204,6 +225,22 @@ export async function verifyPhoneOtp(
     return {
       error: `Too many attempts. Please try again in ${freq.retryAfterSeconds} seconds.`,
     };
+  }
+
+  // Issue #968: SIM-swap risk check before trusting phone OTP.
+  // Fail-closed on verify: if the provider is unavailable we cannot rule out
+  // a recent swap, so we refuse OTP-only sign-in and require step-up.
+  const simSwap = await evaluateSimSwapRisk(e164, { flow: "signin-verify" });
+  if (simSwap.recentSwap || simSwap.providerUnavailable) {
+    logInfo("SIM-swap risk blocked OTP verify; step-up required", {
+      route: "/signin (phone-otp verifyPhoneOtp)",
+      phoneHash: hashPhoneForLogs(e164),
+      swapAgeHours: simSwap.swapAgeHours,
+      providerUnavailable: simSwap.providerUnavailable,
+      decision: "block",
+    });
+    await notifySimSwapBlocked({ phoneHash: hashPhoneForLogs(e164), flow: "signin" });
+    return { error: SIM_SWAP_BLOCK_MESSAGE };
   }
 
   const supabase = await createClient();

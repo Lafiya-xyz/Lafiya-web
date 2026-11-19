@@ -5,6 +5,7 @@ import {
   getRpcResolutionStatus,
   getRuntimeConfig,
   isPrivateAddress,
+  resolveRuntimeConfig,
   verifyRpcHostResolution,
 } from "./runtime-config";
 
@@ -48,6 +49,51 @@ function productionEnv(overrides: EnvOverrides = {}): NodeJS.ProcessEnv {
     ...overrides,
   });
 }
+
+describe("country packs (#969)", () => {
+  it("defaults to the Nigeria pack when no country is configured", () => {
+    const config = resolveRuntimeConfig(baseEnv);
+    expect(config.countryPack.id).toBe("NG");
+    expect(config.countryPack.phone.countryCallingCode).toBe("+234");
+  });
+
+  it("loads the Nigeria pack explicitly", () => {
+    const config = resolveRuntimeConfig({
+      ...baseEnv,
+      LAFIYA_COUNTRY_PACK: "NG",
+    });
+    expect(config.countryPack.id).toBe("NG");
+    expect(config.countryPack.currency.code).toBe("NGN");
+    expect(config.countryPack.regulator.name).toMatch(/NDPC|Nigerian/i);
+  });
+
+  it("loads a minimal Ghana pack without Nigeria assumptions", () => {
+    const config = resolveRuntimeConfig({
+      ...baseEnv,
+      LAFIYA_COUNTRY_PACK: "GH",
+    });
+    expect(config.countryPack.id).toBe("GH");
+    expect(config.countryPack.phone.countryCallingCode).toBe("+233");
+    expect(config.countryPack.currency.code).toBe("GHS");
+    expect(config.countryPack.phone.countryCallingCode).not.toBe("+234");
+    expect(JSON.stringify(config.countryPack)).not.toMatch(/\+234/);
+  });
+
+  it("rejects an unknown country pack", () => {
+    expect(() =>
+      resolveRuntimeConfig({ ...baseEnv, LAFIYA_COUNTRY_PACK: "ZZ" }),
+    ).toThrow(/COUNTRY_PACK/i);
+  });
+
+  it("keeps jurisdiction-specific rules out of the shared runtime config", () => {
+    const ng = resolveRuntimeConfig({ ...baseEnv, LAFIYA_COUNTRY_PACK: "NG" });
+    const gh = resolveRuntimeConfig({ ...baseEnv, LAFIYA_COUNTRY_PACK: "GH" });
+    const { countryPack: _ngPack, ...ngRest } = ng;
+    const { countryPack: _ghPack, ...ghRest } = gh;
+    expect(ngRest).toEqual(ghRest);
+    expect(JSON.stringify(ngRest)).not.toMatch(/\+234|\bNG\b/);
+  });
+});
 
 describe("runtime configuration matrix", () => {
   it("keeps intentional local mock mode explicit and non-production", () => {

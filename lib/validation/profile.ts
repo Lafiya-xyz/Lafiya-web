@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isValidPhoneNumber } from "libphonenumber-js";
+import { getActiveCountryPack } from "@/lib/country-packs";
 
 export { formatZodError } from "./zod";
 
@@ -87,9 +88,12 @@ export const emergencyContactSchema = z.object({
     .trim()
     .min(1, "Contact phone is required")
     .max(30)
-    .refine((val) => isValidPhoneNumber(val, "NG"), {
-      message: "This doesn't look like a valid phone number",
-    }),
+    .refine(
+      (val) => isValidPhoneNumber(val, getActiveCountryPack().phone.region),
+      {
+        message: "This doesn't look like a valid phone number",
+      },
+    ),
   relationship: z
     .string()
     .trim()
@@ -136,8 +140,8 @@ export const MEDICATION_FREQUENCIES = [
   "Other",
 ] as const;
 
-// Curated, Nigerian EML-based medication list. Names are the generic names used
-// on the Nigerian Essential Medicines List; the free-text fallback covers
+// Curated medication list sourced from the active country pack's essential
+// medicines list (e.g. the Nigerian EML). The free-text fallback covers
 // anything not listed here.
 export const COMMON_MEDICATIONS = [
   "Paracetamol",
@@ -209,7 +213,15 @@ export const COMMON_MEDICATIONS = [
   "Tenofovir/Lamivudine/Dolutegravir",
   "Nevirapine",
   "Zidovudine",
-] as const;
+] as const satisfies readonly string[];
+
+/**
+ * The active country pack's essential medicines list. Kept as a separate export
+ * so call sites can read the jurisdiction-specific list directly while
+ * `COMMON_MEDICATIONS` remains the stable Nigeria-default export.
+ */
+export const ESSENTIAL_MEDICATIONS: readonly string[] =
+  getActiveCountryPack().clinical.essentialMedications;
 
 // Critical medications change emergency management immediately (insulin,
 // anticoagulants, anti-epileptics, and similar). Matched case-insensitively
@@ -316,18 +328,35 @@ export const profileFormSchema = z.object({
     ),
   language: z.string().trim().max(100).optional(),
   photoUrl: z.string().trim().max(2048).optional(),
-  bloodGroup: z.enum(BLOOD_GROUPS, {
-    error: `Blood group must be one of: ${BLOOD_GROUPS.join(", ")}`,
-  }),
-  genotype: z.enum(GENOTYPES, {
-    error: `Genotype must be one of: ${GENOTYPES.join(", ")}`,
-  }),
+  // Clinical defaults (allowed blood groups / genotypes) come from the active
+  // country pack so deployments can adjust them without forking.
+  bloodGroup: z.enum(
+    getActiveCountryPack().clinical.bloodGroups as unknown as [
+      string,
+      ...string[],
+    ],
+    {
+      error: `Blood group must be one of: ${getActiveCountryPack().clinical.bloodGroups.join(", ")}`,
+    },
+  ),
+  genotype: z.enum(
+    getActiveCountryPack().clinical.genotypes as unknown as [
+      string,
+      ...string[],
+    ],
+    {
+      error: `Genotype must be one of: ${getActiveCountryPack().clinical.genotypes.join(", ")}`,
+    },
+  ),
   allergies: z.array(z.string().trim().min(1).max(200)).max(20),
   medications: z.array(medicationSchema).max(20),
   chronicConditions: z.array(z.string().trim().min(1).max(200)).max(20),
   emergencyContacts: z
     .array(emergencyContactSchema)
-    .max(3, "Up to 3 emergency contacts"),
+    .max(
+      getActiveCountryPack().clinical.maxEmergencyContacts,
+      `Up to ${getActiveCountryPack().clinical.maxEmergencyContacts} emergency contacts`,
+    ),
 });
 
 export type ProfileFormValues = z.infer<typeof profileFormSchema>;

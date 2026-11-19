@@ -37,3 +37,58 @@ export async function needsStepUp(
   if (data.nextLevel !== level) return false;
   return data.currentLevel !== level;
 }
+
+/**
+ * Issue #968: a recent SIM swap means the phone number that just received
+ * an OTP can no longer be trusted as a sole possession factor -- an
+ * attacker who ported the number can complete OTP-only sign-in or
+ * recovery. When a swap is detected the OTP flow must not proceed on the
+ * OTP alone; the caller is told to satisfy a stronger factor instead.
+ */
+export const SIM_SWAP_STEP_UP_REQUIRED = "SIM_SWAP_STEP_UP_REQUIRED" as const;
+
+/**
+ * Stronger verification methods accepted in place of a phone OTP after a
+ * recent SIM swap. Ordered from most to least preferred so callers can
+ * present the best available option first.
+ */
+export const SIM_SWAP_ALTERNATIVE_METHODS = [
+  "passkey",
+  "recovery_code",
+  "totp",
+] as const;
+
+export type SimSwapAlternativeMethod =
+  (typeof SIM_SWAP_ALTERNATIVE_METHODS)[number];
+
+export type SimSwapStepUpDecision =
+  | { required: false }
+  | {
+      required: true;
+      code: typeof SIM_SWAP_STEP_UP_REQUIRED;
+      /** Methods the caller may offer instead of the blocked OTP. */
+      alternatives: readonly SimSwapAlternativeMethod[];
+    };
+
+/**
+ * Decide whether a detected SIM swap forces stronger verification.
+ *
+ * Fails closed: `recentSwap` is only treated as "no swap" when it is
+ * explicitly `false`. An `undefined`/`null` result (e.g. the provider
+ * could not be reached and the flow is configured fail-closed) therefore
+ * requires step-up, matching `needsStepUp`'s fail-closed contract.
+ *
+ * This is a pure decision helper -- it performs no I/O and stores no phone
+ * number, so OTP actions can call it after `SimSwapChecker` has already
+ * reduced the provider response to a boolean.
+ */
+export function simSwapStepUpDecision(
+  recentSwap: boolean | null | undefined,
+): SimSwapStepUpDecision {
+  if (recentSwap === false) return { required: false };
+  return {
+    required: true,
+    code: SIM_SWAP_STEP_UP_REQUIRED,
+    alternatives: SIM_SWAP_ALTERNATIVE_METHODS,
+  };
+}
