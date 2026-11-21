@@ -1,0 +1,120 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Lafiya Partner API",
+    "version": "1.0.0",
+    "description": "Read-only partner surface: attestation lookup and usage reporting. Authenticate with `Authorization: Bearer <partner key>`."
+  },
+  "servers": [{ "url": "https://lafiya.xyz" }],
+  "security": [{ "partnerKey": [] }],
+  "components": {
+    "securitySchemes": {
+      "partnerKey": { "type": "http", "scheme": "bearer" }
+    },
+    "schemas": {
+      "Attestation": {
+        "type": "object",
+        "required": ["recordHash", "attester", "timestamp", "state"],
+        "properties": {
+          "recordHash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "attester": { "type": "string" },
+          "timestamp": { "type": "integer" },
+          "state": { "type": "string", "enum": ["verified", "revoked", "archived", "pending"] }
+        }
+      },
+      "AttestationLookup": {
+        "type": "object",
+        "required": ["verified", "attestation", "ledger", "rpcHost"],
+        "properties": {
+          "sandbox": { "type": "boolean" },
+          "verified": { "type": "boolean" },
+          "state": { "type": ["string", "null"] },
+          "attestation": { "oneOf": [{ "$ref": "#/components/schemas/Attestation" }, { "type": "null" }] },
+          "ledger": { "type": ["integer", "null"] },
+          "rpcHost": { "type": ["string", "null"] },
+          "simulatedWebhook": { "type": ["object", "null"] }
+        }
+      },
+      "UsageRow": {
+        "type": "object",
+        "required": ["key_id", "period", "endpoint", "status_class", "count"],
+        "properties": {
+          "key_id": { "type": "string" },
+          "period": { "type": "string", "pattern": "^\\d{4}-\\d{2}$" },
+          "endpoint": { "type": "string" },
+          "status_class": { "type": "string", "enum": ["2xx", "3xx", "4xx", "5xx"] },
+          "count": { "type": "integer" }
+        }
+      },
+      "PartnerUsage": {
+        "type": "object",
+        "required": ["partnerId", "period", "limits", "usage"],
+        "properties": {
+          "partnerId": { "type": "string" },
+          "period": { "type": "string" },
+          "limits": {
+            "type": "object",
+            "required": ["ratePerMinute", "monthlyQuota"],
+            "properties": {
+              "ratePerMinute": { "type": "integer" },
+              "monthlyQuota": { "type": "integer" }
+            }
+          },
+          "usage": { "type": "array", "items": { "$ref": "#/components/schemas/UsageRow" } }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": { "type": "string" },
+          "secondsRemaining": { "type": "integer" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/attestation/{recordHash}": {
+      "get": {
+        "operationId": "getAttestation",
+        "summary": "Look up an attestation by record hash",
+        "parameters": [
+          {
+            "name": "recordHash",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Attestation state",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AttestationLookup" } } }
+          },
+          "304": { "description": "Not modified (If-None-Match matched)" },
+          "400": { "description": "Invalid record hash", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Invalid or expired API key", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "403": { "description": "Key lacks attestation:read", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "429": { "description": "Quota exhausted", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/partner/usage": {
+      "get": {
+        "operationId": "getPartnerUsage",
+        "summary": "Read this partner's metered usage for a UTC month",
+        "parameters": [
+          { "name": "period", "in": "query", "required": false, "schema": { "type": "string", "pattern": "^\\d{4}-\\d{2}$" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Usage counters",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PartnerUsage" } } }
+          },
+          "400": { "description": "Invalid period", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Invalid or expired API key", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    }
+  }
+}

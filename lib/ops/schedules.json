@@ -29,6 +29,15 @@
       "maxStalenessSeconds": 600
     },
     {
+      "name": "bulk-export",
+      "path": "/api/internal/bulk-export",
+      "schedule": "* * * * *",
+      "owner": "platform",
+      "maxDurationSeconds": 300,
+      "idempotency": "Jobs claimed with SKIP LOCKED; NDJSON parts overwritten per job/resource type.",
+      "maxStalenessSeconds": 600
+    },
+    {
       "name": "readiness",
       "path": "/api/internal/readiness",
       "manualOnly": true,

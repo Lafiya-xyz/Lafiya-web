@@ -115,6 +115,9 @@ const rawServerEnvSchema = z.object({
   // available (see supabase/migrations/20260929210000_rate_and_frequency_limits_gc.sql).
   // Optional -- a deployment whose Postgres does have pg_cron never needs it.
   PURGE_LIMITS_CRON_SECRET: optionalString,
+  // Issue #936: bearer secret for the POST /api/internal/bulk-export worker
+  // that drains queued FHIR Bulk Data ($export) jobs.
+  BULK_EXPORT_CRON_SECRET: optionalString,
   // Issue #786: comma-separated partner sandbox keys (lfy_sbx_ prefix).
   LAFIYA_SANDBOX_API_KEYS: optionalString,
 });

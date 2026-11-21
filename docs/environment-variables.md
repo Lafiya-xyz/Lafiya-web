@@ -34,6 +34,7 @@ Copy `.env.example` to `.env.local` and fill in the values. Variables marked **R
 | `PAYOUT_INDEXER_START_LEDGER` | Optional | server | public | `z.coerce.number().int().positive().optional()` |
 | `PAYOUT_INDEXER_START_PAYMENT_CURSOR` | Optional | server | public | `optionalString` |
 | `PURGE_LIMITS_CRON_SECRET` | Optional | server | secret | `optionalString` |
+| `BULK_EXPORT_CRON_SECRET` | Optional | server | secret | `optionalString` |
 | `SENTRY_DSN` | Optional | server | public | `optionalUrl` |
 | `SENTRY_ENABLED` | Optional | server | public | `booleanStringSchema.default(false)` |
 | `SOROBAN_RPC_URL` | **Required** | server | public | `z.url()` |
@@ -157,6 +158,7 @@ See `lib/rate-limit.ts` (`getClientIp`) and
 | `TRUSTED_PROXY_HOPS` | Optional | No | How many reverse-proxy hops between the real client and this process are trusted to have appended (not replaced) an X-Forwarded-For entry. Only the entry this many positions in from the right is trusted. Defaults to `1`. | `1` |
 | `CLIENT_IP_HEADER` | Optional | No | Platform-injected header that is authoritative for the client IP when present (set/overwritten by the platform itself, so it cannot carry a client-supplied value). Defaults to Vercel's `x-vercel-forwarded-for`; override for other platforms, e.g. `cf-connecting-ip` on Cloudflare. | `x-vercel-forwarded-for` |
 | `PURGE_LIMITS_CRON_SECRET` | Optional | **No — secret** | Bearer token for the authenticated `POST /api/internal/purge-expired-limits` fallback endpoint, used only where the Postgres `pg_cron` extension is unavailable (e.g. most local/CI Supabase instances). A deployment whose Postgres has `pg_cron` schedules the purge automatically and never needs this. Minimum 32 characters if set. | _(generate with `openssl rand -hex 32`)_ |
+| `BULK_EXPORT_CRON_SECRET` | Optional | **No — secret** | Bearer token for the `POST /api/internal/bulk-export` worker that drains queued FHIR Bulk Data (`$export`) jobs (issue #936). Without it the worker returns `503` and kick-off requests stay `queued`. | _(generate with `openssl rand -hex 32`)_ |
 
 ---
 
