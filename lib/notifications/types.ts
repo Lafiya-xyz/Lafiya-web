@@ -14,7 +14,7 @@
 export type NotificationChannel = "email" | "sms" | "push";
 
 /** BCP-47 locale codes supported by the template registry. */
-export type SupportedLocale = "en" | "ha" | "ig" | "yo";
+export type SupportedLocale = "en" | "ha" | "ig" | "yo" | "pcm";
 
 /** A resolved, provider-ready message. */
 export interface RenderedMessage {
