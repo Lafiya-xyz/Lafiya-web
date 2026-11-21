@@ -30,7 +30,7 @@
 
 import "server-only";
 
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createWorkloadClient } from "@/lib/supabase/workload";
 import { logError, logInfo, logWarn } from "@/lib/logging/logger";
 import { invalidateAttestationCache } from "@/lib/stellar/attestation-cache-invalidation";
 import { parseInboxPayload } from "@/lib/notifications/inbox";
@@ -87,7 +87,7 @@ const handleUserNotification: OutboxHandler = async (row) => {
     });
     return;
   }
-  const admin = createAdminClient();
+  const admin = createWorkloadClient("outbox_dispatcher");
   const { error } = await (admin as any).rpc("record_user_notification", {
     p_card_public_id: payload.card_public_id,
     p_type: payload.type,
@@ -119,7 +119,7 @@ export async function runDispatchCycle(
   handlers: OutboxHandlerRegistry = HANDLERS,
   batchSize = 50,
 ): Promise<number> {
-  const admin = createAdminClient();
+  const admin = createWorkloadClient("outbox_dispatcher");
 
   // Claim a batch atomically (FOR UPDATE SKIP LOCKED via the SQL helper).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -211,11 +211,11 @@ export interface OutboxLag {
  * Returns the lag of the outbox queue so a monitoring probe can alert when
  * rows are not being consumed within an acceptable window.
  *
- * Uses the service-role client because `outbox` is not accessible to the
- * authenticated role (internal infrastructure table).
+ * Uses the `outbox_dispatcher` workload role because `outbox` is not
+ * accessible to the authenticated role (internal infrastructure table).
  */
 export async function getOutboxLag(): Promise<OutboxLag> {
-  const admin = createAdminClient();
+  const admin = createWorkloadClient("outbox_dispatcher");
 
   const { data, error } = await admin
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
