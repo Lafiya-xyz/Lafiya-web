@@ -85,6 +85,13 @@ const rawServerEnvSchema = z.object({
   ),
   CHW_PROTOCOL_EPOCH_ID: optionalString,
   CHW_PROTOCOL_INTENT_SIGNING_KEY: optionalString,
+  // Issue #940: keyed-hash pepper for verify-only NIN checks. The raw NIN is
+  // never stored; only HMAC(pepper, nin) plus the provider's verdict is.
+  NIN_VERIFICATION_HMAC_SECRET: z.preprocess(
+    (value) =>
+      typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.string().min(32).optional(),
+  ),
   PAYOUT_INDEXER_ENABLED: booleanStringSchema.default(false),
   STELLAR_HORIZON_URL: optionalUrl,
   STELLAR_USDC_ISSUER: optionalString,
@@ -117,6 +124,9 @@ const rawServerEnvSchema = z.object({
   PURGE_LIMITS_CRON_SECRET: optionalString,
   // Issue #786: comma-separated partner sandbox keys (lfy_sbx_ prefix).
   LAFIYA_SANDBOX_API_KEYS: optionalString,
+  // Issue #938: comma-separated partner ids notified when they first call a
+  // deprecated endpoint or field. Empty disables notifications.
+  LAFIYA_DEPRECATION_NOTIFY_PARTNERS: optionalString,
 });
 
 export type DeploymentEnvironment = z.infer<typeof deploymentSchema>;
@@ -202,6 +212,8 @@ export type RuntimeConfig = {
     approvedWasmHashes: string[];
   };
   payoutIndexer: { enabled: boolean };
+  /** Issue #940: verify-only NIN checks are enabled only with a pepper set. */
+  ninVerification: { enabled: boolean };
   sentry: { enabled: boolean };
   database: {
     /** Transaction-mode pooler URL for runtime/serverless access. */
@@ -353,6 +365,7 @@ export function getRuntimeConfig(
     ACCOUNT_LINKAGE_HMAC_SECRET: env.ACCOUNT_LINKAGE_HMAC_SECRET,
     CHW_PROTOCOL_EPOCH_ID: env.CHW_PROTOCOL_EPOCH_ID,
     CHW_PROTOCOL_INTENT_SIGNING_KEY: env.CHW_PROTOCOL_INTENT_SIGNING_KEY,
+    NIN_VERIFICATION_HMAC_SECRET: env.NIN_VERIFICATION_HMAC_SECRET,
     PAYOUT_INDEXER_ENABLED: env.PAYOUT_INDEXER_ENABLED,
     STELLAR_HORIZON_URL: env.STELLAR_HORIZON_URL,
     STELLAR_USDC_ISSUER: env.STELLAR_USDC_ISSUER,
@@ -541,6 +554,7 @@ export function getRuntimeConfig(
       approvedWasmHashes,
     },
     payoutIndexer: { enabled: config.PAYOUT_INDEXER_ENABLED },
+    ninVerification: { enabled: Boolean(config.NIN_VERIFICATION_HMAC_SECRET) },
     sentry: { enabled: config.SENTRY_ENABLED },
     database: {
       poolerUrl: config.DATABASE_URL,

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import sharp from "sharp";
 
 import { checkAndIncrementFrequency } from "@/lib/frequency-limit";
+import { fixedWindowHeaders } from "@/lib/gcra-limit";
 import { logError } from "@/lib/logging/logger";
 import { createClient } from "@/lib/supabase/server";
 import { getAvatarSignedUrl } from "@/lib/storage/avatar";
@@ -86,7 +87,11 @@ export async function POST(request: Request) {
         { error: "Too many photo uploads. Please try again shortly." },
         {
           status: 429,
-          headers: { "Retry-After": String(frequency.retryAfterSeconds) },
+          headers: fixedWindowHeaders(
+            frequency,
+            UPLOAD_FREQUENCY_MAX,
+            UPLOAD_FREQUENCY_WINDOW_SECONDS,
+          ),
         },
       );
     }

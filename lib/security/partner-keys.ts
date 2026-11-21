@@ -140,6 +140,7 @@ export async function consumePartnerQuota(key: PartnerKey): Promise<QuotaDecisio
   const reset = new Date(minuteTighter ? row.minute_reset : row.month_reset);
   const resetSeconds = Math.max(1, Math.ceil((reset.getTime() - Date.now()) / MS_PER_SECOND));
   const headers: Record<string, string> = {
+    "RateLimit-Policy": `${minuteTighter ? key.ratePerMinute : key.monthlyQuota};w=${minuteTighter ? 60 : 2592000}`,
     "RateLimit-Limit": String(minuteTighter ? key.ratePerMinute : key.monthlyQuota),
     "RateLimit-Remaining": String(minuteTighter ? row.minute_remaining : row.month_remaining),
     "RateLimit-Reset": String(resetSeconds),

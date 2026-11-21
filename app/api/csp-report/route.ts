@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { checkAndIncrementFrequency } from "@/lib/frequency-limit";
+import { fixedWindowHeaders } from "@/lib/gcra-limit";
 import { logWarn } from "@/lib/logging/logger";
 import { getClientIp } from "@/lib/rate-limit";
 
@@ -131,7 +132,11 @@ export async function POST(request: Request) {
       { error: "Too many CSP reports." },
       {
         status: 429,
-        headers: { "Retry-After": String(frequency.retryAfterSeconds) },
+        headers: fixedWindowHeaders(
+          frequency,
+          CSP_REPORT_FREQUENCY_MAX,
+          CSP_REPORT_FREQUENCY_WINDOW_SECONDS,
+        ),
       },
     );
   }
@@ -165,5 +170,12 @@ export async function POST(request: Request) {
     });
   }
 
-  return new NextResponse(null, { status: 204 });
+  return new NextResponse(null, {
+    status: 204,
+    headers: fixedWindowHeaders(
+      frequency,
+      CSP_REPORT_FREQUENCY_MAX,
+      CSP_REPORT_FREQUENCY_WINDOW_SECONDS,
+    ),
+  });
 }

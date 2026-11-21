@@ -25,8 +25,9 @@
  * calls from multiple Vercel instances never race.
  *
  * ## Standard headers
- * `limiterHeaders()` produces the standard `RateLimit-*` / `Retry-After`
- * headers described in draft-ietf-httpapi-ratelimit-headers-08.
+ * `limiterHeaders()` produces the standard `RateLimit` / `RateLimit-Policy`
+ * headers described in draft-ietf-httpapi-ratelimit-headers-08, plus
+ * `Retry-After` when the request is denied (issue #939).
  */
 
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -101,30 +102,67 @@ export async function gcraConsume(
 // ─── Standard headers ────────────────────────────────────────────────────────
 
 /**
- * Produce standard `RateLimit-*` and (when denied) `Retry-After` headers
- * from a `LimiterResult`.
+ * Produce standard `RateLimit` / `RateLimit-Policy` and (when denied)
+ * `Retry-After` headers from a `LimiterResult`.
  *
- * Follows draft-ietf-httpapi-ratelimit-headers-08:
- * - `RateLimit-Limit`: the request quota.
- * - `RateLimit-Remaining`: remaining quota.
- * - `RateLimit-Reset`: seconds until reset (relative, as per the draft).
+ * Follows draft-ietf-httpapi-ratelimit-headers-08 (issue #939):
+ * - `RateLimit-Policy`: the quota policy, e.g. `"60;w=60"` (quota;window).
+ * - `RateLimit`: the current state, e.g. `"60;w=60, 42, 18"` — quota,
+ *   remaining quota and seconds until reset (relative, as per the draft).
  * - `Retry-After`: seconds to wait (only when denied).
+ *
+ * The legacy `RateLimit-Limit` / `RateLimit-Remaining` / `RateLimit-Reset`
+ * fields are emitted alongside for clients written against the earlier
+ * draft; they carry the same values.
  */
 export function limiterHeaders(
   result: LimiterResult,
   burst: number,
+  periodSeconds?: number,
 ): Record<string, string> {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const resetIn = Math.max(0, result.resetAt - nowSeconds);
+  const remaining = Math.max(0, result.remaining);
+  const window = periodSeconds ? `;w=${periodSeconds}` : "";
 
   const hdrs: Record<string, string> = {
+    "RateLimit-Policy": `${burst}${window}`,
+    RateLimit: `${burst}${window}, ${remaining}, ${resetIn}`,
     "RateLimit-Limit": String(burst),
-    "RateLimit-Remaining": String(Math.max(0, result.remaining)),
+    "RateLimit-Remaining": String(remaining),
     "RateLimit-Reset": String(resetIn),
   };
 
   if (!result.allowed) {
     hdrs["Retry-After"] = String(Math.max(1, result.retryAfter));
+  }
+
+  return hdrs;
+}
+
+/**
+ * Produce the same standard headers from a fixed-window counter result
+ * (`lib/frequency-limit.ts`), so public JSON APIs that still use the
+ * fixed-window limiter emit an identical header shape (issue #939).
+ */
+export function fixedWindowHeaders(
+  result: { allowed: boolean; count: number; retryAfterSeconds: number },
+  maxCount: number,
+  windowSeconds: number,
+): Record<string, string> {
+  const remaining = Math.max(0, maxCount - result.count);
+  const resetIn = result.allowed ? windowSeconds : Math.max(0, result.retryAfterSeconds);
+
+  const hdrs: Record<string, string> = {
+    "RateLimit-Policy": `${maxCount};w=${windowSeconds}`,
+    RateLimit: `${maxCount};w=${windowSeconds}, ${remaining}, ${resetIn}`,
+    "RateLimit-Limit": String(maxCount),
+    "RateLimit-Remaining": String(remaining),
+    "RateLimit-Reset": String(resetIn),
+  };
+
+  if (!result.allowed) {
+    hdrs["Retry-After"] = String(Math.max(1, result.retryAfterSeconds));
   }
 
   return hdrs;

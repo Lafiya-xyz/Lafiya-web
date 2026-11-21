@@ -15,6 +15,7 @@ export const ADMIN_PURPOSES = [
   "fx-rates",
   "audit-explorer",
   "partner-api",
+  "partner-webhooks",
   "job-lease",
 ] as const;
 
