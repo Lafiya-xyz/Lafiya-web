@@ -2,8 +2,12 @@ import { createHash } from "node:crypto";
 
 import { NextResponse } from "next/server";
 
-import { getAttestation } from "@/lib/stellar/attestation";
+import {
+  buildAttestationLookupBody,
+  buildSandboxAttestationLookupBody,
+} from "@/lib/contracts/attestation-lookup";
 import { checkRateLimit, getClientIp, recordFailure } from "@/lib/rate-limit";
+import { getAttestation } from "@/lib/stellar/attestation";
 import {
   authenticatePartnerKey,
   consumePartnerQuota,
@@ -186,15 +190,11 @@ async function lookup(
     }
     const fixture = getSandboxFixture(recordHash);
     return NextResponse.json(
-      {
-        sandbox: true,
-        verified: fixture?.verified ?? false,
+      buildSandboxAttestationLookupBody({
         state: fixture?.state ?? null,
         attestation: fixture?.attestation ?? null,
-        ledger: null,
-        rpcHost: null,
         simulatedWebhook: buildSandboxWebhook(recordHash),
-      },
+      }),
       { headers: sandboxHeaders },
     );
   }
@@ -223,12 +223,11 @@ async function lookup(
     const attestation = pinned?.value ?? null;
     const outcome = attestation === null ? "not_found" : "verified";
 
-    const body = {
-      verified: attestation !== null,
+    const body = buildAttestationLookupBody({
       attestation,
       ledger: pinned?.ledger ?? null,
       rpcHost: pinned?.rpcHost ?? null,
-    };
+    });
 
     const etag = deriveETag(body);
 
