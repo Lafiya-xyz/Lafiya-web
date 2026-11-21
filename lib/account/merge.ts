@@ -1,5 +1,6 @@
 import "server-only";
 
+import { isExpired, isoAfter, toUtcIso } from "@/lib/format/datetime";
 import type { createAdminClient } from "@/lib/supabase/admin";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -49,7 +50,7 @@ export async function startMergeRequest(
       requester_user_id: requester.id,
       other_user_id:
         otherUserId && otherUserId !== requester.id ? otherUserId : null,
-      expires_at: new Date(Date.now() + MERGE_REQUEST_TTL_MS).toISOString(),
+      expires_at: isoAfter(MERGE_REQUEST_TTL_MS),
     })
     .select("id")
     .single();
@@ -81,11 +82,7 @@ export async function verifyMergeRequest(
     .eq("id", input.requestId)
     .eq("requester_user_id", requester.id)
     .maybeSingle();
-  if (
-    !request ||
-    request.status !== "pending" ||
-    new Date(request.expires_at).getTime() <= Date.now()
-  ) {
+  if (!request || request.status !== "pending" || isExpired(request.expires_at)) {
     throw new MergeError("REQUEST_NOT_FOUND");
   }
   const [requesterOk, otherOk] = await Promise.all([
@@ -108,7 +105,7 @@ export async function verifyMergeRequest(
     p_b: request.other_user_id,
   });
   if (!shared) throw new MergeError("NOT_A_DUPLICATE");
-  const now = new Date().toISOString();
+  const now = toUtcIso(Date.now()) as string;
   const { error } = await admin
     .from("account_merge_requests")
     .update({
