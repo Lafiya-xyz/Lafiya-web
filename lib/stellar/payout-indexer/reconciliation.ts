@@ -16,6 +16,113 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 import { logError, logInfo, logWarn } from "@/lib/logging/logger";
+import { payoutBatchReference } from "./batch-payout";
+
+/** A payout observed on-chain, as needed for reference-first matching. */
+export interface ObservedPayout {
+  transactionHash: string;
+  /** Payout reference decoded from the transaction Memo.hash, if any. */
+  memoReference?: string | null;
+  /** Obligation ids covered by the transaction, when known from the memo. */
+  obligationIds?: string[];
+}
+
+/** An off-chain ledger entry (payout obligation) to match against. */
+export interface LedgerPayoutEntry {
+  obligationId: string;
+  transactionHash?: string | null;
+}
+
+export type PayoutMatchStrategy = "memo" | "hash" | "unmatched";
+
+export interface PayoutMatch {
+  obligationId: string;
+  transactionHash: string;
+  strategy: PayoutMatchStrategy;
+}
+
+export interface PayoutMatchResult {
+  matches: PayoutMatch[];
+  unmatchedObligations: string[];
+  unmatchedTransactions: string[];
+}
+
+/**
+ * Reconciles on-chain payouts against off-chain ledger entries, matching on
+ * the payout reference memo first and falling back to the transaction hash
+ * (issue #900). Memo-first matching is what makes retried and fee-bumped
+ * transactions reconcile: a fee-bump wraps the inner transaction and keeps
+ * its memo, and a retried batch re-derives the same reference from the same
+ * obligation set, so both still resolve to the same ledger entries even when
+ * the transaction hash differs from the one recorded at submission time.
+ */
+export function reconcilePayoutReferences(
+  observed: ObservedPayout[],
+  entries: LedgerPayoutEntry[],
+): PayoutMatchResult {
+  const matches: PayoutMatch[] = [];
+  const matchedObligations = new Set<string>();
+  const matchedTransactions = new Set<string>();
+
+  const byMemo = new Map<string, ObservedPayout>();
+  const byHash = new Map<string, ObservedPayout>();
+  for (const payout of observed) {
+    if (payout.memoReference) byMemo.set(payout.memoReference, payout);
+    byHash.set(payout.transactionHash, payout);
+  }
+
+  // Pass 1: memo reference. A memo covers a whole batch, so every obligation
+  // in that batch resolves to the same transaction.
+  for (const entry of entries) {
+    if (matchedObligations.has(entry.obligationId)) continue;
+    const reference = payoutBatchReference([entry.obligationId]);
+    const payout = byMemo.get(reference);
+    if (!payout) continue;
+    matches.push({
+      obligationId: entry.obligationId,
+      transactionHash: payout.transactionHash,
+      strategy: "memo",
+    });
+    matchedObligations.add(entry.obligationId);
+    matchedTransactions.add(payout.transactionHash);
+  }
+
+  // Pass 2: transaction hash, for historical payouts submitted before the
+  // memo scheme existed (or with a memo we cannot decode).
+  for (const entry of entries) {
+    if (matchedObligations.has(entry.obligationId)) continue;
+    if (!entry.transactionHash) continue;
+    const payout = byHash.get(entry.transactionHash);
+    if (!payout) continue;
+    matches.push({
+      obligationId: entry.obligationId,
+      transactionHash: payout.transactionHash,
+      strategy: "hash",
+    });
+    matchedObligations.add(entry.obligationId);
+    matchedTransactions.add(payout.transactionHash);
+  }
+
+  return {
+    matches,
+    unmatchedObligations: entries
+      .map((entry) => entry.obligationId)
+      .filter((id) => !matchedObligations.has(id)),
+    unmatchedTransactions: observed
+      .map((payout) => payout.transactionHash)
+      .filter((hash) => !matchedTransactions.has(hash)),
+  };
+}
+
+/**
+ * Backfill helper: derives the payout reference memo for a historical batch
+ * from its obligation ids, so pre-memo payouts can be re-referenced without
+ * re-reading the chain. Returns null for an empty batch.
+ */
+export function backfillPayoutReference(obligationIds: string[]): string | null {
+  if (obligationIds.length === 0) return null;
+  return payoutBatchReference(obligationIds);
+}
 
 export interface ReconciliationRecord {
   recordHash: string;

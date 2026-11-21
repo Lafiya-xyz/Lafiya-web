@@ -16,6 +16,7 @@ import type {
   PayoutSource,
 } from "./types";
 import { BoundedMap } from "@/lib/bounded-map";
+import { Asset } from "@/lib/stellar/assets";
 
 const RECORD_HASH_PATTERN = /^[0-9a-f]{64}$/;
 
@@ -28,6 +29,17 @@ export type TrustlineStatus =
   | "zero_limit"
   | "unauthorized";
 
+/**
+ * SEP-29: an account that requires a memo on every incoming payment. Payouts
+ * to such accounts must carry the payout reference memo (they always do), and
+ * a missing memo is a hard failure rather than a silent drop.
+ */
+export interface MemoRequiredCheck {
+  memoRequired: boolean;
+  /** SEP-29 `config.memo_required` value when the account advertises one. */
+  configValue: string | null;
+}
+
 export interface TrustlineCheck {
   status: TrustlineStatus;
   authorized: boolean;
@@ -38,6 +50,26 @@ export interface TrustlineCheck {
 interface CachedTrustlineCheck {
   expiresAt: number;
   check: TrustlineCheck;
+}
+
+interface CachedMemoRequiredCheck {
+  expiresAt: number;
+  check: MemoRequiredCheck;
+}
+
+/**
+ * SEP-29 memo-required detection from an account's `data` entries. The
+ * `config.memo_required` data entry is present (any value) when the account
+ * requires a memo on incoming payments.
+ */
+export function memoRequiredFromAccountData(
+  data: Record<string, string> | undefined | null,
+): MemoRequiredCheck {
+  const value = data?.["config.memo_required"];
+  return {
+    memoRequired: value !== undefined && value !== null,
+    configValue: value ?? null,
+  };
 }
 
 export function recordHashFromMemo(
@@ -146,14 +178,22 @@ export class HorizonPayoutSource implements PayoutSource {
   private readonly trustlineCache = new BoundedMap<string, CachedTrustlineCheck>(
     10_000,
   );
+  // SEP-29 memo-required flags, same TTL/bounds as the trustline cache.
+  private readonly memoRequiredCache = new BoundedMap<
+    string,
+    CachedMemoRequiredCheck
+  >(10_000);
+
+  private readonly usdc: Asset;
 
   constructor(
     horizonUrl: string,
     private readonly poolAddress: string,
-    private readonly usdcIssuer: string,
+    usdcIssuer: string,
     private readonly pageSize = 100,
-    private readonly usdcAssetCode = "USDC",
+    usdcAssetCode = "USDC",
   ) {
+    this.usdc = Asset.of(usdcAssetCode, usdcIssuer);
     this.server = new Horizon.Server(horizonUrl, {
       allowHttp: new URL(horizonUrl).protocol === "http:",
     });
@@ -170,11 +210,8 @@ export class HorizonPayoutSource implements PayoutSource {
     let check: TrustlineCheck;
     try {
       const account = await this.server.accounts().accountId(stellarAddress).call();
-      const trustline = account.balances.find(
-        (balance) =>
-          balance.asset_type !== "native" &&
-          balance.asset_code === this.usdcAssetCode &&
-          balance.asset_issuer === this.usdcIssuer,
+      const trustline = account.balances.find((balance) =>
+        this.usdc.matchesHorizonAsset(balance),
       );
       if (!trustline) {
         check = {
@@ -226,6 +263,33 @@ export class HorizonPayoutSource implements PayoutSource {
     return check.status === "healthy";
   }
 
+  /**
+   * SEP-29 preflight: does this recipient require a memo on incoming payments?
+   * Cached for 5 minutes like the trustline check. A missing account is not
+   * memo-required (the payment will fail on `no_account` instead).
+   */
+  async checkMemoRequired(stellarAddress: string): Promise<MemoRequiredCheck> {
+    const cached = this.memoRequiredCache.get(stellarAddress);
+    if (cached && cached.expiresAt > Date.now()) return cached.check;
+
+    let check: MemoRequiredCheck;
+    try {
+      const account = await this.server.accounts().accountId(stellarAddress).call();
+      check = memoRequiredFromAccountData(account.data);
+    } catch (error) {
+      const status = (error as { response?: { status?: number } })?.response
+        ?.status;
+      if (status !== 404) throw error;
+      check = { memoRequired: false, configValue: null };
+    }
+
+    this.memoRequiredCache.set(stellarAddress, {
+      expiresAt: Date.now() + TRUSTLINE_CACHE_TTL_MS,
+      check,
+    });
+    return check;
+  }
+
   async read(
     cursor: string | null,
     startCursor = "0",
@@ -249,18 +313,21 @@ export class HorizonPayoutSource implements PayoutSource {
         continue;
       }
       const transaction = await operation.transaction();
-      const recordHash = recordHashFromMemo(
+      const memoReference = recordHashFromMemo(
         transaction.memo_type,
         transaction.memo ?? "",
       );
-      if (!recordHash) continue;
+      // SEP-29: a memo-required recipient must never be settled from a
+      // memo-less payment -- there is no reference to reconcile against.
+      if (!memoReference) continue;
       events.push({
-        recordHash,
+        recordHash: memoReference,
         stellarAddress: operation.to,
         amountUsdc: operation.amount,
         transactionHash: operation.transaction_hash,
         paidAt: operation.created_at,
         pagingToken: operation.paging_token,
+        memoReference,
       });
     }
 

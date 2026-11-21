@@ -32,6 +32,8 @@
  *    batch waits for the previous one's sequence number to be consumed.
  */
 
+import { createHash } from "node:crypto";
+
 import {
   Asset,
   BASE_FEE,
@@ -47,6 +49,31 @@ import {
 export const DEFAULT_MAX_OPERATIONS_PER_TRANSACTION = 100;
 export const MAX_ALLOWED_OPERATIONS_PER_TRANSACTION = 100;
 
+/**
+ * Version of the payout memo scheme (issue #900). Bumping this changes every
+ * derived memo, so reconciliation must keep decoding older versions.
+ */
+export const PAYOUT_MEMO_VERSION = 1;
+
+/**
+ * Deterministic payout reference for a batch: `sha256("lafiya-payout:v1:" +
+ * sorted obligation ids)`. Used as the transaction `Memo.hash`, so a submitted
+ * transaction can always be traced back to the exact obligation set it covers
+ * -- including retried and fee-bumped transactions, which inherit the inner
+ * transaction's memo.
+ */
+export function payoutBatchReference(obligationIds: string[]): string {
+  const ids = [...obligationIds].sort();
+  return createHash("sha256")
+    .update(`lafiya-payout:v${PAYOUT_MEMO_VERSION}:${ids.join(",")}`)
+    .digest("hex");
+}
+
+/** 32-byte digest of `payoutBatchReference`, ready for `Memo.hash`. */
+export function payoutBatchMemo(obligationIds: string[]): Buffer {
+  return Buffer.from(payoutBatchReference(obligationIds), "hex");
+}
+
 export interface PayoutRecipient {
   /** payout_obligations.id */
   obligationId: string;
@@ -54,6 +81,14 @@ export interface PayoutRecipient {
   eligibilityKey: string;
   recipientAddress: string;
   amountUsdc: string;
+  /**
+   * Optional CHW payout asset preference (issue #899). When set, the payout is
+   * submitted as a slippage-bounded `pathPaymentStrictReceive`; when no path
+   * fits the cap it falls back to a plain USDC payment.
+   */
+  assetPreference?: PayoutAssetPreference | null;
+  /** Pre-fetched Horizon strict-receive quotes for `assetPreference`, best first. */
+  pathQuotes?: PathQuote[];
 }
 
 export interface BatchPayoutConfig {
@@ -118,12 +153,14 @@ function buildSingleBatchTransaction(
   }).setTimeout(180);
 
   for (const recipient of recipients) {
+    const plan = planPathPayment({
+      amountUsdc: recipient.amountUsdc,
+      usdcAsset: config.usdcAsset,
+      preference: recipient.assetPreference,
+      quotes: recipient.pathQuotes ?? [],
+    });
     builder.addOperation(
-      Operation.payment({
-        destination: recipient.recipientAddress,
-        asset: config.usdcAsset,
-        amount: recipient.amountUsdc,
-      }),
+      buildPayoutOperation(plan, recipient.recipientAddress, config.usdcAsset),
     );
   }
 
@@ -132,6 +169,8 @@ function buildSingleBatchTransaction(
   // indexer observes individual payment operations. Full traceability for
   // an individual operation still comes from ordering: operation N in the
   // transaction corresponds to recipients[N] in eligibilityKey order.
+  // The memo is a deterministic payout reference (issue #900): reconciliation
+  // matches on it first, then falls back to the transaction hash.
   const batchDigest = obligationBatchDigest(recipients);
   const tx = builder.addMemo(Memo.hash(batchDigest)).build();
   tx.sign(config.sourceKeypair);
@@ -140,9 +179,7 @@ function buildSingleBatchTransaction(
 
 /** 32-byte digest binding this batch to its exact set of obligation ids, used as the Memo.hash. */
 function obligationBatchDigest(recipients: PayoutRecipient[]): Buffer {
-  const crypto = require("node:crypto") as typeof import("node:crypto");
-  const ids = recipients.map((r) => r.obligationId).join(",");
-  return crypto.createHash("sha256").update(ids).digest();
+  return payoutBatchMemo(recipients.map((r) => r.obligationId));
 }
 
 export type OperationFailureCode = string;
