@@ -26,6 +26,13 @@ that external payment, not a source of payout policy. Anyone changing "how
 much a CHW gets paid" needs to change the amount sent from
 `CHW_INCENTIVE_POOL_ADDRESS`, not any code in this repository.
 
+## Payout initiation
+
+This indexer records settlement only. Whether transfers are sent by an
+operator script or by an external disbursement service is out of scope here;
+see [ADR-006](adr-006-stellar-disbursement-platform.md) for the decision to
+keep this ledger as the system of record.
+
 ## Event-source decision
 
 `lafiya-web` and its documented `lafiya-contracts` interface define
