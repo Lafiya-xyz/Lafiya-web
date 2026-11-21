@@ -54,6 +54,14 @@ export interface PayoutRecipient {
   eligibilityKey: string;
   recipientAddress: string;
   amountUsdc: string;
+  /**
+   * Optional CHW payout asset preference (issue #899). When set, the payout is
+   * submitted as a slippage-bounded `pathPaymentStrictReceive`; when no path
+   * fits the cap it falls back to a plain USDC payment.
+   */
+  assetPreference?: PayoutAssetPreference | null;
+  /** Pre-fetched Horizon strict-receive quotes for `assetPreference`, best first. */
+  pathQuotes?: PathQuote[];
 }
 
 export interface BatchPayoutConfig {
@@ -118,12 +126,14 @@ function buildSingleBatchTransaction(
   }).setTimeout(180);
 
   for (const recipient of recipients) {
+    const plan = planPathPayment({
+      amountUsdc: recipient.amountUsdc,
+      usdcAsset: config.usdcAsset,
+      preference: recipient.assetPreference,
+      quotes: recipient.pathQuotes ?? [],
+    });
     builder.addOperation(
-      Operation.payment({
-        destination: recipient.recipientAddress,
-        asset: config.usdcAsset,
-        amount: recipient.amountUsdc,
-      }),
+      buildPayoutOperation(plan, recipient.recipientAddress, config.usdcAsset),
     );
   }
 
