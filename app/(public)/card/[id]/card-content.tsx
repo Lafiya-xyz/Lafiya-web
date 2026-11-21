@@ -9,6 +9,11 @@ import {
   CROSS_REACTIVITY_DISCLAIMER,
   crossReactivityNotes,
 } from "@/lib/clinical/allergy-cross-reactivity";
+import {
+  DRUG_INTERACTIONS_DISCLAIMER,
+  DRUG_INTERACTIONS_VERSION,
+  drugInteractionWarnings,
+} from "@/lib/clinical/drug-interactions";
 import { OfflineEnvelopeSource } from "@/lib/emergency/offline-source";
 import type { EmergencyCardRow } from "@/lib/supabase/types";
 
@@ -163,6 +168,15 @@ export function EmergencyCardContent({
   const medications = formatMedications(
     (card.medications as unknown[] | null) ?? null,
   );
+
+  // Issue #917: interaction warnings are computed server-side from the
+  // already-disclosed medication list only. A withheld or PIN-gated list is
+  // null here, so nothing is inferred from fields the patient kept private.
+  const interactionWarnings =
+    card.disclosure_states?.medications === "disclosed" &&
+    Array.isArray(card.medications)
+      ? drugInteractionWarnings(card.medications)
+      : [];
 
   return (
     <>

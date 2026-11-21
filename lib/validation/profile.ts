@@ -328,6 +328,59 @@ export const profileFormSchema = z.object({
   emergencyContacts: z
     .array(emergencyContactSchema)
     .max(3, "Up to 3 emergency contacts"),
+  /** Issue #918: optional sickle-cell crisis care plan. */
+  sickleCellPlan: z
+    .object({
+      baselineHb: z
+        .string()
+        .trim()
+        .max(10)
+        .refine(
+          (value) => !value || /^\d{1,2}(\.\d{1,2})?$/.test(value),
+          "Enter baseline Hb in g/dL, e.g. 7.5",
+        )
+        .optional(),
+      baselineHbDate: z
+        .string()
+        .trim()
+        .refine(
+          (value) => !value || !Number.isNaN(Date.parse(value)),
+          "Enter a valid date",
+        )
+        .optional(),
+      usualAnalgesics: z.array(z.string().trim().min(1).max(200)).max(10),
+      lastTransfusionDate: z
+        .string()
+        .trim()
+        .refine(
+          (value) => !value || !Number.isNaN(Date.parse(value)),
+          "Enter a valid date",
+        )
+        .optional(),
+      knownAlloantibodies: z.array(z.string().trim().min(1).max(200)).max(10),
+      hydroxyureaInUse: z.boolean(),
+      hydroxyureaDose: z.string().trim().max(200).optional(),
+      haematologistName: z.string().trim().max(200).optional(),
+      haematologistPhone: z
+        .string()
+        .trim()
+        .max(40)
+        .refine(
+          (value) => !value || isValidPhoneNumber(value, "NG"),
+          "Enter a valid phone number",
+        )
+        .optional(),
+      source: z.enum(["patient", "clinician"]),
+      attestedAt: z
+        .string()
+        .trim()
+        .refine(
+          (value) => !value || !Number.isNaN(Date.parse(value)),
+          "Enter a valid date",
+        )
+        .optional(),
+    })
+    .optional(),
 });
 
 export type ProfileFormValues = z.infer<typeof profileFormSchema>;
