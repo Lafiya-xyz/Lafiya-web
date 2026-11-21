@@ -1,8 +1,16 @@
+"use client";
+
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 import Image from "next/image";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 
+import {
+  DEFAULT_CARD_ROLE,
+  sectionOrderForRole,
+  type CardRole,
+  type CardSection,
+} from "@/lib/clinical/card-role-layout";
 import { formatDateTime, formatRelativeTime } from "@/lib/format/datetime";
 import { formatPhoneDisplay, phoneHref } from "@/lib/format/phone";
 import {
@@ -17,6 +25,7 @@ import { FacilityDirectory } from "@/components/facility-directory";
 import { NotifyContactsForm } from "../c/[token]/notify-contacts-form";
 import { VerifiedBadge, type VerificationStatus } from "./verified-badge";
 import { ReadAloud } from "./read-aloud";
+import { RoleSelector } from "./role-selector";
 
 function formatList(values: string[] | null, pinRequired = false): string {
   if (values === null) {

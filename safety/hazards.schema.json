@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lafiya.xyz/schemas/clinical-hazards-v1.json",
+  "title": "Lafiya clinical hazard log",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "last_reviewed", "clinical_reviewer", "hazards"],
+  "properties": {
+    "version": { "const": 1 },
+    "last_reviewed": { "type": "string", "format": "date" },
+    "clinical_reviewer": { "type": "string", "minLength": 1 },
+    "hazards": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/hazard" }
+    }
+  },
+  "$defs": {
+    "hazard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "category",
+        "severity",
+        "likelihood",
+        "risk_level",
+        "description",
+        "controls",
+        "residual_risk",
+        "status"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^HZ-[0-9]{3}$" },
+        "title": { "type": "string", "minLength": 1 },
+        "category": {
+          "enum": [
+            "misidentification",
+            "treatment",
+            "availability",
+            "privacy",
+            "data-integrity",
+            "usability"
+          ]
+        },
+        "severity": { "enum": ["catastrophic", "major", "moderate", "minor"] },
+        "likelihood": {
+          "enum": ["frequent", "probable", "possible", "unlikely", "rare"]
+        },
+        "risk_level": { "enum": ["high", "medium", "low"] },
+        "description": { "type": "string", "minLength": 1 },
+        "controls": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/control" }
+        },
+        "residual_risk": { "enum": ["high", "medium", "low"] },
+        "status": { "enum": ["open", "mitigated", "accepted", "closed"] }
+      }
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "type", "tests"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^CTL-[0-9]{3}$" },
+        "description": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["preventive", "detective", "mitigative"] },
+        "tests": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}
