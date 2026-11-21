@@ -27,6 +27,7 @@ Copy `.env.example` to `.env.local` and fill in the values. Variables marked **R
 | `LAFIYA_SANDBOX_API_KEYS` | Optional | server | secret | `optionalString` |
 | `LAFIYA_SCHEMA_COMPATIBILITY` | Optional | server | public | `optionalString` |
 | `NEXT_PUBLIC_SENTRY_DSN` | Optional | browser | public | `optionalUrl` |
+| `NIN_VERIFICATION_HMAC_SECRET` | Optional | server | secret | `z.preprocess((value) =>typeof value === "string" && value.trim() === "" ? undefined : value,z.string().min(32).optional(),)` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **Required** | browser | public | `z.string().min(1)` |
 | `NEXT_PUBLIC_SUPABASE_URL` | **Required** | browser | public | `z.url()` |
 | `PAYOUT_INDEXER_CRON_SECRET` | Optional | server | secret | `optionalString` |
@@ -197,6 +198,18 @@ returns HTTP 501 if any variable for that platform is missing.
 | `GOOGLE_WALLET_SERVICE_ACCOUNT_JSON` | Conditional | **No — secret** | Full Google Cloud service-account key JSON. |
 | `GOOGLE_WALLET_ISSUER_ID` | Conditional | No | Google Wallet issuer account ID. |
 | `GOOGLE_WALLET_CLASS_ID` | Conditional | No | ID of the generic pass class created via the Wallet Objects API. |
+
+---
+
+## NIN verification (optional — issue #940)
+
+Verify-only NIN checks against a licensed NIMC verification provider. The raw
+NIN is never persisted: only a keyed hash and the provider's verdict are
+stored. See [`docs/nin-verification-spike.md`](./nin-verification-spike.md).
+
+| Variable | Required | Exposed to browser | Purpose | Example / placeholder |
+|---|---|---|---|---|
+| `NIN_VERIFICATION_HMAC_SECRET` | Optional | **No — secret** | Pepper (32+ characters) for the keyed NIN hash. Rotating it invalidates every stored hash, so treat it as a long-lived secret. Unset disables NIN verification. | _(generate with `openssl rand -hex 32`)_ |
 
 ---
 
