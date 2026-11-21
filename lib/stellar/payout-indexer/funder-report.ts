@@ -27,12 +27,24 @@ export interface RegionPayoutRow {
   transactionHashes: string[];
 }
 
+/** Per-pool usage/remaining balance, in stroops (issue #907). */
+export interface PoolReportRow {
+  poolId: string;
+  funderName: string;
+  fundedStroops: string;
+  spentStroops: string;
+  remainingStroops: string;
+  payoutsCount: number;
+}
+
 export interface FunderReport {
   schemaVersion: number;
   /** UTC period, e.g. "2026-09" for a calendar month. */
   period: string;
   generatedAt: string;
   rows: RegionPayoutRow[];
+  /** Present only when the caller supplies pool usage; sorted by poolId. */
+  pools?: PoolReportRow[];
 }
 
 export interface RawSettlementRecord {
@@ -58,6 +70,7 @@ export function buildFunderReport(
   period: string,
   records: RawSettlementRecord[],
   generatedAt: Date = new Date(),
+  poolUsage: PoolUsageRow[] = [],
 ): FunderReport {
   if (!/^\d{4}-\d{2}$/.test(period)) {
     throw new Error(`period must be a UTC "YYYY-MM" string, got: ${period}`);
@@ -91,7 +104,22 @@ export function buildFunderReport(
     period,
     generatedAt: generatedAt.toISOString(),
     rows,
+    ...(poolUsage.length > 0 ? { pools: buildPoolReportRows(poolUsage) } : {}),
   };
+}
+
+/** Sorted, string-encoded per-pool rows so the report stays byte-reproducible. */
+function buildPoolReportRows(poolUsage: PoolUsageRow[]): PoolReportRow[] {
+  return [...poolUsage]
+    .sort((a, b) => (a.poolId < b.poolId ? -1 : a.poolId > b.poolId ? 1 : 0))
+    .map((row) => ({
+      poolId: row.poolId,
+      funderName: row.funderName,
+      fundedStroops: row.fundedStroops.toString(),
+      spentStroops: row.spentStroops.toString(),
+      remainingStroops: row.remainingStroops.toString(),
+      payoutsCount: row.payoutsCount,
+    }));
 }
 
 /** Sums decimal strings (7 dp) using integer arithmetic to avoid floating-point drift. */
