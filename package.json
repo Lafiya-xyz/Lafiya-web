@@ -59,6 +59,8 @@
     "hooks:install": "git config core.hooksPath .githooks",
     "ci:check-action-pins": "node scripts/check-action-pins.mjs",
     "contracts:check": "node scripts/check-schema-compat.mjs",
+    "soroban:snapshot": "node scripts/soroban-schema-snapshot.mjs --write",
+    "soroban:snapshot:check": "node scripts/soroban-schema-snapshot.mjs --check",
     "ci:check-clean-worktree": "node scripts/check-clean-worktree.mjs",
     "sbom": "node scripts/generate-sbom.mjs && node scripts/vex.mjs publish",
     "vex:validate": "node scripts/vex.mjs validate",
