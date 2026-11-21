@@ -42,4 +42,5 @@ export const serverEnv = serverEnvSchema.parse({
   TRUSTED_PROXY_HOPS: process.env.TRUSTED_PROXY_HOPS,
   CLIENT_IP_HEADER: process.env.CLIENT_IP_HEADER,
   PURGE_LIMITS_CRON_SECRET: process.env.PURGE_LIMITS_CRON_SECRET,
+  BULK_EXPORT_CRON_SECRET: process.env.BULK_EXPORT_CRON_SECRET,
 });

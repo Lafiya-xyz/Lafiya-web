@@ -11,6 +11,10 @@
     {
       "path": "/api/outbox/dispatch",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/internal/bulk-export",
+      "schedule": "* * * * *"
     }
   ],
   "functions": {
@@ -22,6 +26,9 @@
     },
     "app/api/outbox/dispatch/route.ts": {
       "maxDuration": 30
+    },
+    "app/api/internal/bulk-export/route.ts": {
+      "maxDuration": 300
     }
   }
 }
