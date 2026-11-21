@@ -22,6 +22,8 @@ export type PayoutEvent = {
   paidAt: string;
   pagingToken: string;
   ledger?: number;
+  /** Payout reference carried in the transaction Memo.hash (issue #900). */
+  memoReference?: string;
 };
 
 export type EventPage<T> = {
