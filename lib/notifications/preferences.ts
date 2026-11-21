@@ -33,6 +33,7 @@ export const TEMPLATE_CLASS: Record<string, EventClass> = {
   "emergency.card_accessed": "break_glass_access",
   "chw.verification_complete": "account_updates",
   "chw.reattestation_requested": "reminders",
+  "chw.certification_expiring": "account_updates",
 };
 
 export interface NotificationPreferences {
