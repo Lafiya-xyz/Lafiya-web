@@ -1,0 +1,47 @@
+{
+  "$comment": "Assumptions for perf/capacity-model.mjs (issue #886). Every number is overridable on the CLI, e.g. --cards=1000000. Sources and rationale: docs/capacity-model.md.",
+  "cards": 10000000,
+  "population": {
+    "activeShare": 0.35
+  },
+  "traffic": {
+    "requestsPerActiveCardPerDay": 1.5,
+    "peakToAverageRatio": 4,
+    "dbBoundShare": 0.25,
+    "dbLatencySeconds": 0.05,
+    "rpcShare": 0.1,
+    "avgResponseBytes": 70000
+  },
+  "db": {
+    "bytesPerProfileRow": 4096,
+    "bytesPerAuditRow": 512,
+    "auditRowsPerCardMonth": 20,
+    "bytesPerCardAttachment": 65536,
+    "annualGrowthRate": 0.4,
+    "requestsPerConnection": 20,
+    "poolerMaxConnections": 2000
+  },
+  "rpc": {
+    "providerRequestsPerSecond": 100
+  },
+  "sms": {
+    "messagesPerActiveCardPerMonth": 0.5,
+    "onboardingMessagesPerCard": 2,
+    "costPerMessageUsd": 0.035,
+    "monthlyBudgetUsd": 250000
+  },
+  "storage": {
+    "bytesPerCardYear1": 262144,
+    "annualGrowthRate": 0.5,
+    "quotaGb": 5000,
+    "costPerGbMonthUsd": 0.021
+  },
+  "serverless": {
+    "avgDurationMs": 120,
+    "memoryGb": 1,
+    "costPerMillionInvocationsUsd": 0.6,
+    "costPerGbSecondUsd": 0.0000166667,
+    "costPerGbEgressUsd": 0.15,
+    "monthlyBudgetUsd": 50000
+  }
+}

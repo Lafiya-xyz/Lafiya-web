@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createWorkloadClient } from "@/lib/supabase/workload";
 import type { Database } from "@/lib/supabase/types";
 
 import type {
@@ -28,7 +28,9 @@ function assertNoError(
 
 export class SupabasePayoutIndexerStore implements PayoutIndexerStore {
   constructor(
-    private readonly client: SupabaseClient<Database> = createAdminClient(),
+    private readonly client: SupabaseClient<Database> = createWorkloadClient(
+      "payout_indexer",
+    ),
   ) {}
 
   async getCursor(stream: StreamName): Promise<string | null> {

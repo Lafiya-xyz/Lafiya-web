@@ -13,7 +13,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createWorkloadClient } from "@/lib/supabase/workload";
 import type { Database } from "@/lib/supabase/types";
 import { logError, logInfo, logWarn } from "@/lib/logging/logger";
 
@@ -68,7 +68,11 @@ export interface LedgerReconciliationResult {
  * to identify silently diverged records. Does not modify state, only logs conflicts.
  */
 export class ReconciliationEngine {
-  constructor(private readonly client: SupabaseClient<Database> = createAdminClient()) {}
+  constructor(
+    private readonly client: SupabaseClient<Database> = createWorkloadClient(
+      "payout_indexer",
+    ),
+  ) {}
 
   /**
    * Reconcile all records: compare attestation evidence against payout status.

@@ -34,6 +34,10 @@
 //   SUPABASE_MGMT_TOKEN  — Supabase Management API token      (optional)
 //   SUPABASE_PROJECT_REF — Supabase project ref               (optional)
 //   PG_SNAPSHOT_INTERVAL — seconds between snapshots           (default: 5)
+//   CARD_POOL_SIZE       — distinct card IDs to fan across     (default: all)
+//                          Set this to the pool size the seed script created
+//                          (500) to reproduce the capacity-model bottleneck
+//                          validation in docs/capacity-model.md.
 // ---------------------------------------------------------------------------
 
 import http from "k6/http";
@@ -78,6 +82,12 @@ if (cardIds.length === 0) {
 
 // Pick one fixed card ID for the cache-hit scenario.
 const fixedCardId = cardIds[0];
+
+// Optional cap on the cache-miss fan-out pool. The capacity model
+// (perf/capacity-model.mjs) predicts DB-bound latency from the number of
+// distinct cards in flight; CARD_POOL_SIZE lets a run reproduce that number.
+const cardPoolSize = Number(__ENV.CARD_POOL_SIZE) || cardIds.length;
+const missCardIds = cardIds.slice(0, Math.max(1, cardPoolSize));
 
 // ── Options ─────────────────────────────────────────────────────────────────
 
@@ -193,7 +203,7 @@ export function cacheHitScenario() {
 export function cacheMissScenario() {
   // Pick a random card from the full pool — with 500 cards and 500 VUs,
   // most requests will be cache misses within any 60 s ISR window.
-  const id = cardIds[Math.floor(Math.random() * cardIds.length)];
+  const id = missCardIds[Math.floor(Math.random() * missCardIds.length)];
   const res = makeRequest(id);
   const ok = check(res, {
     "status is 200": (r) => r.status === 200,

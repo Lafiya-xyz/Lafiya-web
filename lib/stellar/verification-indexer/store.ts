@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createWorkloadClient } from "@/lib/supabase/workload";
 import type { Database } from "@/lib/supabase/types";
 
 import type {
@@ -21,7 +21,9 @@ function assertNoError(
 /** Database adapter used by the protocol worker, never by a browser client. */
 export class SupabaseVerificationEvidenceStore implements VerificationEvidenceStore {
   constructor(
-    private readonly client: SupabaseClient<Database> = createAdminClient(),
+    private readonly client: SupabaseClient<Database> = createWorkloadClient(
+      "verification_indexer",
+    ),
   ) {}
 
   async getCursor(): Promise<string | null> {
@@ -85,7 +87,9 @@ export class SupabaseVerificationEvidenceStore implements VerificationEvidenceSt
 /** Database adapter for the attestation-contract governance monitor. */
 export class SupabaseContractGovernanceStore implements ContractGovernanceStore {
   constructor(
-    private readonly client: SupabaseClient<Database> = createAdminClient(),
+    private readonly client: SupabaseClient<Database> = createWorkloadClient(
+      "verification_indexer",
+    ),
   ) {}
 
   async getCursor(): Promise<string | null> {

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { logError } from "@/lib/logging/logger";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createWorkloadClient } from "@/lib/supabase/workload";
 
 import type { ContractTrustState } from "./types";
 
@@ -14,7 +14,7 @@ export async function getContractTrustState(): Promise<
   ContractTrustState | "unknown"
 > {
   try {
-    const { data, error } = await createAdminClient()
+    const { data, error } = await createWorkloadClient("verification_indexer")
       .from("attestation_contract_trust_state")
       .select("state")
       .maybeSingle();

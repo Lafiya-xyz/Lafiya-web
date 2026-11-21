@@ -89,6 +89,7 @@ graph TB
 - **lib/stellar/**: Soroban attestation lookup — `getAttestation(recordHash)` calls the deployed `lafiya-contracts` registry over RPC in live mode. Mock attestations require an explicitly non-production deployment identity and cannot boot in production.
 - **lib/runtime-config.ts**: fail-closed server configuration boundary. It validates deployment identity, network/contract pairing, feature-group completeness, build/schema compatibility, and production telemetry before traffic; `/api/internal/readiness` exposes only non-secret component state for platform probes.
 - **lib/qr/**: QR code generation — see [docs/qr-code-format.md](docs/qr-code-format.md) for the encoded payload specification and the reasoning behind the chosen QR options
+- **perf/**: performance budgets and the national-scale capacity model — `npm run perf:capacity` (see [docs/capacity-model.md](docs/capacity-model.md))
 
 ### Emergency access and offline support
 
