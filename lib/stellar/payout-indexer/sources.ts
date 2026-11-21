@@ -16,6 +16,7 @@ import type {
   PayoutSource,
 } from "./types";
 import { BoundedMap } from "@/lib/bounded-map";
+import { Asset } from "@/lib/stellar/assets";
 
 const RECORD_HASH_PATTERN = /^[0-9a-f]{64}$/;
 
@@ -147,13 +148,16 @@ export class HorizonPayoutSource implements PayoutSource {
     10_000,
   );
 
+  private readonly usdc: Asset;
+
   constructor(
     horizonUrl: string,
     private readonly poolAddress: string,
-    private readonly usdcIssuer: string,
+    usdcIssuer: string,
     private readonly pageSize = 100,
-    private readonly usdcAssetCode = "USDC",
+    usdcAssetCode = "USDC",
   ) {
+    this.usdc = Asset.of(usdcAssetCode, usdcIssuer);
     this.server = new Horizon.Server(horizonUrl, {
       allowHttp: new URL(horizonUrl).protocol === "http:",
     });
@@ -170,11 +174,8 @@ export class HorizonPayoutSource implements PayoutSource {
     let check: TrustlineCheck;
     try {
       const account = await this.server.accounts().accountId(stellarAddress).call();
-      const trustline = account.balances.find(
-        (balance) =>
-          balance.asset_type !== "native" &&
-          balance.asset_code === this.usdcAssetCode &&
-          balance.asset_issuer === this.usdcIssuer,
+      const trustline = account.balances.find((balance) =>
+        this.usdc.matchesHorizonAsset(balance),
       );
       if (!trustline) {
         check = {
