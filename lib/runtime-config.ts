@@ -119,6 +119,10 @@ const rawServerEnvSchema = z.object({
   // available (see supabase/migrations/20260929210000_rate_and_frequency_limits_gc.sql).
   // Optional -- a deployment whose Postgres does have pg_cron never needs it.
   PURGE_LIMITS_CRON_SECRET: optionalString,
+  // Issue #943: bearer secret for POST /api/internal/synthetic-monitor, the
+  // ingest endpoint the Nigerian-carrier probe runners post results to.
+  // Optional -- a deployment without external probes never needs it.
+  SYNTHETIC_MONITOR_INGEST_SECRET: optionalString,
   // Issue #786: comma-separated partner sandbox keys (lfy_sbx_ prefix).
   LAFIYA_SANDBOX_API_KEYS: optionalString,
 });
@@ -376,6 +380,7 @@ export function getRuntimeConfig(
     LAFIYA_SCHEMA_COMPATIBILITY: env.LAFIYA_SCHEMA_COMPATIBILITY,
     TRUSTED_PROXY_HOPS: env.TRUSTED_PROXY_HOPS,
     CLIENT_IP_HEADER: env.CLIENT_IP_HEADER,
+    SYNTHETIC_MONITOR_INGEST_SECRET: env.SYNTHETIC_MONITOR_INGEST_SECRET,
   });
   if (!parsed.success) {
     const missingOrInvalid = [
