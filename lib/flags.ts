@@ -23,7 +23,8 @@ export type FlagKey =
   | 'attestation_lookup'
   | 'payouts'
   | 'uploads'
-  | 'capability_sharing';
+  | 'capability_sharing'
+  | 'legacy_card_sunset';
 
 export interface FlagState {
   key: FlagKey;
@@ -52,6 +53,7 @@ export const FLAG_REGISTRY: Record<FlagKey, FlagMetadata> = {
   payouts: { owner: 'payments', kind: 'kill_switch', expiresAt: null },
   uploads: { owner: 'records', kind: 'kill_switch', expiresAt: null },
   capability_sharing: { owner: 'emergency-access', kind: 'kill_switch', expiresAt: null },
+  legacy_card_sunset: { owner: 'emergency-access', kind: 'release', expiresAt: '2027-06-30' },
 };
 
 /** True when a non-kill-switch flag is past its expiry date. */
@@ -68,6 +70,10 @@ export const FLAG_DEFAULTS: Record<FlagKey, boolean> = {
   payouts: false,
   uploads: false,
   capability_sharing: false,
+  // Issue #888: off = legacy UUID links keep serving (warn page only);
+  // on = hard 410. Defaults off so a flag-store outage never breaks a
+  // printed card that is still inside its compatibility window.
+  legacy_card_sunset: false,
 };
 
 const CACHE_TTL_MS = 30_000;
