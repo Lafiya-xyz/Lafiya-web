@@ -29,6 +29,15 @@
       "maxStalenessSeconds": 600
     },
     {
+      "name": "partition-maintenance",
+      "path": "/api/internal/partition-maintenance",
+      "schedule": "17 3 * * *",
+      "owner": "platform",
+      "maxDurationSeconds": 60,
+      "idempotency": "Creates missing monthly partitions and drops only fully terminal partitions; safe to re-run.",
+      "maxStalenessSeconds": 172800
+    },
+    {
       "name": "readiness",
       "path": "/api/internal/readiness",
       "manualOnly": true,

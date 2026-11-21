@@ -9,6 +9,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/internal/partition-maintenance",
+      "schedule": "17 3 * * *"
+    },
+    {
       "path": "/api/outbox/dispatch",
       "schedule": "* * * * *"
     }
@@ -18,6 +22,9 @@
       "maxDuration": 60
     },
     "app/api/internal/purge-expired-limits/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/internal/partition-maintenance/route.ts": {
       "maxDuration": 60
     },
     "app/api/outbox/dispatch/route.ts": {
