@@ -49,6 +49,7 @@
     "schedules:generate": "node scripts/schedules.mjs",
     "schedules:check": "node scripts/schedules.mjs --check",
     "env:drift": "node scripts/env-drift.mjs --check-doc",
+    "infra:check": "node scripts/env-drift.mjs --terraform",
     "ops": "node lib/ops/cli.ts",
     "secrets:scan": "node scripts/scan-secrets.mjs",
     "secrets:scan-all": "node scripts/scan-secrets.mjs --all",
