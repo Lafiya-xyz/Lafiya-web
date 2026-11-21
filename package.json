@@ -50,6 +50,8 @@
     "schedules:check": "node scripts/schedules.mjs --check",
     "env:drift": "node scripts/env-drift.mjs --check-doc",
     "ops": "node lib/ops/cli.ts",
+    "ops:docs": "node scripts/check-ops-runbooks.mjs --write",
+    "ops:check": "node scripts/check-ops-runbooks.mjs",
     "secrets:scan": "node scripts/scan-secrets.mjs",
     "secrets:scan-all": "node scripts/scan-secrets.mjs --all",
     "bench:compare": "node scripts/compare-benchmark.mjs",
