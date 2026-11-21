@@ -169,6 +169,7 @@ Opt-in outside production. The `SENTRY_ENABLED` flag and DSN values must be cons
 | `SENTRY_ENABLED` | Optional — **Required `true` in production** | No | Set to `true` to enable Sentry error tracking. Defaults to `false`. | `false` |
 | `NEXT_PUBLIC_SENTRY_DSN` | Conditional | Yes | Public Sentry DSN for client-side error capture. Required (with or instead of `SENTRY_DSN`) when `SENTRY_ENABLED=true`. | `https://abc123@o0.ingest.sentry.io/0` |
 | `SENTRY_DSN` | Conditional | No | Server-side Sentry DSN. Required (with or instead of `NEXT_PUBLIC_SENTRY_DSN`) when `SENTRY_ENABLED=true`. | `https://abc123@o0.ingest.sentry.io/0` |
+| `SENTRY_PROFILES_SAMPLE_RATE` | Optional | No | Fraction of sampled transactions that also get a continuous CPU/heap profile (issue #942). `0` disables profiling. Must be `0` when `SENTRY_ENABLED=false`. Keep ≤ `0.1` to stay under the 2% CPU overhead budget. | `0.1` |
 
 > **Note:** `SENTRY_AUTH_TOKEN` is a build-time-only secret used by the Sentry Next.js plugin to upload source maps. It is not validated by the runtime schema and does not appear in `.env.example`. Set it in your CI/deployment secrets if you want source map uploads.
 

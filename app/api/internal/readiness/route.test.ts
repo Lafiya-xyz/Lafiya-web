@@ -44,7 +44,7 @@ function readyConfig() {
       protocolConfigured: true,
     },
     payoutIndexer: { enabled: true },
-    sentry: { enabled: true },
+    sentry: { enabled: true, profilesSampleRate: 0.1 },
     rpcEndpoints: { policy: "allowlist" },
   };
 }
@@ -73,6 +73,7 @@ describe("readiness route", () => {
         attestationGovernance: "trusted",
         payoutIndexer: "enabled",
         sentry: "enabled",
+        profiling: "enabled",
         rpcEndpoints: { policy: "allowlist", resolution: "verified" },
       },
     });

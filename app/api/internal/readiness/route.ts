@@ -177,6 +177,12 @@ export async function GET() {
         scheduledJobs,
         payoutIndexer: config.payoutIndexer.enabled ? "enabled" : "disabled",
         sentry: config.sentry.enabled ? "enabled" : "disabled",
+        // Issue #942: profiling is only active when Sentry is enabled and the
+        // sample rate is non-zero; the rate itself is not sensitive.
+        profiling:
+          config.sentry.enabled && config.sentry.profilesSampleRate > 0
+            ? "enabled"
+            : "disabled",
         // Validation results for SOROBAN_RPC_URL / STELLAR_HORIZON_URL --
         // the policy that was enforced and the boot-time DNS check outcome,
         // never the URLs or hosts themselves.

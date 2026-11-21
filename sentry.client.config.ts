@@ -11,6 +11,9 @@ Sentry.init({
   // Sampling is intentionally configured per-runtime; the sanitizer below is
   // the single source of truth for what leaves the browser.
   tracesSampleRate: 1.0,
+  // Issue #942: tag profiles with the deployed release so staging and
+  // production profiles are separable in the Sentry UI.
+  release: process.env.LAFIYA_BUILD_REVISION || undefined,
   sendDefaultPii: false,
 
   // Setting this option to true will print useful information to the console when Sentry is initialized
