@@ -41,6 +41,7 @@
     "check:adrs": "node scripts/check-adr-template.mjs",
     "docs:snippets": "node scripts/run-doc-snippets.mjs",
     "bundle:check": "node scripts/check-bundle-size.mjs",
+    "perf:capacity": "node perf/capacity-model.mjs",
     "perf:lab": "node scripts/perf-lab.mjs",
     "build:verify-repro": "node scripts/verify-reproducible-build.mjs",
     "migration:lint": "node scripts/lint-migrations.mjs",
