@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHmac } from "node:crypto";
 
+import { nameMatchKey } from "@/lib/i18n/name-match-key";
 import type { createAdminClient } from "@/lib/supabase/admin";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -27,9 +28,9 @@ export function normalizePhone(
 }
 
 /**
- * Name + date-of-birth blocking value: accents removed, case-folded,
- * punctuation dropped, and name tokens sorted so "Yusuf Amina" matches
- * "Amina Yusuf".
+ * Name + date-of-birth blocking value: NFC-normalized, diacritics removed,
+ * case-folded, punctuation dropped, and name tokens sorted so "Yusuf Amina"
+ * matches "Amina Yusuf" and "Ọlá Adéyẹmí" matches "Ola Adeyemi" (issue #927).
  */
 export function normalizeNameDob(
   name: string | null | undefined,
@@ -38,14 +39,7 @@ export function normalizeNameDob(
   if (!name || !dateOfBirth || !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
     return null;
   }
-  const tokens = name
-    .normalize("NFKD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .split(/\s+/)
-    .filter(Boolean)
-    .sort();
+  const tokens = nameMatchKey(name).split(" ").filter(Boolean).sort();
   return tokens.length > 0 ? `${tokens.join(" ")}|${dateOfBirth}` : null;
 }
 
