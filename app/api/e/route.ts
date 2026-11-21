@@ -120,12 +120,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // GCRA check (issue #793): replaces the former in-memory fixed-window limiter.
   const limit = await gcraConsume(rateKey, ANALYTICS_BURST, ANALYTICS_PERIOD_SECONDS);
+  const headers = limiterHeaders(limit, ANALYTICS_BURST, ANALYTICS_PERIOD_SECONDS);
   if (!limit.allowed) {
     return NextResponse.json(
       { ok: false, error: "rate_limited" },
       {
         status: 429,
-        headers: limiterHeaders(limit, ANALYTICS_BURST),
+        headers,
       },
     );
   }
@@ -139,7 +140,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   return NextResponse.json(
     { ok: true },
-    { headers: limiterHeaders(limit, ANALYTICS_BURST) },
+    { headers },
   );
 }
 

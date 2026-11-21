@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { checkAndIncrementFrequency } from "@/lib/frequency-limit";
+import { fixedWindowHeaders } from "@/lib/gcra-limit";
 import { logError } from "@/lib/logging/logger";
 import { QrCapacityError } from "@/lib/qr/generateQrDataUrl";
 import { createClient } from "@/lib/supabase/server";
@@ -48,7 +49,11 @@ export async function POST(request: Request) {
         { error: "Too many wallpaper generations. Please try again shortly." },
         {
           status: 429,
-          headers: { "Retry-After": String(frequency.retryAfterSeconds) },
+          headers: fixedWindowHeaders(
+            frequency,
+            WALLPAPER_FREQUENCY_MAX,
+            WALLPAPER_FREQUENCY_WINDOW_SECONDS,
+          ),
         },
       );
     }

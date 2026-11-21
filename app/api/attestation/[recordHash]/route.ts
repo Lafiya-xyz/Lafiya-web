@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { getAttestation } from "@/lib/stellar/attestation";
+import { fixedWindowHeaders } from "@/lib/gcra-limit";
 import { checkRateLimit, getClientIp, recordFailure } from "@/lib/rate-limit";
 import {
   authenticatePartnerKey,
@@ -152,6 +153,15 @@ export async function GET(
   for (const [name, value] of Object.entries(quota.headers)) {
     response.headers.set(name, value);
   }
+  // Issue #939: also emit the IETF `RateLimit` / `RateLimit-Policy` fields
+  // alongside the legacy `RateLimit-*` ones for partner clients.
+  const policy = quota.headers["RateLimit-Policy"];
+  if (policy) {
+    const limit = quota.headers["RateLimit-Limit"] ?? "";
+    const remaining = quota.headers["RateLimit-Remaining"] ?? "";
+    const reset = quota.headers["RateLimit-Reset"] ?? "";
+    response.headers.set("RateLimit", `${limit}${policy.slice(limit.length)}, ${remaining}, ${reset}`);
+  }
   await recordPartnerUsage(key.id, ENDPOINT_TEMPLATE, response.status);
   return response;
 }
@@ -213,7 +223,18 @@ async function lookup(
           error: "Too many requests. Please try again later.",
           secondsRemaining: limitCheck.secondsRemaining,
         },
-        { status: 429 },
+        {
+          status: 429,
+          headers: fixedWindowHeaders(
+            {
+              allowed: false,
+              count: 1,
+              retryAfterSeconds: limitCheck.secondsRemaining,
+            },
+            1,
+            Math.max(1, limitCheck.secondsRemaining),
+          ),
+        },
       );
     }
 
