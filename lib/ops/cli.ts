@@ -16,6 +16,7 @@
  */
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { readFileSync } from "node:fs";
 
 export interface Operator {
   id: string;
@@ -25,6 +26,7 @@ export interface OpsDb {
   requeueOutbox(id: string): Promise<void>;
   resetRateLimit(key: string): Promise<void>;
   setFlag(key: string, enabled: boolean): Promise<void>;
+  recordCanaryDecision(decision: CanaryDecision): Promise<void>;
   audit(event: AuditEvent): Promise<void>;
 }
 
@@ -74,6 +76,18 @@ export const COMMANDS: Record<string, CommandDef> = {
     args: { scenario: "Scenario id from `gameday:list`" },
     plan: (a) => `Would print the injection plan for scenario ${a.scenario}`,
     run: async () => {},
+  },
+  "canary:decide": {
+    summary:
+      "Record the automated canary analysis decision (promote or rollback) for a release (issue #946).",
+    args: {
+      release: "Release / build revision the canary analysis ran against",
+      decision: "promote or rollback, as computed by scripts/canary-analysis.mjs",
+      analysis: "Path to the canary analysis JSON produced by the analysis run",
+    },
+    plan: (a) =>
+      `Would record canary decision ${a.decision} for release ${a.release} from ${a.analysis}`,
+    run: (db, a) => db.recordCanaryDecision(parseCanaryDecision(a)),
   },
 };
 
@@ -213,6 +227,66 @@ export function renderScenarioPlan(scenario: GameDayScenario): string {
   ].join("\n");
 }
 
+export interface CanaryDecision {
+  release: string;
+  decision: "promote" | "rollback";
+  /** Why the analysis reached this decision, in one line. */
+  reason: string;
+  /** Per-metric canary vs. baseline comparison, safe dimensions only. */
+  metrics: Record<string, CanaryMetricResult>;
+  /** Deploy marker id emitted to the observability tool for this release. */
+  deployMarker: string;
+}
+
+export interface CanaryMetricResult {
+  canary: number;
+  baseline: number;
+  /** Relative change of canary vs. baseline (0.1 = +10%). */
+  delta: number;
+  threshold: number;
+  passed: boolean;
+}
+
+/**
+ * Reads the analysis JSON written by `scripts/canary-analysis.mjs` and turns it
+ * into the decision recorded in the operator audit log. The analysis file only
+ * carries aggregate counters (error rate, latency, card render success) — never
+ * PHI, card URLs, or capability tokens.
+ */
+export function parseCanaryDecision(args: Record<string, string>): CanaryDecision {
+  const raw = readFileSync(args.analysis, "utf8");
+  const analysis = JSON.parse(raw) as {
+    release?: unknown;
+    decision?: unknown;
+    reason?: unknown;
+    deployMarker?: unknown;
+    metrics?: unknown;
+  };
+  if (analysis.release !== args.release)
+    throw new Error(
+      `Analysis is for release ${String(analysis.release)}, not ${args.release}`,
+    );
+  if (analysis.decision !== args.decision)
+    throw new Error(
+      `Analysis decided ${String(analysis.decision)}, not ${args.decision}`,
+    );
+  if (analysis.decision !== "promote" && analysis.decision !== "rollback")
+    throw new Error("Analysis decision must be promote or rollback");
+  return {
+    release: args.release,
+    decision: analysis.decision,
+    reason: typeof analysis.reason === "string" ? analysis.reason : "",
+    metrics:
+      typeof analysis.metrics === "object" && analysis.metrics !== null
+        ? (analysis.metrics as Record<string, CanaryMetricResult>)
+        : {},
+    deployMarker:
+      typeof analysis.deployMarker === "string"
+        ? analysis.deployMarker
+        : `canary:${args.release}`,
+  };
+}
+
 export function parseArgv(argv: string[]): {
   command?: string;
   flags: Record<string, string>;
@@ -295,6 +369,13 @@ export async function runCommand(
     deps.log(
       `Unknown scenario. Available: ${GAME_DAY_SCENARIOS.map((s) => s.id).join(", ")}`,
     );
+    return 2;
+  }
+  if (
+    command === "canary:decide" &&
+    !["promote", "rollback"].includes(flags.decision)
+  ) {
+    deps.log("--decision must be promote or rollback");
     return 2;
   }
 
@@ -396,6 +477,16 @@ export function supabaseDeps(): RunDeps {
         check(db().from("rate_limits").delete().eq("key", key)),
       setFlag: (key, enabled) =>
         check(db().from("feature_flags").update({ enabled }).eq("key", key)),
+      recordCanaryDecision: (d) =>
+        check(
+          db().from("canary_release_decisions").insert({
+            release: d.release,
+            decision: d.decision,
+            reason: d.reason,
+            metrics: d.metrics,
+            deploy_marker: d.deployMarker,
+          }),
+        ),
       audit: (e) =>
         check(
           db().from("operator_audit_log").insert({
@@ -438,6 +529,7 @@ function dryRunDeps(): RunDeps {
       requeueOutbox: refuse,
       resetRateLimit: refuse,
       setFlag: refuse,
+      recordCanaryDecision: refuse,
       audit: refuse,
     },
   };
