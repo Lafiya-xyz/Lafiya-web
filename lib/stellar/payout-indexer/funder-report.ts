@@ -13,6 +13,8 @@
  * review notes.
  */
 
+import { formatStroops, parseStroops, sumStroops } from "./stroops";
+
 export const FUNDER_REPORT_SCHEMA_VERSION = 1;
 
 export interface RegionPayoutRow {
@@ -81,7 +83,9 @@ export function buildFunderReport(
         region,
         verifiedRegistrations,
         payoutsCount: paid.length,
-        payoutsTotalUsdc: sumFixedDecimal(paid.map((r) => r.payoutAmountUsdc)),
+        payoutsTotalUsdc: formatStroops(
+          sumStroops(paid.map((r) => parseStroops(r.payoutAmountUsdc))),
+        ),
         transactionHashes,
       };
     });
@@ -92,21 +96,6 @@ export function buildFunderReport(
     generatedAt: generatedAt.toISOString(),
     rows,
   };
-}
-
-/** Sums decimal strings (7 dp) using integer arithmetic to avoid floating-point drift. */
-function sumFixedDecimal(amounts: string[]): string {
-  const DECIMALS = 7;
-  const scale = 10 ** DECIMALS;
-  let totalScaled = 0n;
-  for (const amount of amounts) {
-    const [whole, frac = ""] = amount.split(".");
-    const fracPadded = (frac + "0".repeat(DECIMALS)).slice(0, DECIMALS);
-    totalScaled += BigInt(whole) * BigInt(scale) + BigInt(fracPadded || "0");
-  }
-  const wholePart = totalScaled / BigInt(scale);
-  const fracPart = (totalScaled % BigInt(scale)).toString().padStart(DECIMALS, "0");
-  return `${wholePart}.${fracPart}`;
 }
 
 /** JSON serialization with stable key ordering (used for both output and the signed byte stream). */

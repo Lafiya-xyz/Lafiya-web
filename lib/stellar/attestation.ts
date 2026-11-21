@@ -215,11 +215,40 @@ export class AttestationContractError extends Error {
 export type AttestationErrorKind = "timeout" | "contract" | "breaker_open" | "network";
 
 /**
+ * Raised when the attestation entry exists on-chain but its Soroban storage
+ * entry has been archived (TTL lapsed). This is *not* the same as "never
+ * attested": the entry is restorable with `RestoreFootprint` (Issue #896).
+ */
+export class AttestationArchivedError extends Error {
+  /** Ledger keys the simulation asked us to restore, if it told us. */
+  readonly restorePreamble: unknown;
+  constructor(restorePreamble?: unknown) {
+    super("Attestation entry is archived");
+    this.name = "AttestationArchivedError";
+    this.restorePreamble = restorePreamble;
+  }
+}
+
+/**
+ * Detect an archived-entry simulation failure. Soroban reports archived
+ * contract state as a host error (`MissingValue` / `restorePreamble` present)
+ * rather than as a missing attestation, so callers must not treat it as
+ * "unverified" (Issue #896).
+ */
+export function isArchivedEntryError(error: unknown): boolean {
+  if (error instanceof AttestationArchivedError) return true;
+  const message =
+    error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  return /archived|restorePreamble|MissingValue/i.test(message);
+}
+
+/**
  * Classify a lookup failure so the circuit breaker / callers can tell a
  * timeout from a network fault or a contract error (Issue #691).
  */
 export function classifyAttestationError(error: unknown): AttestationErrorKind {
   if (error instanceof AttestationTimeoutError) return "timeout";
+  if (error instanceof AttestationArchivedError) return "contract";
   if (error instanceof AttestationContractError) return "contract";
   if (error instanceof Error && error.message === "Circuit breaker is OPEN") {
     return "breaker_open";
@@ -331,6 +360,14 @@ async function fetchAttestationUncached(
     }, ATTESTATION_TIMEOUT_MS);
 
     if (rpc.Api.isSimulationError(simulation)) {
+      // Issue #896: an archived storage entry surfaces as a host error, not as
+      // a missing attestation. Classify it distinctly so the responder UI can
+      // show "verification being restored" instead of "unverified".
+      if (isArchivedEntryError(simulation.error)) {
+        throw new AttestationArchivedError(
+          (simulation as { restorePreamble?: unknown }).restorePreamble,
+        );
+      }
       throw new AttestationContractError(simulation.error);
     }
 
