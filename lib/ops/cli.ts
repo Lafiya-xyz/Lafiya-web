@@ -17,6 +17,13 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import {
+  isSeverity,
+  renderPostmortem,
+  resolveSeverity,
+  type TimelineEntry,
+} from "./incident";
+
 export interface Operator {
   id: string;
 }
@@ -26,6 +33,28 @@ export interface OpsDb {
   resetRateLimit(key: string): Promise<void>;
   setFlag(key: string, enabled: boolean): Promise<void>;
   audit(event: AuditEvent): Promise<void>;
+  /** Incident lifecycle (issue #944). */
+  createIncident(input: {
+    title: string;
+    severity: string;
+    environment: string;
+    declaredBy: string;
+  }): Promise<{ id: string }>;
+  incidentTimeline(
+    id: string,
+    since: string,
+    environment: string,
+  ): Promise<TimelineEntry[]>;
+  savePostmortem(id: string, markdown: string): Promise<void>;
+}
+
+/** GitHub issue creation for incident declarations (issue #944). */
+export interface IssueTracker {
+  createIssue(input: {
+    title: string;
+    body: string;
+    labels: string[];
+  }): Promise<{ url: string }>;
 }
 
 export interface AuditEvent {
