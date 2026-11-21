@@ -1,0 +1,6 @@
+{
+  "$schema": "./record-canonicalization-differential-v1.schema.json",
+  "contract": "lafiya.record-canonicalization-differential",
+  "version": 1,
+  "vectors": []
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Lafiya differential canonicalization vectors",
+  "description": "Divergences found by the nightly differential fuzzer (issue #958). Each vector is a record whose canonical form differs between @lafiya/protocol and the verifier-side implementation.",
+  "type": "object",
+  "required": ["contract", "version", "vectors"],
+  "properties": {
+    "contract": { "const": "lafiya.record-canonicalization-differential" },
+    "version": { "const": 1 },
+    "vectors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "seed",
+          "caseIndex",
+          "input",
+          "expected",
+          "actual"
+        ],
+        "properties": {
+          "name": { "type": "string" },
+          "seed": { "type": "integer" },
+          "caseIndex": { "type": "integer", "minimum": 0 },
+          "input": { "type": "object" },
+          "expected": { "type": "string" },
+          "actual": { "type": "string" }
+        }
+      }
+    }
+  }
+}

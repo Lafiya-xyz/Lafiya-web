@@ -109,6 +109,29 @@ export function canonicalizeEmergencyRecord(data: EmergencyRecordData): string {
   });
 }
 
+/**
+ * Verifier-side canonicalization (issue #958). This is the implementation the
+ * attestation pipeline and CHW tooling run; the nightly differential fuzzer
+ * compares it against `@lafiya/protocol` and persists any divergence as a
+ * committed test vector. Keep it independent of the protocol package.
+ */
+export function canonicalizeEmergencyRecordVerifier(
+  data: EmergencyRecordData,
+): string {
+  const normalized = normalizeEmergencyRecord(data);
+  return JSON.stringify({
+    schemaVersion: RECORD_SCHEMA_VERSION,
+    name: normalized.name,
+    bloodGroup: normalized.blood_group,
+    genotype: normalized.genotype,
+    allergies: normalized.allergies,
+    medications: normalized.medications,
+    chronicConditions: normalized.chronic_conditions,
+    emergencyContacts: normalized.emergency_contacts,
+    language: normalized.language,
+  });
+}
+
 export function computeRevisionCommitment(
   data: EmergencyRecordData,
   secretHex: string,

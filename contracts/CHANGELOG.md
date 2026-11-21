@@ -14,3 +14,9 @@ below that names the new file.
 ## record-canonicalization-v1.schema.json
 
 - Initial published version.
+
+## record-canonicalization-differential-v1.schema.json
+
+- Initial published version. Holds divergences found by the nightly
+  differential fuzzer (issue #958); the contracts repo must adopt the same
+  vectors.
