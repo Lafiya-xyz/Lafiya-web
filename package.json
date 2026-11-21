@@ -67,7 +67,9 @@
     "db:audit-rls": "node scripts/audit-rls.mjs",
     "db:drift": "node scripts/check-schema-drift.mjs",
     "deps:health": "node scripts/dependency-health.mjs",
-    "db:upgrade-rehearsal": "node scripts/pg-upgrade-rehearsal.mjs"
+    "db:upgrade-rehearsal": "node scripts/pg-upgrade-rehearsal.mjs",
+    "safety:check": "node scripts/check-hazards.mjs",
+    "safety:report": "node scripts/check-hazards.mjs --report"
   },
   "dependencies": {
     "@lafiya/protocol": "*",

@@ -1,0 +1,140 @@
+# Clinical hazard log (issue #924).
+#
+# Machine-readable source of truth for the clinical safety case. Validated in
+# CI by `npm run safety:check` (scripts/check-hazards.mjs) against
+# safety/hazards.schema.json. Every control must name at least one test file
+# that exists in the repository, so a control cannot silently lose its
+# evidence. Never put patient data (PHI) in this file.
+version: 1
+last_reviewed: "2026-11-20"
+clinical_reviewer: "PENDING — named clinician required before release"
+
+hazards:
+  - id: HZ-001
+    title: Responder sees a stale or wrong blood group / genotype
+    category: misidentification
+    severity: catastrophic
+    likelihood: rare
+    risk_level: high
+    description: >
+      A responder acts on an outdated blood group or genotype because the
+      printed card, QR link or wallet pass was rendered from a superseded
+      record revision.
+    controls:
+      - id: CTL-001
+        description: >
+          Emergency record is canonicalized deterministically and committed
+          with a revision commitment so a stale revision is detectable.
+        type: preventive
+        tests:
+          - lib/records/canonicalization.test.ts
+      - id: CTL-002
+        description: >
+          Attestation lookup is keyed by a per-patient secret record hash, so
+          a card cannot be re-pointed at another patient's record.
+        type: preventive
+        tests:
+          - lib/attestation/recordHash.test.ts
+    residual_risk: low
+    status: open
+
+  - id: HZ-002
+    title: Life-critical field hidden behind the card PIN
+    category: availability
+    severity: catastrophic
+    likelihood: unlikely
+    risk_level: high
+    description: >
+      A field a responder needs in an emergency (allergies, blood group,
+      emergency contacts) is placed behind the PIN gate, delaying care.
+    controls:
+      - id: CTL-003
+        description: >
+          PIN-gateable fields are restricted to an explicit allowlist; all
+          other fields are always disclosed.
+        type: preventive
+        tests:
+          - lib/emergency/card-pin.test.ts
+    residual_risk: low
+    status: open
+
+  - id: HZ-003
+    title: Missed drug cross-reactivity warning
+    category: treatment
+    severity: major
+    likelihood: possible
+    risk_level: medium
+    description: >
+      A recorded allergy implies a related drug class the responder should
+      avoid, but no note is shown on the card.
+    controls:
+      - id: CTL-004
+        description: >
+          Versioned, clinically reviewed cross-reactivity relations; only
+          high-evidence relations are surfaced.
+        type: preventive
+        tests:
+          - lib/clinical/allergy-cross-reactivity.test.ts
+    residual_risk: medium
+    status: open
+
+  - id: HZ-004
+    title: Critical medication not flagged on the card
+    category: treatment
+    severity: major
+    likelihood: possible
+    risk_level: medium
+    description: >
+      A medication that must never be interrupted (e.g. anticoagulant) is
+      recorded but not highlighted, so a responder may withhold or duplicate
+      therapy.
+    controls:
+      - id: CTL-005
+        description: >
+          Critical-medication list matched case-insensitively against
+          free-text entries.
+        type: preventive
+        tests:
+          - lib/validation/profile.test.ts
+    residual_risk: medium
+    status: open
+
+  - id: HZ-005
+    title: Emergency card unavailable offline
+    category: availability
+    severity: major
+    likelihood: possible
+    risk_level: medium
+    description: >
+      Network is unavailable at the point of care and the responder cannot
+      retrieve the emergency card.
+    controls:
+      - id: CTL-006
+        description: >
+          Offline envelope source resolves a cached card when the network
+          fetch fails.
+        type: mitigative
+        tests:
+          - lib/emergency/offline-source.test.ts
+    residual_risk: medium
+    status: open
+
+  - id: HZ-006
+    title: Capability token leaked through a wallet pass
+    category: privacy
+    severity: major
+    likelihood: unlikely
+    risk_level: medium
+    description: >
+      A wallet pass embeds a capability URL that is not a valid capability
+      link, or leaks more than the capability token.
+    controls:
+      - id: CTL-007
+        description: >
+          Wallet pass content is built from a validated capability URL and
+          contains no patient data.
+        type: preventive
+        tests:
+          - lib/wallet-passes/passContent.test.ts
+    residual_risk: low
+    status: open
