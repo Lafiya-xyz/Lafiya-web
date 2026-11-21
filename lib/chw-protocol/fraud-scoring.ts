@@ -14,19 +14,26 @@
  *  - the reviewer-action audit helper used by the admin release/void flow.
  *
  * Privacy: signals operate on device_id/ip_address/timestamps/revision_id
- * only -- never on patient health record content. No PHI is read, logged,
- * or persisted by this module.
+ * and, only with explicit CHW consent, a coarse (geohash precision 5)
+ * location token -- never on patient health record content. No PHI is read,
+ * logged, or persisted by this module.
  */
 
 export type FraudRuleCode =
   | "burst_velocity_v1"
   | "shared_device_ip_v1"
   | "near_duplicate_v1"
-  | "mutual_graph_v1";
+  | "mutual_graph_v1"
+  | "out_of_area_v1";
 
 export interface FraudRuleDefinition {
   ruleCode: FraudRuleCode;
-  signalFamily: "burst_velocity" | "shared_device_ip" | "near_duplicate" | "mutual_graph";
+  signalFamily:
+    | "burst_velocity"
+    | "shared_device_ip"
+    | "near_duplicate"
+    | "mutual_graph"
+    | "out_of_area";
   shadowMode: boolean;
 }
 
@@ -35,6 +42,7 @@ export const DEFAULT_FRAUD_RULES: FraudRuleDefinition[] = [
   { ruleCode: "shared_device_ip_v1", signalFamily: "shared_device_ip", shadowMode: true },
   { ruleCode: "near_duplicate_v1", signalFamily: "near_duplicate", shadowMode: true },
   { ruleCode: "mutual_graph_v1", signalFamily: "mutual_graph", shadowMode: true },
+  { ruleCode: "out_of_area_v1", signalFamily: "out_of_area", shadowMode: true },
 ];
 
 export interface VerificationIntentSignal {
@@ -43,6 +51,8 @@ export interface VerificationIntentSignal {
   revisionId: string;
   deviceId?: string;
   ipAddress?: string;
+  /** Coarse (geohash precision 5) location, only when the CHW consented. */
+  coarseGeohash?: string;
   issuedAt: Date;
 }
 
@@ -148,6 +158,35 @@ export function detectNearDuplicates(
         });
       }
     }
+  }
+  return findings;
+}
+
+/**
+ * Coarse location plausibility: flags intents whose consented coarse geohash
+ * (precision 5) is not one of the CHW's assigned operating-area geohashes.
+ *
+ * Weighted risk signal only -- callers must never auto-reject on this finding;
+ * it feeds the reviewer queue like every other rule.
+ */
+export function detectOutOfArea(
+  intents: VerificationIntentSignal[],
+  assignedGeohashes: readonly string[],
+  weight = 2,
+): FraudFinding[] {
+  const assigned = new Set(assignedGeohashes.map((g) => g.toLowerCase()));
+  const findings: FraudFinding[] = [];
+  for (const intent of intents) {
+    if (!intent.coarseGeohash) continue;
+    const geohash = intent.coarseGeohash.toLowerCase();
+    if (assigned.has(geohash)) continue;
+    findings.push({
+      chwId: intent.chwId,
+      ruleCode: "out_of_area_v1",
+      reasonCode: "out_of_area_verification",
+      evidence: { intentId: intent.intentId, coarseGeohash: geohash },
+      severityScore: weight,
+    });
   }
   return findings;
 }

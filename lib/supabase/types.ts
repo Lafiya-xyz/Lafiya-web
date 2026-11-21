@@ -310,6 +310,9 @@ export type VerificationIntentRow = {
   submitted_at: string | null;
   submitted_transaction_hash: string | null;
   terminal_at: string | null;
+  coarse_geohash: string | null;
+  location_consent_at: string | null;
+  location_purge_at: string | null;
 };
 
 export type AttestationEvidenceRow = {
@@ -787,6 +790,9 @@ export type Database = {
         Insert: Omit<VerificationIntentRow, "id" | "issued_at"> & {
           id?: string;
           issued_at?: string;
+          coarse_geohash?: string | null;
+          location_consent_at?: string | null;
+          location_purge_at?: string | null;
         };
         Update: Partial<Omit<VerificationIntentRow, "id">>;
         Relationships: [];
