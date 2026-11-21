@@ -23,6 +23,7 @@ Copy `.env.example` to `.env.local` and fill in the values. Variables marked **R
 | `DIRECT_URL` | Optional | server | secret | `optionalPoolerUrl` |
 | `LAFIYA_BUILD_REVISION` | Optional | server | public | `optionalString` |
 | `LAFIYA_DEPLOYMENT_ENV` | Optional | server | public | `optionalString` |
+| `LAFIYA_DEPRECATION_NOTIFY_PARTNERS` | Optional | server | public | `optionalString` |
 | `LAFIYA_SANDBOX_API_KEYS` | Optional | server | secret | `optionalString` |
 | `LAFIYA_SCHEMA_COMPATIBILITY` | Optional | server | public | `optionalString` |
 | `NEXT_PUBLIC_SENTRY_DSN` | Optional | browser | public | `optionalUrl` |

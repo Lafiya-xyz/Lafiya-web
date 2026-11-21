@@ -117,6 +117,9 @@ const rawServerEnvSchema = z.object({
   PURGE_LIMITS_CRON_SECRET: optionalString,
   // Issue #786: comma-separated partner sandbox keys (lfy_sbx_ prefix).
   LAFIYA_SANDBOX_API_KEYS: optionalString,
+  // Issue #938: comma-separated partner ids notified when they first call a
+  // deprecated endpoint or field. Empty disables notifications.
+  LAFIYA_DEPRECATION_NOTIFY_PARTNERS: optionalString,
 });
 
 export type DeploymentEnvironment = z.infer<typeof deploymentSchema>;

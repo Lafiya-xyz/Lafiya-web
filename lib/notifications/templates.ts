@@ -156,6 +156,30 @@ const TEMPLATES: TemplateMap = {
       body: "A gba ìbéèrè lati fọwọ́ sí àkọsílẹ̀ Lafiya ní {requested_at_utc} UTC, ó sì ń dúró fún àgbeyẹwò.",
     },
   },
+
+  /**
+   * Sent to a partner owner the first time their integration calls a
+   * deprecated API endpoint or field (issue #938).
+   * Variables: {feature}, {sunset_date}
+   */
+  "partner.deprecated_feature_used": {
+    en: {
+      subject: "Your integration uses a deprecated Lafiya API feature",
+      body: "Your integration called the deprecated API feature {feature}. It will be removed on {sunset_date}. Please migrate before that date.",
+    },
+    ha: {
+      subject: "Haɗin ku yana amfani da fasalin Lafiya da aka soke",
+      body: "Haɗin ku ya yi amfani da fasalin API na Lafiya da aka soke {feature}. Za a cire shi a {sunset_date}. Don Allah ku sauya kafin wannan ranar.",
+    },
+    ig: {
+      subject: "Njikọ gị na-eji atụmatụ Lafiya akwụsịla",
+      body: "Njikọ gị kpọrọ atụmatụ API Lafiya akwụsịla {feature}. A ga-ewepụ ya na {sunset_date}. Biko gbanwee tupu ụbọchị ahụ.",
+    },
+    yo: {
+      subject: "Ìsopọ̀ rẹ ń lo ẹ̀yà Lafiya tí a ti dáwọ́ dúró",
+      body: "Ìsopọ̀ rẹ pe ẹ̀yà API Lafiya tí a ti dáwọ́ dúró {feature}. A ó yọ ọ́ kúrò ní {sunset_date}. Jọ̀wọ́ yí padà kí ọjọ́ náà tó dé.",
+    },
+  },
 };
 
 export type TemplateId = keyof typeof TEMPLATES;
