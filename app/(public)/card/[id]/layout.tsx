@@ -26,16 +26,22 @@
  *    the label text. The manual switch (a plain link, no JS required) persists
  *    the responder's choice in a cookie; when that cookie is present it wins
  *    over Accept-Language.
+ *
+ * 4. TEXT DIRECTION (issue #926) — `ha-Arab` (Hausa in Ajami script) is
+ *    right-to-left. The negotiated locale's direction is set on the wrapper
+ *    so the whole card mirrors; patient free text keeps its own `lang`/`dir`
+ *    from the card content so mixed-script values stay readable.
  */
 
 import { cookies, headers } from "next/headers";
+import { getTextDirection } from "@/lib/i18n/direction";
 import "./print.css";
 
 /**
  * Locales we ship reviewed clinical label translations for. Kept in sync with
  * the glossary used by the card content and the offline envelope.
  */
-const SUPPORTED_LABEL_LOCALES = ["en", "ha", "fr", "ar"] as const;
+const SUPPORTED_LABEL_LOCALES = ["en", "ha", "ha-Arab", "fr", "ar"] as const;
 
 const DEFAULT_LABEL_LOCALE = "en";
 
@@ -65,6 +71,13 @@ function negotiateLabelLocale(acceptLanguage: string | null): string {
     .sort((a, b) => b.q - a.q);
 
   for (const { tag } of ranked) {
+    // Issue #926: match the full tag first so script-specific locales
+    // (`ha-Arab`) win over their primary-subtag sibling (`ha`).
+    const exact = SUPPORTED_LABEL_LOCALES.find(
+      (locale) => locale.toLowerCase() === tag,
+    );
+    if (exact) return exact;
+
     const primary = tag.split("-")[0];
     const match = SUPPORTED_LABEL_LOCALES.find((locale) => locale === primary);
     if (match) return match;
@@ -129,7 +142,11 @@ export default function CardLayout({
        * `lang` attribute (the patient's entry language), which overrides this
        * for those spans so screen readers switch voices correctly.
        */}
-      <div lang={labelLocale} data-label-locale={labelLocale}>
+      <div
+        lang={labelLocale}
+        dir={getTextDirection(labelLocale)}
+        data-label-locale={labelLocale}
+      >
         {children}
       </div>
     </>
