@@ -501,6 +501,24 @@ export type GuardianAuditLogRow = {
   occurred_at: string;
 };
 
+/** Row shape of public.funnel_daily_counts. See lib/analytics/funnel.ts. */
+export type FunnelDailyCountRow = {
+  day: string;
+  event: FunnelEvent;
+  dimension: string;
+  count: number;
+  updated_at: string;
+};
+
+/** Return row shape of public.funnel_daily_counts(from, to, min_cell). */
+export type FunnelDailyCountsRow = {
+  day: string;
+  event: FunnelEvent;
+  dimension: string;
+  /** NULL when the cell was suppressed as too small to report. */
+  count: number | null;
+};
+
 /** Row shape of public.rate_limits. See lib/rate-limit.ts. */
 export type RateLimitRow = {
   key: string;
@@ -721,6 +739,13 @@ export type Database = {
         Row: RateLimitRow;
         Insert: Pick<RateLimitRow, "key"> & Partial<RateLimitRow>;
         Update: Partial<RateLimitRow>;
+        Relationships: [];
+      };
+      funnel_daily_counts: {
+        Row: FunnelDailyCountRow;
+        // Written only through funnel_increment().
+        Insert: never;
+        Update: never;
         Relationships: [];
       };
       chw_payouts: {
