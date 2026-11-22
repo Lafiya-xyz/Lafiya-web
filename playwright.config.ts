@@ -1,5 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// Device-cloud runs (issue #954) drive the critical journeys on real low-end
+// Android devices. The cloud provider supplies the browser endpoint, so the
+// local webServer is skipped and the device label is passed through for
+// device-specific failure labels.
+const deviceCloud = process.env.LAFIYA_DEVICE_CLOUD === "1";
+
 // Network-emulation e2e scenarios (issue #610) rely on the Chrome DevTools
 // Protocol (`Network.emulateNetworkConditions`), which is only available in
 // Chromium. Firefox and WebKit cannot throttle/flap connectivity this way, so
@@ -43,6 +49,18 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         colorScheme: "dark",
         forcedColors: "active",
+      },
+    },
+    {
+      // Real low-end Android devices in the device cloud (#954). The provider
+      // adapter sets PLAYWRIGHT_WS_ENDPOINT and LAFIYA_DEVICE_LABEL per device.
+      name: "device-cloud",
+      testMatch: /device-cloud\/.*\.spec\.ts/,
+      use: {
+        ...devices["Pixel 5"],
+        connectOptions: process.env.PLAYWRIGHT_WS_ENDPOINT
+          ? { wsEndpoint: process.env.PLAYWRIGHT_WS_ENDPOINT }
+          : undefined,
       },
     },
   ],
