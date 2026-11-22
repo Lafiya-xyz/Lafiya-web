@@ -33,6 +33,7 @@
     "test:integration:flake": "node scripts/check-integration-flake.mjs",
     "test:e2e": "playwright test",
     "test:soak": "vitest run -c vitest.soak.config.ts",
+    "quarantine:check": "node scripts/check-quarantine.mjs",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "test-storybook": "test-storybook --url http://127.0.0.1:6006",
