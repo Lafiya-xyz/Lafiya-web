@@ -59,7 +59,7 @@ function assertNoPhi(vars: Record<string, string>): void {
 // ─── Template definitions ───────────────────────────────────────────────────
 
 type LocaleMap = Partial<Record<SupportedLocale, RenderedMessage>>;
-type TemplateMap = Record<string, LocaleMap>;
+export type TemplateMap = Record<string, LocaleMap>;
 
 /**
  * Notification templates keyed by template ID then locale.
@@ -162,6 +162,45 @@ export type TemplateId = keyof typeof TEMPLATES;
 
 /** All registered template IDs (used by startup routing validation, #805). */
 export const TEMPLATE_IDS = Object.keys(TEMPLATES) as TemplateId[];
+
+/** All locales the registry is expected to cover (issue #955). */
+export const SUPPORTED_LOCALES: readonly SupportedLocale[] = ["en", "ha", "ig", "yo"];
+
+/**
+ * Raw (uninterpolated) template definitions, keyed by template ID then locale.
+ * Read-only view used by the golden snapshot / segment-budget tests (#955).
+ */
+export function getTemplateDefinitions(): Readonly<TemplateMap> {
+  return TEMPLATES;
+}
+
+/**
+ * Variable names referenced by a template string (`{variable}` placeholders).
+ */
+export function templateVariables(message: RenderedMessage): string[] {
+  const keys = new Set<string>();
+  for (const text of [message.subject ?? "", message.body]) {
+    for (const match of text.matchAll(/\{(\w+)\}/g)) keys.add(match[1]);
+  }
+  return [...keys].sort();
+}
+
+/**
+ * Per-template SMS segment budgets (issue #955).
+ *
+ * A segment is one billable SMS part: 160 GSM-7 characters, or 70 UCS-2
+ * characters when the message needs Unicode (Hausa/Igbo/Yoruba diacritics).
+ * Multi-part messages lose 7 (GSM-7) / 3 (UCS-2) characters per segment to the
+ * concatenation header. Budgets are enforced by
+ * `lib/notifications/templates.golden.test.ts`; raising one is a deliberate,
+ * reviewed decision.
+ */
+export const SMS_SEGMENT_BUDGETS: Record<TemplateId, number> = {
+  "security.new_signin": 2,
+  "emergency.card_accessed": 2,
+  "chw.verification_complete": 2,
+  "chw.reattestation_requested": 2,
+};
 
 // ─── Renderer ───────────────────────────────────────────────────────────────
 
