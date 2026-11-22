@@ -4,10 +4,13 @@ export function DownloadCardButton({
   cardUrl,
   card,
   cardPin,
+  format,
 }: {
   cardUrl: string;
   /** Issue #631: printed on a separate panel, away from the QR code. */
   cardPin?: string;
+  /** Issue #932: `large-print` renders the ≥18 pt variant. */
+  format?: "large-print";
   card: {
     name: string | null;
     age: number | null;
@@ -26,16 +29,24 @@ export function DownloadCardButton({
   const handleDownload = async () => {
     const { record_updated_at: _updatedAt, ...visible } = card;
     void _updatedAt;
-    const res = await fetch("/api/card/pdf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ card: visible, cardUrl, cardPin }),
-    });
+    const res = await fetch(
+      format === "large-print"
+        ? "/api/card/pdf?format=large-print"
+        : "/api/card/pdf",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ card: visible, cardUrl, cardPin }),
+      },
+    );
     if (!res.ok) return;
     const url = URL.createObjectURL(await res.blob());
     const link = document.createElement("a");
     link.href = url;
-    link.download = "lafiya-emergency-card.pdf";
+    link.download =
+      format === "large-print"
+        ? "lafiya-emergency-card-large-print.pdf"
+        : "lafiya-emergency-card.pdf";
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };

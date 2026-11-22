@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { logError } from "@/lib/logging/logger";
-import { buildCardPdf } from "@/lib/pdf/accessible-card";
+import { buildCardPdf, buildLargePrintCardPdf } from "@/lib/pdf/accessible-card";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -68,8 +68,29 @@ export async function POST(request: Request) {
     );
   }
 
+  // Issue #932: `?format=large-print` renders the ≥18 pt variant.
+  const format = new URL(request.url).searchParams.get("format");
+  if (format !== null && format !== "large-print") {
+    return NextResponse.json(
+      { error: "Unsupported format." },
+      { status: 400 },
+    );
+  }
+
   try {
     const { card, cardUrl, cardPin } = parsed.data;
+    if (format === "large-print") {
+      const pdf = buildLargePrintCardPdf(card);
+      return new NextResponse(new Uint8Array(pdf), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition":
+            'attachment; filename="lafiya-emergency-card-large-print.pdf"',
+          "Cache-Control": "no-store",
+        },
+      });
+    }
     const pdf = buildCardPdf(card, cardUrl, cardPin);
     return new NextResponse(new Uint8Array(pdf), {
       status: 200,
