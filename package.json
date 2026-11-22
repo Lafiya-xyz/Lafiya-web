@@ -22,6 +22,8 @@
     "lint": "eslint --max-warnings=0",
     "tokens:check": "node scripts/verify-tokens-contrast.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p sw/tsconfig.json",
+    "typecheck:strict": "tsc --noEmit -p tsconfig.strict.json",
+    "typecheck:strict:ratchet": "node scripts/check-strict-ratchet.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
