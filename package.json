@@ -58,6 +58,7 @@
     "db:stop": "npx supabase stop",
     "hooks:install": "git config core.hooksPath .githooks",
     "ci:check-action-pins": "node scripts/check-action-pins.mjs",
+    "ci:test-impact": "node scripts/test-impact.mjs",
     "contracts:check": "node scripts/check-schema-compat.mjs",
     "ci:check-clean-worktree": "node scripts/check-clean-worktree.mjs",
     "sbom": "node scripts/generate-sbom.mjs && node scripts/vex.mjs publish",

@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -30,7 +32,19 @@ jobs:
 
       - run: npm run typecheck
 
-      - run: npm test
+      # Issue #953: pull requests run only affected tests; main and nightly
+      # always run the full suite.
+      - name: Test impact analysis
+        id: impact
+        run: >-
+          node scripts/test-impact.mjs
+          --base "origin/${{ github.base_ref || 'main' }}"
+          --head "${{ github.event.pull_request.head.sha || github.sha }}"
+          --event "${{ github.event_name }}"
+          --ref "${{ github.ref }}"
+          --out test-impact.json
+
+      - run: npm test -- ${{ steps.impact.outputs.vitest_args }}
 
       - name: Verify design token contrast across themes
         run: npm run tokens:check
@@ -93,7 +107,7 @@ jobs:
       - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3
       - run: supabase start
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - run: npm run test:e2e -- ${{ steps.impact.outputs.playwright_args }}
       - run: supabase stop
         if: always()
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
