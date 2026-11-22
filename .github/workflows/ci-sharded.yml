@@ -23,8 +23,46 @@ env:
   CI_DURATION_BUDGET_MINUTES: 20
 
 jobs:
+  impact:
+    name: Test impact analysis
+    runs-on: ubuntu-latest
+    outputs:
+      full: ${{ steps.impact.outputs.full }}
+      reason: ${{ steps.impact.outputs.reason }}
+      vitest_mode: ${{ steps.impact.outputs.vitest_mode }}
+      vitest_args: ${{ steps.impact.outputs.vitest_args }}
+      vitest_count: ${{ steps.impact.outputs.vitest_count }}
+      playwright_mode: ${{ steps.impact.outputs.playwright_mode }}
+      playwright_args: ${{ steps.impact.outputs.playwright_args }}
+      playwright_count: ${{ steps.impact.outputs.playwright_count }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      # Issue #953: pull requests run only affected tests; main, nightly and
+      # shared-infrastructure changes fall back to the full suites.
+      - id: impact
+        run: >-
+          node scripts/test-impact.mjs
+          --base "origin/${{ github.base_ref || 'main' }}"
+          --head "${{ github.event.pull_request.head.sha || github.sha }}"
+          --event "${{ github.event_name }}"
+          --ref "${{ github.ref }}"
+          --out test-impact.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: ${{ !cancelled() }}
+        with:
+          name: test-impact
+          path: test-impact.json
+          retention-days: 7
+
   unit:
     name: Vitest shard ${{ matrix.shard }}/4
+    needs: impact
+    if: ${{ needs.impact.outputs.vitest_mode == 'full' || needs.impact.outputs.vitest_count != '0' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -40,7 +78,8 @@ jobs:
       - run: npm install --no-save --package-lock=false "@vitest/coverage-v8@$(node -p "require('vitest/package.json').version")"
       # Thresholds are enforced once on the merged coverage, not per shard.
       - run: >-
-          npx vitest run --shard=${{ matrix.shard }}/${{ env.VITEST_SHARDS }}
+          npx vitest run ${{ needs.impact.outputs.vitest_args }}
+          --shard=${{ matrix.shard }}/${{ env.VITEST_SHARDS }}
           --reporter=blob --reporter=default --coverage --coverage.thresholds=false
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ !cancelled() }}
@@ -80,6 +119,8 @@ jobs:
 
   e2e:
     name: Playwright shard ${{ matrix.shard }}/3
+    needs: impact
+    if: ${{ needs.impact.outputs.playwright_mode == 'full' || needs.impact.outputs.playwright_count != '0' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -115,7 +156,7 @@ jobs:
       - name: Save Supabase images for the cache
         if: steps.supabase-cache.outputs.cache-hit != 'true'
         run: docker save $(docker images --format '{{.Repository}}:{{.Tag}}' | grep supabase) -o ~/supabase-images.tar
-      - run: npx playwright test --shard=${{ matrix.shard }}/${{ env.PLAYWRIGHT_SHARDS }} --reporter=blob
+      - run: npx playwright test ${{ needs.impact.outputs.playwright_args }} --shard=${{ matrix.shard }}/${{ env.PLAYWRIGHT_SHARDS }} --reporter=blob
       - run: supabase stop
         if: always()
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -169,12 +210,18 @@ jobs:
 
   duration-budget:
     name: CI duration budget
-    needs: [unit-merge, e2e-merge]
+    needs: [impact, unit-merge, e2e-merge]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     permissions:
       actions: read
     steps:
+      - name: Report test impact
+        run: |
+          echo "## Test impact" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Vitest: ${{ needs.impact.outputs.vitest_mode }} (${{ needs.impact.outputs.vitest_count }} files)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Playwright: ${{ needs.impact.outputs.playwright_mode }} (${{ needs.impact.outputs.playwright_count }} specs)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Reason: ${{ needs.impact.outputs.reason }}" >> "$GITHUB_STEP_SUMMARY"
       - name: Alert when the run exceeds the budget
         env:
           GH_TOKEN: ${{ github.token }}

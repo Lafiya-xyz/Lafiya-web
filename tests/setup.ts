@@ -2,6 +2,9 @@ import { cleanup } from "@testing-library/react";
 import { afterEach, expect, vi } from "vitest";
 
 import "@testing-library/jest-dom/vitest";
+// Hermetic guards (Issue #956): unmocked network calls fail, time is frozen
+// and `Math.random` is seeded by default. See tests/hermetic.ts for opt-outs.
+import "./hermetic";
 import * as matchers from "vitest-axe/matchers";
 import "vitest-axe/extend-expect";
 

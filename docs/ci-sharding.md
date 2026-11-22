@@ -17,6 +17,26 @@ Per-shard coverage thresholds are disabled; the merged coverage is checked
 against the same `vitest.config.ts` thresholds and the ratchet baseline, so
 merged numbers match an unsharded run (V8 coverage merges by hit counts).
 
+## Test impact analysis (Issue #953)
+
+The `impact` job runs `scripts/test-impact.mjs` before the suites and decides
+what to run:
+
+- **Pull requests**: Vitest runs only the tests that (transitively) import a
+  changed source file, plus changed test files. Playwright runs only specs
+  whose `page.goto()` routes match a changed route directory (e.g. a change
+  under `app/(public)/card/` selects specs that visit `/card/...`).
+- **Fallback to full suites**: any change to `package.json`,
+  `package-lock.json`, `tsconfig*`, `vitest*`/`playwright`/`next` configs,
+  `.github/`, `scripts/`, `supabase/`, `packages/`, test fixtures/helpers, or
+  app-wide entry points (`proxy.ts`, `instrumentation.ts`, Sentry configs).
+- **`main`, nightly and manual runs** always run the full suites.
+
+The job writes `test-impact.json` (artifact, 7 days) and a summary table in
+the `duration-budget` job. Escape rate is monitored by the nightly full run:
+any test that fails on `main` but was skipped on a PR is visible in the
+nightly run and the flaky-test summary.
+
 ## Caching
 
 - npm: `actions/setup-node` cache keyed by `package-lock.json`.

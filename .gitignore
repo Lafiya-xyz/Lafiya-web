@@ -19,6 +19,9 @@
 .nyc_output/
 test_snapshots/
 **/test_snapshots/
+# Golden notification-template snapshots are committed on purpose (issue #955).
+!lib/notifications/__snapshots__/
+!lib/notifications/__snapshots__/*.snap
 
 # playwright
 /playwright-report/
