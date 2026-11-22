@@ -17,6 +17,23 @@ import { sendPhoneOtp, verifyPhoneOtp } from "./phone-otp-actions";
 
 const RESEND_COOLDOWN_S = 60;
 
+/**
+ * Issue #930 (WCAG 2.2 SC 3.3.8): WebOTP API support. On Android Chrome the
+ * SMS is delivered to the page as a `otp` event, so the user never has to
+ * transcribe the code. The code is only ever written into the local input --
+ * it is not logged or sent anywhere except the existing verify action.
+ */
+type WebOtpCredential = { code?: string };
+type WebOtpCredentialContainer = {
+  get?: (options: { otp: { transport: string[] } }) => Promise<WebOtpCredential>;
+};
+
+function webOtpContainer(): WebOtpCredentialContainer | undefined {
+  if (typeof navigator === "undefined") return undefined;
+  return (navigator as Navigator & { credentials?: WebOtpCredentialContainer })
+    .credentials;
+}
+
 export function PhoneOtpForm() {
   const [sendState, sendAction, isSending] = useActionState(
     sendPhoneOtp,
@@ -57,6 +74,32 @@ export function PhoneOtpForm() {
     }
   }, [sendState?.sent]);
 
+  // Issue #930: WebOTP -- fill the code automatically when the SMS arrives.
+  useEffect(() => {
+    if (!sendState?.sent) return;
+    const container = webOtpContainer();
+    if (!container?.get) return;
+
+    let cancelled = false;
+    container
+      .get({ otp: { transport: ["sms"] } })
+      .then((credential) => {
+        const code = credential?.code?.replace(/\D/g, "").slice(0, 6);
+        if (cancelled || !code || !otpInputRef.current) return;
+        otpInputRef.current.value = code;
+        otpInputRef.current.dispatchEvent(
+          new Event("input", { bubbles: true }),
+        );
+      })
+      .catch(() => {
+        // Not supported / permission denied / no SMS: manual entry still works.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sendState?.sent]);
+
   // --- Step 2: verify code ---
   if (sendState?.sent && sendState.e164) {
     return (
@@ -89,8 +132,15 @@ export function PhoneOtpForm() {
               required
               autoComplete="one-time-code"
               placeholder="123456"
+              aria-describedby="otp-token-hint"
               className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 tracking-widest focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-zinc-600"
             />
+            <p
+              id="otp-token-hint"
+              className="mt-1 text-xs text-zinc-500 dark:text-zinc-400"
+            >
+              Paste the code from your SMS if it is not filled in automatically.
+            </p>
           </div>
 
           {verifyState?.error ? (
@@ -144,9 +194,13 @@ export function PhoneOtpForm() {
           required
           autoComplete="tel"
           placeholder="+2348001234567"
+          aria-describedby="phone-number-hint"
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-zinc-950 focus:ring-2 focus:ring-zinc-400 focus:ring-offset-0 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-zinc-600"
         />
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+        <p
+          id="phone-number-hint"
+          className="mt-1 text-xs text-zinc-500 dark:text-zinc-400"
+        >
           Nigerian numbers only. Enter with or without the +234 prefix.
         </p>
       </div>
