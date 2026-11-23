@@ -5,6 +5,9 @@
  * majority birthday in the dependant's jurisdiction time zone; a staged
  * handover (notify → claim/decline/timeout) decides what access, if any,
  * the guardian retains. Every transition appends a consent record.
+ *
+ * Issue #871: guardian consent for a public card ends at majority too; see
+ * `decideMinorCardActivation` in lib/consent.ts and `majorityHandoverRequiresReconfirm`.
  */
 
 export type HandoverState =
@@ -127,4 +130,12 @@ export function transitionHandover(
     default:
       return current;
   }
+}
+
+/**
+ * Issue #871: once handover starts, the guardian's consent for a public card
+ * no longer applies and the dependant must re-confirm from their own account.
+ */
+export function majorityHandoverRequiresReconfirm(handover: Handover): boolean {
+  return handover.state !== "not_eligible";
 }

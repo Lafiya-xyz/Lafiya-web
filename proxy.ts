@@ -111,6 +111,9 @@ export async function proxy(request: NextRequest) {
     response.headers.set("Referrer-Policy", "no-referrer");
     response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
     response.headers.set("Cache-Control", "private, no-store, max-age=0");
+    // Issue #872: lets the service worker tell first-party card responses
+    // from captive-portal pages before trusting or caching them.
+    response.headers.set("X-Lafiya-Origin", "1");
     // Issue #520: report-to (Reporting API v1, via Reporting-Endpoints)
     // covers current browsers; report-uri stays alongside it for Safari,
     // which has never implemented the Reporting API. Both point at the

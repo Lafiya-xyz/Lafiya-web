@@ -3,7 +3,7 @@
 - **Status:** Draft for review
 - **Owner:** Privacy Engineering
 - **Related issue:** #574
-- **Scope:** Public emergency card, CHW verification, on-chain attestations, offline caching, analytics
+- **Scope:** Public emergency card, CHW verification, on-chain attestations, offline caching, analytics, children's cards
 - **Out of scope:** Legal certification
 
 This DPIA documents the processing activities of the emergency card system, the associated
@@ -64,6 +64,27 @@ flowchart LR
   C -->|dashboards| D[Operators]
 ```
 
+### 1.6 Children's cards and guardian consent (issue #871)
+
+Under the NDPA, processing a child's data requires consent from a parent or
+legal guardian and reasonable efforts to verify it. A dependant's card is
+private by default and can only be made public once a consent record from the
+**current** guardian, under the **current** policy version, has been verified
+by one of the assurance methods: CHW in-person confirmation, facility
+confirmation, or operator document review. Dependants without a date of birth
+are treated as minors (fail closed).
+
+- **Ledger:** `public.guardian_consents` records method, verifier, timestamps
+  and policy version. It stores only an opaque evidence reference; documents
+  stay with the verifier and are never uploaded to the ledger.
+- **Enforcement:** `public.set_dependant_card_public()` (database) and
+  `decideMinorCardActivation()` in `lib/consent.ts` (application).
+- **Re-confirmation:** revoking a guardianship makes the card private again;
+  at the age of majority guardian consent stops applying and the dependant
+  must re-confirm from their own account (`lib/account/guardianHandover.ts`).
+- **Audit:** request, verification and visibility changes are written to
+  `guardian_audit_log` without PHI.
+
 ## 2. Risk register
 
 Scoring: Likelihood (L) and Severity (S) on a 1–5 scale; Risk = L x S.
@@ -77,6 +98,7 @@ High risk is defined as Risk >= 12.
 | R4 | CHW coercion (pressure to disclose protected fields) | 2 | 5 | 10 | Scoped access, audit events without PHI, and role verification. See CHW verification flow and `SECURITY.md`. |
 | R5 | Analytics re-identification via aggregation | 2 | 4 | 8 | Only aggregated, non-identifying events; no PHI or capability tokens. See analytics flow. |
 | R6 | Cross-region data transfer | 2 | 4 | 8 | Runtime region enforcement via `compliance/residency.json` and `scripts/generate-ropa.mjs`. |
+| R7 | Child's card published without verified guardian consent | 2 | 5 | 10 | Private by default; verified consent from the current guardian required (section 1.6, issue #871). |
 
 Every high risk (R1, R2, R3) has a mitigation and/or a tracked issue.
 
@@ -90,6 +112,7 @@ Every high risk (R1, R2, R3) has a mitigation and/or a tracked issue.
 | Scoped CHW access with audit events | CHW verification flow; `SECURITY.md` |
 | Aggregated analytics only | Analytics flow |
 | Runtime region enforcement | `compliance/residency.json`; `scripts/generate-ropa.mjs` |
+| Verified guardian consent for minors' cards | `supabase/migrations/20261123120000_guardian_consent_assurance.sql`; `lib/consent.ts`; issue #871 |
 
 ## 4. Review process
 

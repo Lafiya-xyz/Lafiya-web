@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   detectQrFromVideo,
   hasBarcodeDetector,
@@ -13,7 +12,6 @@ import {
 } from "../../lib/qr/scanner";
 
 export function ScannerView() {
-  const router = useRouter();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanningRef = useRef<boolean>(true);
@@ -274,7 +272,9 @@ export function ScannerView() {
               <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={() => router.push(detectedResult.targetUrl!)}
+                  // Full navigation so the service worker can cache the card
+                  // offline and keep it in an active shift vault (#873).
+                  onClick={() => window.location.assign(detectedResult.targetUrl!)}
                   className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium text-sm text-center"
                 >
                   Open Card

@@ -2,6 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import {
+  CONNECTIVITY_MESSAGE,
+  CONNECTIVITY_PATH,
+  CARD_NAVIGATION_BUDGET_MS,
+  classifyProbe,
+  signConnectivityNonce,
+  type ConnectivityState,
+  type ProbeOutcome,
+} from "@/lib/offline/connectivity";
+
 /**
  * Registers the offline service worker (public/sw.js) once the app has
  * loaded. It is registered for the whole origin so that by the time a
@@ -30,7 +40,10 @@ async function registerPeriodicSync(registration: ServiceWorkerRegistration) {
   const periodicSync = (
     registration as ServiceWorkerRegistration & {
       periodicSync?: {
-        register: (tag: string, options: { minInterval: number }) => Promise<void>;
+        register: (
+          tag: string,
+          options: { minInterval: number },
+        ) => Promise<void>;
       };
     }
   ).periodicSync;
@@ -88,6 +101,86 @@ export function ServiceWorkerRegister() {
   return null;
 }
 
+async function probeConnectivity(): Promise<ConnectivityState> {
+  if (!navigator.onLine) return "offline";
+  const nonce = crypto.randomUUID().replace(/-/g, "");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CARD_NAVIGATION_BUDGET_MS);
+  const started = performance.now();
+  let outcome: ProbeOutcome;
+  try {
+    const response = await fetch(`${CONNECTIVITY_PATH}?nonce=${nonce}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    const body = (await response.json().catch(() => null)) as {
+      mac?: string;
+    } | null;
+    outcome = {
+      kind: "response",
+      verified:
+        response.ok && body?.mac === (await signConnectivityNonce(nonce)),
+      elapsedMs: performance.now() - started,
+    };
+  } catch {
+    outcome = { kind: controller.signal.aborted ? "timeout" : "error" };
+  } finally {
+    clearTimeout(timer);
+  }
+  return classifyProbe(outcome);
+}
+
+const CONNECTIVITY_COPY: Partial<Record<ConnectivityState, string>> = {
+  captive:
+    "You are on a sign-in network. Sign in to the Wi-Fi or data portal to load current information; cached cards remain available.",
+  degraded: "The network is very slow. Cached cards are shown where available.",
+  offline: "You are offline. Cached cards are shown where available.",
+};
+
+/**
+ * Issue #872: renders an explicit banner when the network is a captive
+ * portal, degraded or offline. The classification comes from the service
+ * worker (card navigations) and from a signed probe on load / reconnect.
+ */
+export function ConnectivityBanner() {
+  const [state, setState] = useState<ConnectivityState>("online");
+
+  useEffect(() => {
+    if (typeof navigator === "undefined") return;
+    let cancelled = false;
+    const update = () => {
+      void probeConnectivity().then((next) => {
+        if (!cancelled) setState(next);
+      });
+    };
+    const onMessage = (event: MessageEvent) => {
+      if (event.data?.type === CONNECTIVITY_MESSAGE) setState(event.data.state);
+    };
+    navigator.serviceWorker?.addEventListener("message", onMessage);
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    update();
+    return () => {
+      cancelled = true;
+      navigator.serviceWorker?.removeEventListener("message", onMessage);
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
+
+  const copy = CONNECTIVITY_COPY[state];
+  if (!copy) return null;
+  return (
+    <div
+      role="status"
+      data-connectivity={state}
+      className="fixed inset-x-0 bottom-0 z-50 bg-blue-900 px-4 py-2 text-sm text-white"
+    >
+      {copy}
+    </div>
+  );
+}
+
 type PersistenceState = "unknown" | "protected" | "best-effort" | "unsupported";
 
 /**
@@ -113,7 +206,9 @@ export function OfflineStorageStatus() {
     }
     if (typeof navigator.storage.persisted === "function") {
       try {
-        setState((await navigator.storage.persisted()) ? "protected" : "best-effort");
+        setState(
+          (await navigator.storage.persisted()) ? "protected" : "best-effort",
+        );
       } catch {
         setState("best-effort");
       }
@@ -124,7 +219,11 @@ export function OfflineStorageStatus() {
     if (typeof navigator.storage.estimate === "function") {
       try {
         const { usage: used, quota } = await navigator.storage.estimate();
-        if (typeof used === "number" && typeof quota === "number" && quota > 0) {
+        if (
+          typeof used === "number" &&
+          typeof quota === "number" &&
+          quota > 0
+        ) {
           setUsage(`${formatBytes(used)} of ${formatBytes(quota)} used`);
         }
       } catch {

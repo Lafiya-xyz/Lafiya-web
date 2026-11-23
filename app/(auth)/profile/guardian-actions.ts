@@ -19,6 +19,13 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { hasReachedMajority } from "@/lib/account/guardianHandover";
+import {
+  CURRENT_POLICY_VERSION,
+  GUARDIAN_ASSURANCE_METHODS,
+  decideMinorCardActivation,
+  type GuardianConsentRecord,
+} from "@/lib/consent";
 import { logError } from "@/lib/logging/logger";
 import { createClient } from "@/lib/supabase/server";
 import type { DependantRow } from "@/lib/supabase/types";
@@ -174,6 +181,137 @@ export async function deleteDependant(
       route: "/profile (guardian-actions: deleteDependant)",
     });
     return { error: "Could not remove this profile. Please try again." };
+  }
+
+  revalidatePath("/profile");
+  return { success: true };
+}
+
+// ---- Guardian consent for minors (issue #871) ----
+
+const guardianConsentSchema = z.object({
+  dependantId: z.string().uuid("Missing dependant ID."),
+  method: z.enum(GUARDIAN_ASSURANCE_METHODS),
+  // Reference to evidence held by the verifier (e.g. CHW visit or facility
+  // record number). Documents themselves are never stored in the ledger.
+  evidenceRef: z.string().trim().max(200).optional(),
+});
+
+export type GuardianConsentState = { error?: string; success?: boolean };
+
+export async function requestGuardianConsent(
+  _prev: GuardianConsentState | undefined,
+  formData: FormData,
+): Promise<GuardianConsentState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You must be signed in." };
+
+  const parsed = guardianConsentSchema.safeParse({
+    dependantId: formData.get("dependantId"),
+    method: formData.get("method"),
+    evidenceRef: formData.get("evidenceRef") || undefined,
+  });
+  if (!parsed.success) return formatZodError(parsed.error);
+
+  const { error } = await supabase.rpc("record_guardian_consent", {
+    p_dependant_id: parsed.data.dependantId,
+    p_method: parsed.data.method,
+    p_evidence_ref: parsed.data.evidenceRef ?? null,
+    p_policy_version: CURRENT_POLICY_VERSION,
+  });
+  if (error) {
+    if (error.message.includes("UNAUTHORIZED")) {
+      return { error: "You are not authorised to manage this profile." };
+    }
+    logError("Failed to record guardian consent", error, {
+      route: "/profile (guardian-actions: requestGuardianConsent)",
+    });
+    return { error: "Could not record consent. Please try again." };
+  }
+
+  revalidatePath("/profile");
+  return { success: true };
+}
+
+export type CardVisibilityState = { error?: string; success?: boolean };
+
+/**
+ * Makes a dependant's card public/private. A minor's card cannot be made
+ * public without verified consent from the current guardian; the database
+ * RPC enforces the same rule.
+ */
+export async function setDependantCardPublic(
+  _prev: CardVisibilityState | undefined,
+  formData: FormData,
+): Promise<CardVisibilityState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "You must be signed in." };
+
+  const dependantId = formData.get("dependantId");
+  if (typeof dependantId !== "string" || !dependantId) {
+    return { error: "Missing dependant ID." };
+  }
+  const makePublic = formData.get("public") === "true";
+
+  if (makePublic) {
+    const { data: dependant } = await supabase
+      .from("dependants")
+      .select("date_of_birth")
+      .eq("id", dependantId)
+      .maybeSingle();
+    const { data: consents } = await supabase
+      .from("guardian_consents")
+      .select("*")
+      .eq("dependant_id", dependantId);
+    const dob = dependant?.date_of_birth;
+    const decision = decideMinorCardActivation({
+      isMinor: !dob || !hasReachedMajority(dob, new Date()),
+      currentGuardianId: user.id,
+      consents: (consents ?? []) as GuardianConsentRecord[],
+    });
+    if (!decision.allowed) {
+      return {
+        error:
+          decision.reason === "consent_pending"
+            ? "Guardian consent is awaiting verification. The card can be made public once it is verified."
+            : decision.reason === "majority_reconfirm"
+              ? "This dependant has reached the age of majority and must make their own card public."
+              : "A verified guardian consent is required before a child's card can be made public.",
+      };
+    }
+  }
+
+  const { error } = await supabase.rpc("set_dependant_card_public", {
+    p_dependant_id: dependantId,
+    p_public: makePublic,
+    p_policy_version: CURRENT_POLICY_VERSION,
+  });
+  if (error) {
+    if (error.message.includes("MAJORITY_RECONFIRM_REQUIRED")) {
+      return {
+        error:
+          "This dependant has reached the age of majority and must make their own card public.",
+      };
+    }
+    if (error.message.includes("GUARDIAN_CONSENT_REQUIRED")) {
+      return {
+        error:
+          "A verified guardian consent is required before a child's card can be made public.",
+      };
+    }
+    if (error.message.includes("UNAUTHORIZED")) {
+      return { error: "You are not authorised to manage this profile." };
+    }
+    logError("Failed to change dependant card visibility", error, {
+      route: "/profile (guardian-actions: setDependantCardPublic)",
+    });
+    return { error: "Could not update card visibility. Please try again." };
   }
 
   revalidatePath("/profile");
