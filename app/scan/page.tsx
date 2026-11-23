@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { OfflinePacksPanel } from "./offline-packs-panel";
 import { ScannerView } from "./scanner-view";
+import { ShiftVaultPanel } from "./shift-vault-panel";
 
 export const metadata: Metadata = {
   title: "Scan Emergency Card | Lafiya",
@@ -10,6 +12,8 @@ export default function ScanPage() {
   return (
     <main className="min-h-screen bg-black">
       <ScannerView />
+      <ShiftVaultPanel />
+      <OfflinePacksPanel />
     </main>
   );
 }

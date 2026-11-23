@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-import { ServiceWorkerRegister } from "./offline-register";
+import { ConnectivityBanner, ServiceWorkerRegister } from "./offline-register";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { VitalsReporter } from "./vitals-reporter";
 
@@ -76,6 +76,7 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col">
         {children}
         <ServiceWorkerRegister />
+        <ConnectivityBanner />
         <VitalsReporter />
       </body>
     </html>
