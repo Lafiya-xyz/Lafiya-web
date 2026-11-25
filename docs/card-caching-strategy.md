@@ -52,6 +52,42 @@ device that stays permanently offline cannot learn a later revocation; the
 72-hour envelope maximum limits Lafiya's own cached presentation but cannot
 erase screenshots, printouts, or copied data.
 
+## Storage eviction (Issue #875)
+
+Cache Storage is best-effort. If it's evicted, the patient's offline card
+disappears without warning. The profile page's offline-readiness check
+(`OfflineStorageStatus` → `lib/offline/readiness.ts`) reads only the
+`x-lafiya-cached-at` metadata of entries in `lafiya-emergency-envelopes-v2`
+and never decrypts an envelope. It reports one of these states:
+
+| State         | Meaning                                                                     |
+| ------------- | --------------------------------------------------------------------------- |
+| `ready`       | An envelope is present and newer than the 72 h maximum age                  |
+| `stale`       | An envelope is present but past 72 h. The SW will refuse to render it       |
+| `evicted`     | A local marker says an envelope existed, but the cache is now empty         |
+| `missing`     | No envelope and no marker: never saved on this device, or everything wiped |
+| `unsupported` | No Cache Storage API                                                        |
+
+The marker (`lafiya-offline-readiness-v1` in `localStorage`) stores the newest
+`cachedAt` seen and the time it was last verified. It holds no card data.
+
+| Platform            | Eviction behaviour                                                                                                                  | Guidance shown                                                     |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Chrome Android      | Best-effort storage can go under storage pressure. `navigator.storage.persist()` (the "Protect offline card" button) prevents that | Backup (print / wallet pass / wallpaper) when not `ready`          |
+| Safari iOS, tab     | ITP deletes **all** script-writable storage after 7 days of browser use with no visit to the site                                  | Always: Add to Home Screen, plus backups                           |
+| Safari iOS, home-screen PWA | Exempt from the 7-day ITP deletion                                                                                          | Backup only when not `ready`                                       |
+
+**Known limitation:** ITP also deletes `localStorage`, so after an ITP wipe the
+marker is gone and the state shows as `missing`, not `evicted`. That's why the
+iOS-tab guidance is shown no matter what state the check reports. The patient
+still sees that there's no offline copy, so the loss isn't silent.
+
+The manual matrix (Chrome Android, Safari iOS tab, iOS installed PWA) still
+has to be run on real devices. Expected result: `ready` after viewing the card
+online; `missing` on iOS tab after 7+ days with no visit; `evicted` after
+clearing site data except `localStorage` (e.g. DevTools → Cache Storage →
+delete).
+
 ## Verification
 
 - `npm run typecheck`
