@@ -22,6 +22,11 @@ import {
   type AuditEvent,
 } from "@/lib/audit/explorer";
 import { requireAdminSession } from "@/lib/auth/admin-session";
+import {
+  exportContentType,
+  streamAuditExport,
+  type ExportFormat,
+} from "@/lib/audit/stream-export";
 import { loadReportSigningKeypair, signReportBytes } from "@/lib/stellar/payout-indexer/report-signing";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -37,18 +42,71 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
   const format = params.get("format");
-  if (format !== null && format !== "json" && format !== "csv") {
-    return NextResponse.json({ error: "format must be json or csv" }, { status: 400 });
+  if (format !== null && format !== "json" && format !== "csv" && format !== "ndjson") {
+    return NextResponse.json({ error: "format must be json, csv or ndjson" }, { status: 400 });
   }
+  const stream = params.get("stream") === "1";
 
   const signingSecret = process.env.FUNDER_REPORT_SIGNING_SECRET;
-  if (format && !signingSecret) {
+  if (format && !stream && !signingSecret) {
     return NextResponse.json({ error: "server missing FUNDER_REPORT_SIGNING_SECRET" }, { status: 500 });
   }
 
   const { filters, justification } = parsed;
   // audit_events / audit_explorer_queries are not in the generated types yet.
   const db = createAdminClient({ purpose: "audit-explorer" }) as unknown as SupabaseClient;
+
+  if (stream && format) {
+    // Issue #884: bounded-memory export. The query is recorded before any
+    // bytes leave the server; the final row count is patched in afterwards
+    // via a second append-only row so the log stays immutable.
+    const { data: logged, error: auditError } = await db
+      .from("audit_explorer_queries")
+      .insert({
+        admin_id: session.adminId,
+        admin_role: session.role,
+        justification,
+        filters: { ...filters, from: filters.from.toISOString(), to: filters.to.toISOString() },
+        result_count: 0,
+        exported_format: format === "ndjson" ? "json" : format,
+      })
+      .select("id")
+      .single();
+    if (auditError) {
+      return NextResponse.json({ error: "could not record audit query" }, { status: 500 });
+    }
+
+    const body = streamAuditExport({
+      db,
+      filters,
+      role: session.role,
+      format,
+      onComplete: async (rowCount) => {
+        await db.from("audit_explorer_queries").insert({
+          admin_id: session.adminId,
+          admin_role: session.role,
+          justification,
+          filters: {
+            ...filters,
+            from: filters.from.toISOString(),
+            to: filters.to.toISOString(),
+            streamed: true,
+            stream_of: (logged as { id?: string } | null)?.id ?? null,
+          },
+          result_count: rowCount,
+          exported_format: format === "ndjson" ? "json" : format,
+        });
+      },
+    });
+
+    return new Response(body, {
+      headers: {
+        "content-type": exportContentType(format),
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  }
 
   let query = db
     .from("audit_events")

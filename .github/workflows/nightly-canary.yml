@@ -35,15 +35,45 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Install Next.js and React canaries (lockfile untouched)
+        # Issue #844: eslint-config-next is pinned to the stable Next version and
+        # declares a peer dependency on that exact `next` release, so installing
+        # only next/react/react-dom leaves the linter on the stable config and
+        # the canary run fails at the first gate for the wrong reason. Install
+        # the matching canary of eslint-config-next too, and keep the install
+        # isolated: --no-save + --package-lock=false means neither package.json
+        # nor package-lock.json is written (asserted below).
         run: |
           npm install --no-save --package-lock=false --legacy-peer-deps \
-            next@canary react@canary react-dom@canary
+            next@canary react@canary react-dom@canary eslint-config-next@canary
           echo "NEXT_VERSION=$(node -p "require('next/package.json').version")" >> "$GITHUB_ENV"
           echo "REACT_VERSION=$(node -p "require('react/package.json').version")" >> "$GITHUB_ENV"
+          echo "ESLINT_CONFIG_NEXT_VERSION=$(node -p "require('eslint-config-next/package.json').version")" >> "$GITHUB_ENV"
       - name: Inject breaking change (verification only)
         if: inputs.inject_breaking_change
         run: |
           echo 'export const canaryInjected: number = "not a number";' > lib/canary-injected.ts
+      - name: Assert canary isolation
+        # Issue #844: the canary install must stay isolated to this job. Fail
+        # loudly if the canary packages did not actually replace the stable
+        # ones, so a green run can never be mistaken for a canary pass.
+        run: |
+          node -e '
+            const stable = require("./package.json");
+            const next = require("next/package.json").version;
+            const react = require("react/package.json").version;
+            const eslintConfigNext = require("eslint-config-next/package.json").version;
+            const problems = [];
+            if (next === stable.dependencies.next) problems.push(`next is still stable (${next})`);
+            if (react === stable.dependencies.react) problems.push(`react is still stable (${react})`);
+            if (eslintConfigNext === stable.devDependencies["eslint-config-next"]) {
+              problems.push(`eslint-config-next is still stable (${eslintConfigNext})`);
+            }
+            if (problems.length) {
+              console.error("Canary isolation check failed:\n- " + problems.join("\n- "));
+              process.exit(1);
+            }
+            console.log(`canary: next@${next} react@${react} eslint-config-next@${eslintConfigNext}`);
+          '
       - id: lint
         continue-on-error: true
         run: npm run lint
@@ -69,6 +99,28 @@ jobs:
           npx playwright test e2e/public-card-view.spec.ts e2e/card-no-javascript.spec.ts --project=chromium
       - name: Assert lockfile unchanged
         run: git diff --exit-code -- package.json package-lock.json
+      - name: Assert canary isolation
+        # Issue #844: the canary install must stay isolated to this job. Fail
+        # loudly if the canary packages did not actually replace the stable
+        # ones, so a green run can never be mistaken for a canary pass.
+        run: |
+          node -e '
+            const stable = require("./package.json");
+            const next = require("next/package.json").version;
+            const react = require("react/package.json").version;
+            const eslintConfigNext = require("eslint-config-next/package.json").version;
+            const problems = [];
+            if (next === stable.dependencies.next) problems.push(`next is still stable (${next})`);
+            if (react === stable.dependencies.react) problems.push(`react is still stable (${react})`);
+            if (eslintConfigNext === stable.devDependencies["eslint-config-next"]) {
+              problems.push(`eslint-config-next is still stable (${eslintConfigNext})`);
+            }
+            if (problems.length) {
+              console.error("Canary isolation check failed:\n- " + problems.join("\n- "));
+              process.exit(1);
+            }
+            console.log(`canary: next@${next} react@${react} eslint-config-next@${eslintConfigNext}`);
+          '
       - name: Write summary
         id: summary
         env:
@@ -83,7 +135,7 @@ jobs:
           {
             echo "## Canary run $(date -u +%Y-%m-%d)"
             echo ""
-            echo "next@${NEXT_VERSION}, react@${REACT_VERSION} — [run]($RUN_URL)"
+            echo "next@${NEXT_VERSION}, react@${REACT_VERSION}, eslint-config-next@${ESLINT_CONFIG_NEXT_VERSION} — [run]($RUN_URL)"
             echo ""
             echo "| Check | Result |"
             echo "| --- | --- |"

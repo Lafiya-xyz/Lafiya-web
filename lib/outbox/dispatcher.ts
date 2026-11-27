@@ -119,6 +119,44 @@ export async function runDispatchCycle(
   handlers: OutboxHandlerRegistry = HANDLERS,
   batchSize = 50,
 ): Promise<number> {
+  const stats = await runDispatchCycleWithStats(handlers, batchSize);
+  return stats.dispatched;
+}
+
+/** Per-cycle dispatch metrics (issue #883). */
+export interface DispatchCycleStats {
+  /** Rows successfully dispatched (handler ran and row was acked). */
+  dispatched: number;
+  /** Rows whose handler threw; left pending for retry. */
+  failed: number;
+  /** Rows claimed in this cycle. */
+  claimed: number;
+  /** Wall-clock duration of the cycle in milliseconds. */
+  durationMs: number;
+  /**
+   * Enqueue-to-dispatch latency samples (ms) for rows dispatched in this
+   * cycle, computed from `created_at`. Used by the load test and the
+   * dispatch-latency SLO probe.
+   */
+  latenciesMs: number[];
+}
+
+/**
+ * Same as {@link runDispatchCycle} but returns per-cycle metrics so callers
+ * (load test, SLO probe) can measure latency, failures and throughput.
+ */
+export async function runDispatchCycleWithStats(
+  handlers: OutboxHandlerRegistry = HANDLERS,
+  batchSize = 50,
+): Promise<DispatchCycleStats> {
+  const startedAt = Date.now();
+  const stats: DispatchCycleStats = {
+    dispatched: 0,
+    failed: 0,
+    claimed: 0,
+    durationMs: 0,
+    latenciesMs: [],
+  };
   const admin = createAdminClient();
 
   // Claim a batch atomically (FOR UPDATE SKIP LOCKED via the SQL helper).
@@ -130,16 +168,18 @@ export async function runDispatchCycle(
 
   if (claimError) {
     logError("outbox: failed to claim batch", claimError);
-    return 0;
+    stats.durationMs = Date.now() - startedAt;
+    return stats;
   }
 
   if (!rows || rows.length === 0) {
-    return 0;
+    stats.durationMs = Date.now() - startedAt;
+    return stats;
   }
 
   logInfo("outbox: dispatching batch", { count: rows.length });
 
-  let dispatched = 0;
+  stats.claimed = rows.length;
 
   for (const row of rows as OutboxRow[]) {
     const key = `${row.aggregate}:${row.event_type}`;
@@ -153,7 +193,8 @@ export async function runDispatchCycle(
       // Acknowledge unknown event types so they don't clog the queue.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (admin as any).rpc("ack_outbox_row", { p_id: row.id });
-      dispatched++;
+      stats.dispatched++;
+      stats.latenciesMs.push(latencyMs(row));
       continue;
     }
 
@@ -161,8 +202,10 @@ export async function runDispatchCycle(
       await handler(row);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (admin as any).rpc("ack_outbox_row", { p_id: row.id });
-      dispatched++;
+      stats.dispatched++;
+      stats.latenciesMs.push(latencyMs(row));
     } catch (err) {
+      stats.failed++;
       // Leave dispatched_at = null; attempts was already incremented by
       // claim_outbox_batch, providing natural back-pressure visibility.
       logError("outbox: handler threw — row will be retried", err, {
