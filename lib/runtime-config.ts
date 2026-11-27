@@ -97,6 +97,10 @@ const rawServerEnvSchema = z.object({
   SENTRY_ENABLED: booleanStringSchema.default(false),
   NEXT_PUBLIC_SENTRY_DSN: optionalUrl,
   SENTRY_DSN: optionalUrl,
+  // Issue #942: continuous CPU/heap profiling for server functions. Profiles
+  // are PHI-free (frames + route/release tags only) and sampled at a low rate
+  // to stay under the 2% CPU overhead budget.
+  SENTRY_PROFILES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.1),
   LAFIYA_BUILD_REVISION: optionalString,
   LAFIYA_SCHEMA_COMPATIBILITY: optionalString,
   // Issue #517: how many reverse-proxy hops between the real client and
@@ -115,6 +119,10 @@ const rawServerEnvSchema = z.object({
   // available (see supabase/migrations/20260929210000_rate_and_frequency_limits_gc.sql).
   // Optional -- a deployment whose Postgres does have pg_cron never needs it.
   PURGE_LIMITS_CRON_SECRET: optionalString,
+  // Issue #943: bearer secret for POST /api/internal/synthetic-monitor, the
+  // ingest endpoint the Nigerian-carrier probe runners post results to.
+  // Optional -- a deployment without external probes never needs it.
+  SYNTHETIC_MONITOR_INGEST_SECRET: optionalString,
   // Issue #786: comma-separated partner sandbox keys (lfy_sbx_ prefix).
   LAFIYA_SANDBOX_API_KEYS: optionalString,
 });
@@ -202,7 +210,7 @@ export type RuntimeConfig = {
     approvedWasmHashes: string[];
   };
   payoutIndexer: { enabled: boolean };
-  sentry: { enabled: boolean };
+  sentry: { enabled: boolean; profilesSampleRate: number };
   database: {
     /** Transaction-mode pooler URL for runtime/serverless access. */
     poolerUrl?: string;
@@ -367,10 +375,12 @@ export function getRuntimeConfig(
     SENTRY_ENABLED: env.SENTRY_ENABLED,
     NEXT_PUBLIC_SENTRY_DSN: env.NEXT_PUBLIC_SENTRY_DSN,
     SENTRY_DSN: env.SENTRY_DSN,
+    SENTRY_PROFILES_SAMPLE_RATE: env.SENTRY_PROFILES_SAMPLE_RATE,
     LAFIYA_BUILD_REVISION: env.LAFIYA_BUILD_REVISION,
     LAFIYA_SCHEMA_COMPATIBILITY: env.LAFIYA_SCHEMA_COMPATIBILITY,
     TRUSTED_PROXY_HOPS: env.TRUSTED_PROXY_HOPS,
     CLIENT_IP_HEADER: env.CLIENT_IP_HEADER,
+    SYNTHETIC_MONITOR_INGEST_SECRET: env.SYNTHETIC_MONITOR_INGEST_SECRET,
   });
   if (!parsed.success) {
     const missingOrInvalid = [
@@ -526,6 +536,12 @@ export function getRuntimeConfig(
       !config.NEXT_PUBLIC_SENTRY_DSN && !config.SENTRY_DSN,
       "SENTRY_DISABLED_WITH_CONFIGURATION",
     );
+    // Profiling rides on Sentry's tracing pipeline; a non-zero rate without
+    // Sentry enabled would silently profile nothing.
+    requireConfigured(
+      config.SENTRY_PROFILES_SAMPLE_RATE === 0,
+      "SENTRY_PROFILES_WITHOUT_SENTRY",
+    );
   }
 
   return {
@@ -541,7 +557,10 @@ export function getRuntimeConfig(
       approvedWasmHashes,
     },
     payoutIndexer: { enabled: config.PAYOUT_INDEXER_ENABLED },
-    sentry: { enabled: config.SENTRY_ENABLED },
+    sentry: {
+      enabled: config.SENTRY_ENABLED,
+      profilesSampleRate: config.SENTRY_PROFILES_SAMPLE_RATE,
+    },
     database: {
       poolerUrl: config.DATABASE_URL,
       directUrl: config.DIRECT_URL,

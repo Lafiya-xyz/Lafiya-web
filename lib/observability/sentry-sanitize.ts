@@ -41,6 +41,11 @@ export const SAFE_KEYS: ReadonlySet<string> = new Set([
   "module",
   "error_type",
   "error_code",
+  // Issue #942: profiling tags. Route templates and release identifiers are
+  // public; profile payloads themselves are frames only (no request data).
+  "route_name",
+  "profile_id",
+  "transaction_name",
 ]);
 
 /** Maximum length for any forwarded message string. */
@@ -134,6 +139,18 @@ export function sanitizeEvent<T>(event: T): T {
 
   if (Array.isArray(result.breadcrumbs)) {
     result.breadcrumbs = result.breadcrumbs.map((breadcrumb) => sanitizeBreadcrumb(breadcrumb));
+  }
+
+  // Issue #942: profiles are attached to transactions. Keep only the
+  // identifying fields; frames are symbolized server-side and carry no PHI.
+  if (result.profile && typeof result.profile === "object" && !Array.isArray(result.profile)) {
+    const profile = result.profile as Record<string, unknown>;
+    result.profile = {
+      profile_id: profile.profile_id,
+      transaction_name: profile.transaction_name,
+      release: profile.release,
+      environment: profile.environment,
+    };
   }
 
   return result as T;

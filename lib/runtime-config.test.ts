@@ -179,7 +179,7 @@ describe("runtime configuration matrix", () => {
         approvedWasmHashes: [],
       },
       payoutIndexer: { enabled: false },
-      sentry: { enabled: true },
+      sentry: { enabled: true, profilesSampleRate: 0.1 },
       rpcEndpoints: { policy: "allowlist" },
     });
     expect(JSON.stringify(config)).not.toContain(
