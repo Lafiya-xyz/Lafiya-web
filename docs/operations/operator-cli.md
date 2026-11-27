@@ -6,6 +6,14 @@ All commands are dry runs unless `--execute` is passed. `--reason` and `--env` a
 always required; `--env production` also requires `--confirm-production`. Set
 `LAFIYA_OPERATOR_ACCESS_TOKEN` to your own Supabase session token (admin role, MFA).
 
+```bash
+npm run ops -- <command> [--flags] --reason "ticket-1" --env staging
+```
+
+`npm run ops:check` (CI) fails when this page drifts from the CLI or when a
+runbook below invokes a command that no longer exists; regenerate with
+`npm run ops:docs`.
+
 ## `outbox:requeue`
 
 Reset an outbox row so the dispatcher redelivers it.

@@ -1,0 +1,80 @@
+{
+  "$comment": "Page-level alert catalog (issue #948). Every page-severity alert must declare an owner and a runbook. Validated by scripts/check-alert-catalog.mjs.",
+  "noiseBudget": {
+    "maxNoiseRatio": 0.3,
+    "maxPagesPerMonth": 20,
+    "maxTimeToAckMinutes": 15
+  },
+  "alerts": [
+    {
+      "id": "public_card_availability",
+      "severity": "page",
+      "owner": "on-call platform",
+      "runbook": "docs/operations/mainnet-assurance.md#slo-and-alert-catalog",
+      "source": "synthetic and server route-class counters, 5-min windows"
+    },
+    {
+      "id": "public_card_p95_latency",
+      "severity": "warn",
+      "owner": "web on-call",
+      "runbook": "docs/operations/mainnet-assurance.md#slo-and-alert-catalog",
+      "source": "route-class latency histogram"
+    },
+    {
+      "id": "attestation_decision_freshness",
+      "severity": "page",
+      "owner": "protocol owner",
+      "runbook": "docs/operations/mainnet-assurance.md#slo-and-alert-catalog",
+      "source": "RPC outcome/latency + trust state age buckets"
+    },
+    {
+      "id": "attestation_governance_unapproved_upgrade",
+      "severity": "page",
+      "owner": "protocol owner",
+      "runbook": "docs/attestation-contract-governance.md#approving-an-upgrade-runbook",
+      "source": "ATTESTATION_GOVERNANCE_UNAPPROVED_WASM_HASH"
+    },
+    {
+      "id": "attestation_governance_admin_transferred",
+      "severity": "page",
+      "owner": "protocol owner",
+      "runbook": "docs/attestation-contract-governance.md#approving-an-upgrade-runbook",
+      "source": "ATTESTATION_GOVERNANCE_ADMIN_TRANSFERRED"
+    },
+    {
+      "id": "attestation_governance_contract_paused",
+      "severity": "page",
+      "owner": "protocol owner",
+      "runbook": "docs/attestation-contract-governance.md#approving-an-upgrade-runbook",
+      "source": "ATTESTATION_GOVERNANCE_CONTRACT_PAUSED"
+    },
+    {
+      "id": "attestation_governance_allowlist_changed",
+      "severity": "page",
+      "owner": "protocol owner",
+      "runbook": "docs/attestation-contract-governance.md#approving-an-upgrade-runbook",
+      "source": "ATTESTATION_GOVERNANCE_ALLOWLIST_CHANGED"
+    },
+    {
+      "id": "error_budget_burn_rate",
+      "severity": "page",
+      "owner": "on-call platform",
+      "runbook": "docs/operations/error-budget-policy.md",
+      "source": "scripts/error-budget.mjs multi-window burn rates"
+    },
+    {
+      "id": "readiness_failure",
+      "severity": "page",
+      "owner": "on-call platform",
+      "runbook": "docs/operations/mainnet-assurance.md",
+      "source": "GET /api/internal/readiness 503"
+    },
+    {
+      "id": "payout_reconciliation_mismatch",
+      "severity": "page",
+      "owner": "payouts owner",
+      "runbook": "docs/chw-payout-indexer.md",
+      "source": "lib/stellar/payout-indexer/reconciliation.ts"
+    }
+  ]
+}
