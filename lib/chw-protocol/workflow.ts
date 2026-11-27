@@ -1,6 +1,7 @@
 import "server-only";
 
 import { ProtocolError, type TrustState } from "./types";
+import { withIdempotency } from "@/lib/idempotency/withIdempotency";
 
 export type VerificationRequestStatus =
   | "pending" | "leased" | "submitted" | "confirming" | "completed" | "failed" | "expired";
@@ -125,6 +126,160 @@ export function assertCurrentRecordHash(expected: string, actual: string) {
 export function assertTransactionHash(value: string) {
   if (!/^[0-9a-f]{64}$/i.test(value)) throw new ProtocolError("INVALID_INTENT");
   return value.toLowerCase();
+}
+
+/**
+ * Durable workflow definition for the CHW verification visit lifecycle (#970).
+ *
+ * The pure state machine above remains the reference model. This section wraps
+ * each command as an idempotent activity so the workflow can be replayed by the
+ * durable engine after a worker/function restart without double-applying
+ * effects (attestation, hold, payout). Every activity is keyed by
+ * `(workflowId, step)` so retries and mid-flight resumes are safe.
+ *
+ * PHI is never read here directly: activities receive purpose-specific
+ * projections from `lib/phi/` (e.g. the CHW verification view) rather than
+ * querying PHI tables (#972).
+ */
+
+export type VerificationWorkflowStep =
+  | "create"
+  | "attest-observed"
+  | "finalize"
+  | "settle"
+  | "invalidate"
+  | "quarantine"
+  | "release";
+
+/** Ordered happy-path steps; compensation runs in reverse on failure. */
+export const VERIFICATION_WORKFLOW_STEPS: readonly VerificationWorkflowStep[] = [
+  "create",
+  "attest-observed",
+  "finalize",
+  "settle",
+];
+
+/** Steps whose effects must be explicitly compensated on abort. */
+export const COMPENSABLE_VERIFICATION_STEPS: readonly VerificationWorkflowStep[] = [
+  "attest-observed",
+  "finalize",
+  "settle",
+];
+
+/** Non-clinical projection consumed by the workflow (from `lib/phi/`). */
+export interface VerificationWorkflowInput {
+  requestId: string;
+  /** CHW verification view projection; never raw PHI columns. */
+  verificationView: {
+    requestId: string;
+    trustState?: TrustState;
+    leaseExpiresAt?: string | null;
+  };
+}
+
+export interface VerificationWorkflowState {
+  requestId: string;
+  status: VerificationRequestStatus;
+  settledCount: number;
+  /** Steps that have completed; used to resume mid-flight. */
+  completedSteps: VerificationWorkflowStep[];
+  /** Steps that were compensated after an abort. */
+  compensatedSteps: VerificationWorkflowStep[];
+}
+
+export interface VerificationWorkflowDeps {
+  /** Persists the workflow state so it survives worker restarts. */
+  loadState: (requestId: string) => Promise<VerificationWorkflowState | null>;
+  saveState: (state: VerificationWorkflowState) => Promise<void>;
+  /** Applies the side effect for a step (attestation, hold, payout, ...). */
+  runStep: (step: VerificationWorkflowStep, input: VerificationWorkflowInput) => Promise<void>;
+  /** Reverses the side effect for a compensable step. */
+  compensateStep: (step: VerificationWorkflowStep, input: VerificationWorkflowInput) => Promise<void>;
+}
+
+function initialState(requestId: string): VerificationWorkflowState {
+  return {
+    requestId,
+    status: "pending",
+    settledCount: 0,
+    completedSteps: [],
+    compensatedSteps: [],
+  };
+}
+
+/**
+ * Advances the workflow by one step, idempotently. Returns the updated state.
+ * If the step already completed (e.g. replay after restart) it is a no-op.
+ */
+export async function advanceVerificationWorkflow(
+  input: VerificationWorkflowInput,
+  step: VerificationWorkflowStep,
+  deps: VerificationWorkflowDeps,
+): Promise<VerificationWorkflowState> {
+  const state = (await deps.loadState(input.requestId)) ?? initialState(input.requestId);
+
+  if (state.completedSteps.includes(step)) return state;
+
+  const next = applyVerificationCommand(state.status, step);
+  if (next === null) {
+    throw new ProtocolError("INVALID_INTENT");
+  }
+
+  await withIdempotency(
+    { key: `verification:${input.requestId}:${step}`, scope: "chw-verification-workflow" },
+    async () => {
+      await deps.runStep(step, input);
+    },
+  );
+
+  const settledCount = step === "settle" ? state.settledCount + 1 : state.settledCount;
+  const violations = checkVerificationInvariants(next, settledCount);
+  if (violations.length > 0) throw new ProtocolError("INVALID_INTENT");
+
+  const updated: VerificationWorkflowState = {
+    ...state,
+    status: next,
+    settledCount,
+    completedSteps: [...state.completedSteps, step],
+  };
+  await deps.saveState(updated);
+  return updated;
+}
+
+/**
+ * Runs the full happy-path workflow, resuming from persisted state so a worker
+ * restart mid-flight continues where it left off. On failure, compensable
+ * steps are reversed in reverse order before rethrowing.
+ */
+export async function runVerificationWorkflow(
+  input: VerificationWorkflowInput,
+  deps: VerificationWorkflowDeps,
+): Promise<VerificationWorkflowState> {
+  let state = (await deps.loadState(input.requestId)) ?? initialState(input.requestId);
+
+  try {
+    for (const step of VERIFICATION_WORKFLOW_STEPS) {
+      state = await advanceVerificationWorkflow(input, step, deps);
+    }
+    return state;
+  } catch (error) {
+    const toCompensate = [...state.completedSteps]
+      .reverse()
+      .filter((step) => COMPENSABLE_VERIFICATION_STEPS.includes(step));
+
+    for (const step of toCompensate) {
+      await withIdempotency(
+        { key: `verification:${input.requestId}:${step}:compensate`, scope: "chw-verification-workflow" },
+        async () => {
+          await deps.compensateStep(step, input);
+        },
+      );
+      state = { ...state, compensatedSteps: [...state.compensatedSteps, step] };
+      await deps.saveState(state);
+    }
+
+    throw error;
+  }
 }
 
 /**

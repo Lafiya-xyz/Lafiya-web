@@ -1,4 +1,5 @@
 import schedules from "@/lib/ops/schedules.json";
+import workflows from "@/lib/ops/workflows.json";
 import { logWarn } from "@/lib/logging/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -8,10 +9,35 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * `release_job_lease`, others via `record_job_success`. The readiness probe
  * reports each manifest job's last-success age and flags it `stale` once it
  * exceeds `maxStalenessSeconds`.
+ *
+ * Durable-engine workflows (Issue #970) report heartbeats through the same
+ * `job_leases` mechanism (via `recordJobSuccess`), so they are surfaced here
+ * alongside cron jobs using the `workflows.json` manifest.
  */
 export interface JobRunHealth {
   lastSuccessAgeSeconds: number | null;
   status: "ok" | "stale" | "never_run" | "unknown";
+}
+
+interface MonitoredEntry {
+  name: string;
+  maxStalenessSeconds: number;
+}
+
+function monitoredEntries(): MonitoredEntry[] {
+  const cronJobs = schedules.jobs.filter(
+    (job): job is typeof job & { maxStalenessSeconds: number } =>
+      !("manualOnly" in job && job.manualOnly) && "maxStalenessSeconds" in job,
+  );
+  const engineWorkflows = workflows.workflows.filter(
+    (workflow): workflow is typeof workflow & { maxStalenessSeconds: number } =>
+      !("manualOnly" in workflow && workflow.manualOnly) &&
+      "maxStalenessSeconds" in workflow,
+  );
+  return [...cronJobs, ...engineWorkflows].map((entry) => ({
+    name: entry.name,
+    maxStalenessSeconds: entry.maxStalenessSeconds,
+  }));
 }
 
 type UntypedClient = {
@@ -49,10 +75,7 @@ export async function recordJobSuccess(jobName: string): Promise<void> {
 export async function getScheduledJobHealth(): Promise<
   Record<string, JobRunHealth>
 > {
-  const jobs = schedules.jobs.filter(
-    (job): job is typeof job & { maxStalenessSeconds: number } =>
-      !("manualOnly" in job && job.manualOnly) && "maxStalenessSeconds" in job,
-  );
+  const jobs = monitoredEntries();
   let rows: Map<string, string | null> | null = null;
   try {
     const { data, error } = await client()

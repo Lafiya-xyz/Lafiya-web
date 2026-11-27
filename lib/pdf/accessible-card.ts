@@ -7,6 +7,8 @@ import { deflateSync } from "node:zlib";
 
 import QRCode from "qrcode";
 
+import type { PrintableCard } from "@/lib/phi/projections/pdf-data";
+
 import { readTtfMetrics, type TtfMetrics } from "./ttf";
 
 /**
@@ -25,21 +27,12 @@ export const CARD_PDF_TITLE = "Lafiya emergency card";
 /** Low-bandwidth download budget (the embedded font is ~125 KB of it). */
 export const CARD_PDF_MAX_BYTES = 200 * 1024;
 
-export interface PrintableCard {
-  name: string | null;
-  age: number | null;
-  blood_group: string | null;
-  genotype: string | null;
-  allergies: string[] | null;
-  medications: string[] | null;
-  chronic_conditions: string[] | null;
-  emergency_contacts: Array<{
-    name: string;
-    phone: string;
-    relationship: string;
-  }> | null;
-  language: string | null;
-}
+/**
+ * The card's data comes from the `lib/phi/` PDF-data projection (issue #972);
+ * this module never reads PHI columns itself. The shape is re-exported so
+ * existing callers keep a stable import path.
+ */
+export type { PrintableCard } from "@/lib/phi/projections/pdf-data";
 
 /**
  * Tamper-evident check code — issue #974.
