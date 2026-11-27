@@ -6,6 +6,7 @@ import { after } from "next/server";
 import { withholdPinGatedFields } from "@/lib/emergency/card-pin";
 import { getLegacyPinGatedFields } from "@/lib/emergency/card-pin-gate";
 import { logError } from "@/lib/logging/logger";
+import { observeRecordFreshness } from "@/lib/observability/freshness";
 import { isAttestationTrustDegraded } from "@/lib/stellar/verification-indexer/trust-state";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -111,6 +112,9 @@ export default async function PublicCardPage({
     data[0],
     await getLegacyPinGatedFields(id),
   );
+
+  // Issue #950: end-to-end freshness — record edit → responder-visible render.
+  observeRecordFreshness("card_render", card.record_updated_at);
 
   after(async () => {
     try {
