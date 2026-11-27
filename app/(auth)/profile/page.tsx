@@ -285,6 +285,23 @@ async function ProfileContent() {
                 record_updated_at: profile.updated_at,
               }}
             />
+            {/* Issue #932: ≥18 pt variant for low-vision readers. */}
+            <DownloadCardButton
+              format="large-print"
+              cardUrl={`${await getBaseUrl()}/card/${profile.card_public_id}`}
+              card={{
+                name: profile.name,
+                age: null,
+                blood_group: profile.blood_group,
+                genotype: profile.genotype,
+                allergies: profile.allergies,
+                medications: profile.medications,
+                chronic_conditions: profile.chronic_conditions,
+                emergency_contacts: profile.emergency_contacts,
+                language: profile.language,
+                record_updated_at: profile.updated_at,
+              }}
+            />
           </div>
           <ProfileCompleteness profile={profile} />
           <WallpaperGenerator />
