@@ -88,6 +88,80 @@ CI runs `supabase test db` on every pull request that touches `supabase/`. A fai
 assertion fails the job, so regressions in the security-critical SQL are caught before
 merge.
 
+## Commit and Tag Signing
+
+All commits that land on `main` and all release tags (`v*`) **must be signed**. Branch
+protection on `main` requires verified signatures, and tag protection rules prevent
+unsigned or mutable release tags. Unsigned commits are rejected at push time, and the
+release workflow re-verifies tag signatures before publishing.
+
+### Choosing a signing method
+
+Use whichever of the following you prefer — all are accepted:
+
+- **Sigstore gitsign** (keyless, no long-lived keys)
+- **SSH signing** (Git 2.34+)
+- **GPG signing**
+
+### Sigstore gitsign
+
+1. Install gitsign (see the [gitsign docs](https://github.com/sigstore/gitsign)).
+2. Configure Git to use it:
+
+   ```bash
+   git config --global gpg.format x509
+   git config --global gpg.x509.program gitsign
+   git config --global commit.gpgsign true
+   git config --global tag.gpgsign true
+   ```
+
+3. The first signed commit opens a browser for OIDC authentication.
+
+### SSH signing
+
+1. Generate (or reuse) an SSH key, e.g. `ssh-keygen -t ed25519 -C "you@example.com"`.
+2. Upload the **public** key to your forge account as a *signing* key.
+3. Configure Git:
+
+   ```bash
+   git config --global gpg.format ssh
+   git config --global user.signingkey ~/.ssh/id_ed25519.pub
+   git config --global commit.gpgsign true
+   git config --global tag.gpgsign true
+   ```
+
+### GPG signing
+
+1. Generate a key: `gpg --full-generate-key` (RSA 4096 or Ed25519 recommended).
+2. Find the key ID: `gpg --list-secret-keys --keyid-format=long`.
+3. Upload the public key to your forge account.
+4. Configure Git:
+
+   ```bash
+   git config --global user.signingkey <KEY_ID>
+   git config --global commit.gpgsign true
+   git config --global tag.gpgsign true
+   ```
+
+### Verifying signatures locally
+
+```bash
+# Show the signature status of recent commits
+git log --show-signature -n 5
+
+# Verify a specific release tag
+git tag -v v1.2.3
+```
+
+A valid signature shows `Good signature` (GPG/SSH) or a verified Sigstore identity.
+Unsigned commits show `No signature` and will be rejected by branch protection.
+
+### CI verification
+
+The release workflow (`.github/workflows/`) verifies that every release tag is signed
+by an allowed maintainer identity before building or publishing artifacts. If you are
+cutting a release, make sure the tag is signed (`git tag -s v1.2.3 -m "v1.2.3"`).
+
 ## Pull Requests
 
 - Reference the issue you are resolving in the PR description.

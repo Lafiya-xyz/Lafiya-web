@@ -2,6 +2,7 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import noWildcardPhiSelect from "./eslint-rules/no-wildcard-phi-select.js";
+import noHardcodedJurisdiction from "./eslint-rules/no-hardcoded-jurisdiction.js";
 
 const eslintConfig = defineConfig([
   ...nextVitals,

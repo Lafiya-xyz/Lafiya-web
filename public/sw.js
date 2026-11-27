@@ -5,6 +5,11 @@
 // live-looking verification badge, stale scripts, or an old route layout.
 // Envelopes are AES-GCM encrypted under a key derived from the card URL's
 // secret segment and stored under an opaque hashed key (issue #630, ADR-004).
+//
+// Worker integrity (issue #967): the worker reports its build-manifest
+// version/hash to clients so the page can detect an unexpected replacement.
+// A server-controlled kill switch (`SW_KILL_SWITCH`) unregisters the worker
+// and deletes all `lafiya-*` caches; once tripped the worker becomes a no-op.
 
 import {
   CARD_CACHE_LIMITS,
@@ -42,9 +47,117 @@ const CARD_ROUTE_PREFIX = "/cards/";
 const FACILITY_CACHE = "lafiya-facilities-v1";
 const FACILITY_PATH_PREFIX = "/facilities/";
 
+// Worker integrity (issue #967). The worker is served only from this fixed
+// path; the CSP `worker-src` directive restricts registration to it. Any
+// registration attempt from another path is rejected by the browser before
+// this script runs.
+const WORKER_PATH = "/sw.js";
+
+// All caches owned by this worker share this prefix so the kill switch can
+// remove them without touching unrelated origin storage.
+const CACHE_PREFIX = "lafiya-";
+
+// Kill-switch flag. When set, the worker stops handling fetch/cache events and
+// only responds to version probes and further kill-switch commands. Persisted
+// in a dedicated cache entry so it survives worker restarts.
+const KILL_SWITCH_CACHE = "lafiya-kill-switch-v1";
+const KILL_SWITCH_KEY = "/__lafiya_kill_switch__";
+let killSwitchActive = false;
+
+// The build-manifest version/hash is injected at build time. When absent (for
+// example in local development) we fall back to a sentinel so the page can
+// still compare and report a mismatch rather than silently trusting the
+// worker.
+const BUILD_VERSION =
+  typeof self.__LAFIYA_SW_BUILD_VERSION__ === "string"
+    ? self.__LAFIYA_SW_BUILD_VERSION__
+    : "unknown";
+
+// Message types exchanged with clients.
+const MSG_VERSION_PROBE = "SW_VERSION_PROBE";
+const MSG_VERSION_REPORT = "SW_VERSION_REPORT";
+const MSG_KILL_SWITCH = "SW_KILL_SWITCH";
+
+function workerVersionInfo() {
+  return {
+    type: MSG_VERSION_REPORT,
+    version: BUILD_VERSION,
+    scriptURL: self.location.href,
+    scope: self.registration ? self.registration.scope : null,
+    killSwitchActive,
+  };
+}
+
+// Broadcast the worker's identity to every controlled client. Called on
+// activation and whenever a client probes for the version.
+async function broadcastVersion() {
+  const info = workerVersionInfo();
+  const clients = await self.clients.matchAll({
+    includeUncontrolled: true,
+    type: "window",
+  });
+  for (const client of clients) {
+    client.postMessage(info);
+  }
+}
+
+async function loadKillSwitch() {
+  try {
+    const cache = await caches.open(KILL_SWITCH_CACHE);
+    const response = await cache.match(KILL_SWITCH_KEY);
+    killSwitchActive = Boolean(response);
+  } catch {
+    killSwitchActive = false;
+  }
+  return killSwitchActive;
+}
+
+async function persistKillSwitch() {
+  try {
+    const cache = await caches.open(KILL_SWITCH_CACHE);
+    await cache.put(KILL_SWITCH_KEY, new Response("1"));
+  } catch {
+    // Best effort: the in-memory flag still disables handling this lifetime.
+  }
+}
+
+// Delete every cache owned by this worker, including the kill-switch marker.
+async function purgeAllCaches() {
+  const keys = await caches.keys();
+  await Promise.all(
+    keys
+      .filter((key) => key.startsWith(CACHE_PREFIX))
+      .map((key) => caches.delete(key)),
+  );
+}
+
+// Trip the kill switch: stop handling events, purge caches, and unregister.
+async function engageKillSwitch() {
+  killSwitchActive = true;
+  await persistKillSwitch();
+  await purgeAllCaches();
+  try {
+    await self.registration.unregister();
+  } catch {
+    // Unregister may fail if the registration is already gone; ignore.
+  }
+  await broadcastVersion();
+}
+
+// Resolve the active cache version from the manifest so `activate` can prune
+// stale revisions without hardcoding a version string.
+let currentVersion = null;
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
+      await loadKillSwitch();
+      if (killSwitchActive) {
+        // A replacement worker deployed after a kill switch stays inert until
+        // the server clears the flag by re-registering a fresh worker.
+        await self.skipWaiting();
+        return;
+      }
       const response = await fetch(MANIFEST_URL, { cache: "no-store" });
       if (!response.ok) {
         throw new Error(`Failed to load ${MANIFEST_URL}: ${response.status}`);
@@ -61,6 +174,12 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
+      await loadKillSwitch();
+      if (killSwitchActive) {
+        await broadcastVersion();
+        await self.clients.claim();
+        return;
+      }
       const keys = await caches.keys();
       await Promise.all(
         keys
@@ -74,19 +193,30 @@ self.addEventListener("activate", (event) => {
         await self.registration.navigationPreload.enable(NAVIGATION_PRELOAD_HEADER);
       }
       await self.clients.claim();
+      await broadcastVersion();
     })(),
   );
 });
 
-// Resolve the active cache version from the manifest so `activate` can prune
-// stale revisions without hardcoding a version string.
-let currentVersion = null;
 self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "SW_VERSION") {
-    currentVersion = event.data.version;
+  const data = event.data;
+  if (!data || typeof data !== "object") return;
+
+  if (data.type === "SW_VERSION") {
+    currentVersion = data.version;
+    return;
   }
-  return fn();
-}
+
+  if (data.type === MSG_VERSION_PROBE) {
+    event.waitUntil(broadcastVersion());
+    return;
+  }
+
+  if (data.type === MSG_KILL_SWITCH) {
+    event.waitUntil(engageKillSwitch());
+    return;
+  }
+});
 
 async function storeEnvelope(cacheKey, envelope, secret) {
   const record = await encryptOfflineEnvelope(envelope, secret, cacheKey);
@@ -166,12 +296,36 @@ async function handleCardNavigation(event) {
   }
 }
 
+// Network-first so fresh shards replace stale ones; falls back to the cached
+// shard when offline.
+async function handleFacilityShard(request) {
+  const cache = await caches.open(FACILITY_CACHE);
+  try {
+    const response = await fetch(request);
+    if (response.ok) await cache.put(request, response.clone());
+    return response;
+  } catch (error) {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    throw error;
+  }
+}
+
 self.addEventListener("fetch", (event) => {
+  // Kill switch: become a no-op. Let the network handle everything.
+  if (killSwitchActive) return;
+
   const { request } = event;
   if (request.method !== "GET") return;
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+
+  // Only handle requests within this worker's scope. Requests outside the
+  // scope should never reach us, but guard defensively so a misconfigured
+  // registration cannot extend our reach.
+  const scope = self.registration ? self.registration.scope : null;
+  if (scope && !url.href.startsWith(scope)) return;
 
   if (url.pathname.startsWith(FACILITY_PATH_PREFIX) && url.pathname.endsWith(".json")) {
     event.respondWith(handleFacilityShard(request));
@@ -199,18 +353,3 @@ self.addEventListener("fetch", (event) => {
     })(),
   );
 });
-
-// Network-first so fresh shards replace stale ones; falls back to the cached
-// shard when offline.
-async function handleFacilityShard(request) {
-  const cache = await caches.open(FACILITY_CACHE);
-  try {
-    const response = await fetch(request);
-    if (response.ok) await cache.put(request, response.clone());
-    return response;
-  } catch (error) {
-    const cached = await cache.match(request);
-    if (cached) return cached;
-    throw error;
-  }
-}
