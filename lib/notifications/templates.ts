@@ -156,6 +156,25 @@ const TEMPLATES: TemplateMap = {
       body: "A gba ìbéèrè lati fọwọ́ sí àkọsílẹ̀ Lafiya ní {requested_at_utc} UTC, ó sì ń dúró fún àgbeyẹwò.",
     },
   },
+
+  /**
+   * Sent to a patient after a CHW visit is verified (issue #915).
+   * Variables: {chw_ref} (opaque CHW reference, never a name).
+   */
+  "chw.visit_feedback_request": {
+    en: {
+      body: "Lafiya: did a community health worker visit you today? Reply YES or NO. Reply STOP to opt out.",
+    },
+    ha: {
+      body: "Lafiya: ma'aikacin lafiya na al'umma ya ziyarce ka yau? Amsa EH ko A'A. Amsa STOP don fita.",
+    },
+    ig: {
+      body: "Lafiya: onye ọrụ ahụike obodo bịara gị taa? Zaa EE ma ọ bụ MBÀ. Zaa STOP iji pụọ.",
+    },
+    yo: {
+      body: "Lafiya: oṣiṣẹ ìlera àdúgbò ṣèbẹ̀wò sí ọ lónìí? Dáhùn BẸ́Ẹ̀NI tàbí RÁRÁ. Dáhùn STOP láti jáde.",
+    },
+  },
 };
 
 export type TemplateId = keyof typeof TEMPLATES;
