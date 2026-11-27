@@ -43,6 +43,16 @@ export {
   computeRevisionCommitmentSync,
 } from "./canonicalization.js";
 
+// Differential fuzzing (issue #958)
+export {
+  generateRecord,
+  mulberry32,
+  runDifferentialFuzz,
+  type DifferentialDivergence,
+  type DifferentialFuzzOptions,
+  type DifferentialFuzzReport,
+} from "./differentialFuzz.js";
+
 // Record hash
 export type { RecordHashFields } from "./recordHash.js";
 export {

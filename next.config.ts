@@ -42,6 +42,12 @@ const nextConfig: NextConfig = {
    */
   cacheComponents: true,
   /**
+   * Self-hosted deployments (issue #961) run the image produced by the
+   * repository Dockerfile, which copies `.next/standalone`. Vercel ignores
+   * this flag, so hosted builds are unaffected.
+   */
+  output: "standalone",
+  /**
    * Deterministic build ID (issue #781). The default is random per build,
    * which changes `_next/static/<buildId>/` paths and breaks hash equality
    * between two builds of one commit. Falls back to Next's default locally.

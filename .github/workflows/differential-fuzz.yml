@@ -1,0 +1,82 @@
+name: Nightly differential canonicalization fuzz
+
+# Issue #958: fuzz record canonicalization between @lafiya/protocol and the
+# verifier-side implementation. Any divergence is committed as a test vector
+# and filed as a cross-repo issue.
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+    inputs:
+      cases:
+        description: "Number of generated records"
+        default: "500"
+      seed:
+        description: "PRNG seed (blank = random)"
+        default: ""
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: differential-fuzz
+  cancel-in-progress: true
+
+env:
+  TRACKING_ISSUE_TITLE: "Differential canonicalization divergence (protocol vs verifier)"
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Run differential fuzzer
+        id: fuzz
+        continue-on-error: true
+        env:
+          CASES: ${{ inputs.cases || '500' }}
+          SEED: ${{ inputs.seed }}
+        run: |
+          seed="${SEED:-$RANDOM}"
+          echo "seed=$seed" >> "$GITHUB_OUTPUT"
+          node scripts/differential-fuzz.mjs --cases "$CASES" --seed "$seed" --write
+      - name: Commit divergences as test vectors
+        if: steps.fuzz.outcome == 'failure'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add contracts/record-canonicalization-differential-v1.json
+          git commit -m "test(protocol): record differential canonicalization vectors (#958)"
+          git push
+      - name: File cross-repo issue
+        if: steps.fuzz.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SEED: ${{ steps.fuzz.outputs.seed }}
+        run: |
+          {
+            echo "Found by the nightly differential fuzzer (seed \`$SEED\`)."
+            echo ""
+            cat differential-divergences.md
+            echo ""
+            echo "Vectors committed to \`contracts/record-canonicalization-differential-v1.json\`."
+            echo ""
+            echo "Cross-repo: the contracts repo must adopt the same vectors and"
+            echo "confirm which implementation is authoritative before the next"
+            echo "protocol release."
+          } > issue-body.md
+          gh issue create \
+            --title "$TRACKING_ISSUE_TITLE (seed $SEED)" \
+            --body-file issue-body.md \
+            --label attestation
+      - name: Fail on divergence
+        if: steps.fuzz.outcome == 'failure'
+        run: |
+          cat differential-divergences.md
+          exit 1
