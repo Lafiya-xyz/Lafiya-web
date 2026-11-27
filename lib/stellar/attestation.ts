@@ -1,19 +1,15 @@
-import {
-  Account,
-  BASE_FEE,
-  Contract,
-  Keypair,
-  TransactionBuilder,
-  nativeToScVal,
-  rpc,
-} from "@stellar/stellar-sdk";
 import { unstable_cache } from "next/cache";
 
 import type { Attestation } from "@/lib/attestation/types";
 import { getProtocolRuntimeConfig } from "@/lib/chw-protocol/config";
 import { serverEnv } from "@/lib/env-server";
+import { upstreamFetch } from "@/lib/http/dispatchers";
 import { Singleflight } from "@/lib/singleflight";
-import { decodeAttestationResult } from "@/lib/stellar/generated/attestation";
+import {
+  buildInvokeContractEnvelope,
+  decodeScVal,
+  type NativeScVal,
+} from "@/lib/stellar/soroban-lite";
 
 /**
  * Live M1 attestation lookup.
@@ -25,11 +21,11 @@ import { decodeAttestationResult } from "@/lib/stellar/generated/attestation";
  * signing, but still executes the contract and returns the on-chain
  * `Attestation` for the given record hash.
  *
- * The `ScVal` returned by the contract is decoded by the generated bindings
- * in `lib/stellar/generated/attestation.ts` (see
- * `scripts/gen-contract-bindings.mjs`), not by hand here. Regenerating the
- * bindings against the deployed spec is gated in CI so drift is caught before
- * runtime.
+ * The request envelope and the returned `ScVal` are encoded/decoded by the
+ * minimal codec in `lib/stellar/soroban-lite.ts` rather than
+ * `@stellar/stellar-sdk`, keeping the SDK out of the card route's cold start
+ * (Issue #880). The RPC call goes through the tuned `soroban` undici
+ * dispatcher (Issue #881).
  *
  * When `ATTESTATION_CONTRACT_ID` is unset (local dev, CI, or pre-deploy), the
  * function falls back to the in-memory mock below so the verified indicator,
@@ -280,13 +276,42 @@ const MOCK_ATTESTATIONS = new Map<string, Attestation>([
   ],
 ]);
 
-// simulateTransaction needs a source account, but since we never submit the
-// transaction it's just a placeholder — any well-formed account works. Built
-// lazily (only on the real-RPC path) so importing this module doesn't require
-// a valid account and the local-dev mock fallback stays side-effect free.
-function simulationSource() {
-  return new Account(Keypair.random().publicKey(), "0");
+/**
+ * Map the contract's decoded `Attestation` struct (snake_case fields,
+ * `Option<T>` as value-or-void) onto the app's `Attestation` type.
+ */
+export function decodeAttestation(
+  raw: NativeScVal | Record<string, unknown>,
+  recordHash: string,
+): Attestation | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw) || raw instanceof Uint8Array) {
+    return null;
+  }
+  const fields = raw as Record<string, unknown>;
+  if (typeof fields.attester !== "string" || fields.timestamp === undefined) return null;
+
+  const hash = fields.record_hash;
+  const attestation: Attestation = {
+    recordHash:
+      hash instanceof Uint8Array
+        ? Buffer.from(hash).toString("hex")
+        : typeof hash === "string"
+          ? hash
+          : recordHash,
+    attester: fields.attester,
+    timestamp: Number(fields.timestamp),
+  };
+  if (fields.expiry !== undefined && fields.expiry !== null) {
+    attestation.expiry = Number(fields.expiry);
+  }
+  if (typeof fields.revoked === "boolean") attestation.revoked = fields.revoked;
+  return attestation;
 }
+
+type SimulateResponse = {
+  error?: { message?: string };
+  result?: { error?: string; results?: Array<{ xdr: string }> };
+};
 
 /**
  * Uncached lookup with circuit breaker and timeout protection.
@@ -305,43 +330,43 @@ async function fetchAttestationUncached(
       return MOCK_ATTESTATIONS.get(recordHash) ?? null;
     }
 
-    const server = new rpc.Server(protocolRuntimeConfig.sorobanRpcUrl, {
-      allowHttp: protocolRuntimeConfig.sorobanRpcUrl.startsWith("http://"),
-    });
-    const contract = new Contract(serverEnv.ATTESTATION_CONTRACT_ID);
+    const envelope = buildInvokeContractEnvelope(
+      serverEnv.ATTESTATION_CONTRACT_ID,
+      "get_attestation",
+      [recordHash],
+    );
 
-    const tx = new TransactionBuilder(simulationSource(), {
-      fee: BASE_FEE,
-      networkPassphrase: protocolRuntimeConfig.networkPassphrase,
-    })
-      .addOperation(
-        contract.call("get_attestation", nativeToScVal(recordHash, { type: "string" })),
-      )
-      .setTimeout(30)
-      .build();
-
-    const simulation = await withTimeout((signal) => {
-      // Thread the abort signal into the underlying HTTP request so a
-      // timed-out simulation is cancelled, not merely ignored.
-      server.httpClient.interceptors.request.use((config) => {
-        (config as { signal?: AbortSignal }).signal = signal;
-        return config;
-      });
-      return server.simulateTransaction(tx);
+    // The abort signal cancels the underlying HTTP request on timeout rather
+    // than leaving it running.
+    const body = await withTimeout(async (signal) => {
+      const response = await upstreamFetch(
+        "soroban",
+        protocolRuntimeConfig.sorobanRpcUrl,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "simulateTransaction",
+            params: { transaction: envelope },
+          }),
+          signal,
+        },
+      );
+      if (!response.ok) throw new Error(`Soroban RPC HTTP ${response.status}`);
+      return (await response.json()) as SimulateResponse;
     }, ATTESTATION_TIMEOUT_MS);
 
-    if (rpc.Api.isSimulationError(simulation)) {
-      throw new AttestationContractError(simulation.error);
-    }
+    if (body.error) throw new Error(`Soroban RPC error: ${body.error.message ?? "unknown"}`);
+    if (body.result?.error) throw new AttestationContractError(body.result.error);
 
-    const returnValue = simulation.result?.retval;
+    const returnValue = body.result?.results?.[0]?.xdr;
     if (!returnValue) {
       return null;
     }
 
-    // Decode via the generated bindings so the shape stays in lockstep with
-    // the deployed contract spec (see scripts/gen-contract-bindings.mjs).
-    return decodeAttestationResult(returnValue);
+    return decodeAttestation(decodeScVal(returnValue), recordHash);
   });
 }
 

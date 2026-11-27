@@ -8,6 +8,8 @@
  * be logged.  The message body must already be PHI-free.
  */
 
+import { upstreamFetch } from "@/lib/http/dispatchers";
+
 import type { SendResult } from "../types";
 
 export interface TwilioConfig {
@@ -38,7 +40,7 @@ export async function sendViaTwilio(
 
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await upstreamFetch("notifications", url, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
