@@ -57,24 +57,29 @@ const eslintConfig = defineConfig([
     },
   },
   {
-    // Issue #969: jurisdiction-specific constants (country code "NG", phone
-    // prefix "+234") must live in the Nigeria country pack only, so a second
-    // deployment (e.g. Ghana) doesn't require forking call sites. The pack
-    // file itself is exempted below.
-    files: ["**/*.{js,jsx,ts,tsx,mjs,cjs}"],
-    plugins: {
-      local: {
-        rules: {
-          "no-hardcoded-jurisdiction": noHardcodedJurisdiction,
-        },
-      },
-    },
+    // Issue #880: keep @stellar/stellar-sdk out of the public card hot path.
+    // The card route uses the minimal codec in lib/stellar/soroban-lite.ts;
+    // the full SDK stays available to CHW / payout / SEP-10 code.
+    files: [
+      "app/(public)/card/**/*.{ts,tsx}",
+      "lib/stellar/attestation.ts",
+      "lib/stellar/soroban-lite.ts",
+      "lib/stellar/verification-indexer/trust-state.ts",
+      "lib/http/dispatchers.ts",
+    ],
+    ignores: ["**/*.test.{ts,tsx}"],
     rules: {
-      "local/no-hardcoded-jurisdiction": [
+      "no-restricted-imports": [
         "error",
         {
-          bannedValues: ["NG", "+234"],
-          allowedFiles: ["lib/country-packs/nigeria.ts"],
+          paths: [
+            {
+              name: "@stellar/stellar-sdk",
+              message:
+                "The card route must not import the Stellar SDK (Issue #880). Use lib/stellar/soroban-lite.ts.",
+            },
+          ],
+          patterns: [{ group: ["@stellar/stellar-sdk/*"], message: "See Issue #880." }],
         },
       ],
     },

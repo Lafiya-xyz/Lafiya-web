@@ -11,6 +11,12 @@ const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp"];
  * (rather than routing the file through the Server Action), then hands the
  * resulting public URL to the rest of the form via a hidden input. Optional
  * — a patient can create a card with no photo.
+ *
+ * Includes on-device face detection and cropping for privacy:
+ * - Detects faces using native FaceDetector API (with WASM fallback)
+ * - Auto-crops to primary face, blurs background
+ * - Warns on zero/multiple faces, requires user confirmation
+ * - All processing happens client-side; editor is lazy-loaded on demand
  */
 export function PhotoUploadField({
   userId,
@@ -26,6 +32,8 @@ export function PhotoUploadField({
   const [localError, setLocalError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [showEditor, setShowEditor] = useState(false);
+  const [editorFile, setEditorFile] = useState<File | null>(null);
   const previewUrlRef = useRef<string | null>(null);
 
   // Revoke object URL on unmount to prevent memory leaks
@@ -67,10 +75,18 @@ export function PhotoUploadField({
     previewUrlRef.current = objectUrl;
     setPreviewUrl(objectUrl);
 
+    // Open the face crop editor (lazy-loaded)
+    setEditorFile(file);
+    setShowEditor(true);
+  }
+
+  async function handleEditorComplete(processedBlob: Blob) {
+    setShowEditor(false);
+    setEditorFile(null);
     setIsUploading(true);
 
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", processedBlob);
 
     try {
       const response = await fetch("/api/profile/photo", {
@@ -118,6 +134,28 @@ export function PhotoUploadField({
     }
   }
 
+  function handleEditorCancel() {
+    setShowEditor(false);
+    setEditorFile(null);
+    // Revoke the preview URL since user cancelled
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    setPreviewUrl(null);
+  }
+
+  function handleEditorError(error: string) {
+    setShowEditor(false);
+    setEditorFile(null);
+    setLocalError(error);
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    setPreviewUrl(null);
+  }
+
   return (
     <div>
       <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -150,7 +188,7 @@ export function PhotoUploadField({
             type="file"
             accept="image/png,image/jpeg,image/webp"
             onChange={handleFileChange}
-            disabled={isUploading}
+            disabled={isUploading || showEditor}
             aria-invalid={activeError ? "true" : undefined}
             aria-describedby={activeError ? "photoUrl-error" : undefined}
             className="hidden"
@@ -169,6 +207,80 @@ export function PhotoUploadField({
           {activeError}
         </p>
       ) : null}
+
+      {/* Lazy-loaded face crop editor */}
+      {showEditor && editorFile && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="face-editor-title"
+        >
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-auto rounded-xl bg-white p-6 shadow-xl dark:bg-zinc-900">
+            <h2
+              id="face-editor-title"
+              className="mb-4 text-lg font-semibold text-zinc-900 dark:text-zinc-100"
+            >
+              Review your photo
+            </h2>
+            <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
+              For privacy, we crop to your face and blur the background. Adjust the
+              green box if needed, then confirm.
+            </p>
+            {/* Dynamic import for zero bundle impact on initial load */}
+            <FaceCropEditorWrapper
+              file={editorFile}
+              onComplete={handleEditorComplete}
+              onCancel={handleEditorCancel}
+              onError={handleEditorError}
+            />
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+// Lazy-loaded wrapper to ensure FaceCropEditor doesn't impact initial bundle
+function FaceCropEditorWrapper({
+  file,
+  onComplete,
+  onCancel,
+  onError,
+}: {
+  file: File;
+  onComplete: (processedBlob: Blob) => void;
+  onCancel: () => void;
+  onError: (error: string) => void;
+}) {
+  const [Component, setComponent] = useState<React.ComponentType<{
+    file: File;
+    onComplete: (processedBlob: Blob, faceData: any) => void;
+    onCancel: () => void;
+    onError: (error: string) => void;
+  }> | null>(null);
+
+  useEffect(() => {
+    import("./face-crop-editor").then((mod) => {
+      setComponent(() => mod.FaceCropEditor);
+    });
+  }, []);
+
+  if (!Component) {
+    return (
+      <div className="flex flex-col items-center gap-4 p-8" role="status" aria-live="polite">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-zinc-200 border-t-emerald-600" aria-hidden="true" />
+        <p className="text-zinc-600 dark:text-zinc-400">Loading editor…</p>
+      </div>
+    );
+  }
+
+  return (
+    <Component
+      file={file}
+      onComplete={(blob) => onComplete(blob)}
+      onCancel={onCancel}
+      onError={onError}
+    />
   );
 }

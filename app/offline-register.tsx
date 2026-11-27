@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import {
+  checkOfflineReadiness,
+  clearReadinessMarker,
+  type ReadinessReport,
+} from "@/lib/offline/readiness";
+
 /**
  * Registers the offline service worker (public/sw.js) once the app has
  * loaded. It is registered for the whole origin so that by the time a
@@ -259,8 +265,11 @@ export function OfflineStorageStatus() {
   const [state, setState] = useState<PersistenceState>("unknown");
   const [usage, setUsage] = useState<string | null>(null);
   const [requesting, setRequesting] = useState(false);
+  const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
 
   const refresh = useCallback(async () => {
+    // Issue #875: verify the cached envelope is actually still on this device.
+    checkOfflineReadiness().then(setReadiness, () => setReadiness(null));
     if (typeof navigator === "undefined" || !navigator.storage) {
       setState("unsupported");
       return;
@@ -338,6 +347,62 @@ export function OfflineStorageStatus() {
         </button>
       )}
       {usage && <p className="text-muted-foreground mt-1">{usage}</p>}
+      {readiness && (
+        <ReadinessDetails
+          report={readiness}
+          onDismiss={() => {
+            clearReadinessMarker();
+            void refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+const READINESS_LABEL: Record<ReadinessReport["state"], string> = {
+  ready: "Offline copy saved on this device",
+  stale: "Offline copy is out of date — open your card while online to refresh it",
+  evicted: "Your offline copy was removed by this browser",
+  missing: "No offline copy saved on this device yet — open your card once while online",
+  unsupported: "This browser can't keep an offline copy",
+};
+
+function ReadinessDetails({
+  report,
+  onDismiss,
+}: {
+  report: ReadinessReport;
+  onDismiss: () => void;
+}) {
+  const atRisk = report.state !== "ready" || report.platform === "ios-tab";
+  return (
+    <div className="mt-2" data-readiness={report.state} data-platform={report.platform}>
+      <p role={report.state === "evicted" ? "alert" : undefined}>
+        Offline readiness: {READINESS_LABEL[report.state]}
+      </p>
+      {atRisk && report.platform === "ios-tab" && (
+        <p className="text-muted-foreground mt-1">
+          Safari deletes saved site data after 7 days without a visit. Add Lafiya
+          to your Home Screen (Share → Add to Home Screen) to keep it, and keep a
+          printed card, wallet pass or lock-screen wallpaper as a backup.
+        </p>
+      )}
+      {atRisk && report.platform !== "ios-tab" && (
+        <p className="text-muted-foreground mt-1">
+          Keep a printed card, wallet pass or lock-screen wallpaper as a backup
+          in case this browser clears its storage.
+        </p>
+      )}
+      {report.state === "evicted" && (
+        <button
+          type="button"
+          className="mt-2 rounded border px-2 py-1"
+          onClick={onDismiss}
+        >
+          Dismiss
+        </button>
+      )}
     </div>
   );
 }

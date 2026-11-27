@@ -292,6 +292,9 @@ const rawServerEnvSchema = z.object({
   NEXT_PUBLIC_SENTRY_DSN: optionalUrl,
   SENTRY_DSN: optionalUrl,
   LAFIYA_BUILD_REVISION: optionalString,
+  // Issue #963: CalVer release identifier (e.g. "2026.11.25" or
+  // "2026.11.25-rc.1") of the tagged release this build was cut from.
+  LAFIYA_RELEASE_VERSION: optionalString,
   LAFIYA_SCHEMA_COMPATIBILITY: optionalString,
   // Issue #517: how many reverse-proxy hops between the real client and
   // this process are trusted to have appended (not replaced) an entry to
@@ -390,6 +393,8 @@ export type RuntimeConfig = {
   isProduction: boolean;
   isPreview: boolean;
   buildRevision: string;
+  /** Issue #963: CalVer release version, or "unknown" outside a release. */
+  releaseVersion: string;
   schemaCompatibility: string;
   attestation: {
     mode: z.infer<typeof attestationModeSchema>;
@@ -572,6 +577,7 @@ export function getRuntimeConfig(
     NEXT_PUBLIC_SENTRY_DSN: env.NEXT_PUBLIC_SENTRY_DSN,
     SENTRY_DSN: env.SENTRY_DSN,
     LAFIYA_BUILD_REVISION: env.LAFIYA_BUILD_REVISION,
+    LAFIYA_RELEASE_VERSION: env.LAFIYA_RELEASE_VERSION,
     LAFIYA_SCHEMA_COMPATIBILITY: env.LAFIYA_SCHEMA_COMPATIBILITY,
     TRUSTED_PROXY_HOPS: env.TRUSTED_PROXY_HOPS,
     CLIENT_IP_HEADER: env.CLIENT_IP_HEADER,
@@ -626,6 +632,11 @@ export function getRuntimeConfig(
       "DEPLOYMENT_IDENTITY_REQUIRED",
     );
     requireConfigured(config.LAFIYA_BUILD_REVISION, "BUILD_REVISION_REQUIRED");
+    // Issue #963: every production deploy must map to a tagged CalVer release.
+    requireConfigured(
+      config.LAFIYA_RELEASE_VERSION,
+      "RELEASE_VERSION_REQUIRED",
+    );
     requireConfigured(
       config.LAFIYA_SCHEMA_COMPATIBILITY === CURRENT_SCHEMA_COMPATIBILITY,
       "SCHEMA_COMPATIBILITY_MISMATCH",
@@ -743,6 +754,7 @@ export function getRuntimeConfig(
     deployment,
     isProduction,
     buildRevision: config.LAFIYA_BUILD_REVISION ?? "unknown",
+    releaseVersion: config.LAFIYA_RELEASE_VERSION ?? "unknown",
     schemaCompatibility:
       config.LAFIYA_SCHEMA_COMPATIBILITY ?? CURRENT_SCHEMA_COMPATIBILITY,
     attestation: {

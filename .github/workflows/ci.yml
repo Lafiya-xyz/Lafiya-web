@@ -22,15 +22,23 @@ jobs:
 
       - run: npm ci
 
-      - run: npm run lint
+      - name: Restore Turborepo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      - run: npm run turbo:lint
 
       - run: npm run schedules:check
 
       - run: npm run tokens:check
 
-      - run: npm run typecheck
+      - run: npm run turbo:typecheck
 
-      - run: npm test
+      - run: npm run turbo:test
 
       - name: Verify design token contrast across themes
         run: npm run tokens:check

@@ -1,0 +1,4 @@
+{
+  "$comment": "Flaky-test quarantine (issue #962). Entries run but do not block CI. `file` is a repo-relative path; `title` optionally narrows to one test name. `owner` is a GitHub handle, `expires` is YYYY-MM-DD. Expired entries fail `npm run quarantine:check`. See docs/operations/test-quarantine.md.",
+  "tests": []
+}

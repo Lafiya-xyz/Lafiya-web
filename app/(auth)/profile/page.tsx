@@ -17,6 +17,7 @@ import { PreviewCardButton } from "./preview-card-button";
 import { DownloadCardButton } from "./download-card-button";
 import { ProfileCompleteness } from "./profile-completeness";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { OfflineStorageStatus } from "@/app/offline-register";
 import { SignOutButton } from "../signout/sign-out-button";
 import { AttestationStatusBanner } from "./attestation-status-banner";
 import { AccessSummary } from "./access-summary";
@@ -260,6 +261,7 @@ async function ProfileContent() {
             cardUrl={`${await getBaseUrl()}/card/${profile.card_public_id}`}
             legacySunsetAt={profile.legacy_card_sunset_at}
           />
+          <OfflineStorageStatus />
           <p className="text-xs text-zinc-500 dark:text-zinc-500">
             Preview shows your last-saved public card. Unsaved draft changes are
             not reflected until you save.

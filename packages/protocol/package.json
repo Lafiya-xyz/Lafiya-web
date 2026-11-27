@@ -30,6 +30,7 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
+    "lint": "tsc --noEmit --pretty false",
     "test": "vitest run",
     "test:vectors": "vitest run src/canonicalization.test.ts src/recordHash.test.ts",
     "typecheck": "tsc --noEmit"
