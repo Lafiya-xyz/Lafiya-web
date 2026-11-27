@@ -89,6 +89,10 @@ const TEMPLATES: TemplateMap = {
       subject: "Ìwọlé tuntun sí àkántì Lafiya rẹ",
       body: "A ṣàwárí ìwọlé tuntun lórí {device_type} ní {timestamp_utc} UTC. Tí ó kò bá jẹ́ ìwọ, jọ̀wọ́ dáàbò bo àkántì rẹ lẹ́sẹ̀kẹsẹ̀.",
     },
+    pcm: {
+      subject: "New sign-in to your Lafiya account",
+      body: "We see one new sign-in from {device_type} at {timestamp_utc} UTC. If na not you, abeg protect your account sharp sharp.",
+    },
   },
 
   /**
@@ -108,6 +112,9 @@ const TEMPLATES: TemplateMap = {
     },
     yo: {
       body: "Káàdì pàjáwìrì Lafiya kan ni wọ́n wọlé rẹ ni {access_time_utc} UTC. A kò firanṣẹ data ìlera kankan sí wa.",
+    },
+    pcm: {
+      body: "Somebody open one Lafiya emergency card at {access_time_utc} UTC. We no send any medical data to us.",
     },
   },
 

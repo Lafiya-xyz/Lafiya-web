@@ -11,8 +11,14 @@
  * and render dates unambiguously with a spelled-out month (e.g. 05 Mar 2026).
  */
 
-/** Locales we explicitly support, in preference order. */
-export const SUPPORTED_LOCALES = ["en-NG", "ha-NG", "yo-NG", "ig-NG"] as const;
+import { intlLocaleFor } from "@/lib/i18n/locales";
+
+/**
+ * Locales we explicitly support, in preference order.
+ * Issue #925: `pcm` (Nigerian Pidgin) is supported; CLDR has no `pcm` data so
+ * it formats with `en-NG` via `intlLocaleFor`.
+ */
+export const SUPPORTED_LOCALES = ["en-NG", "pcm", "ha-NG", "yo-NG", "ig-NG"] as const;
 
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
@@ -27,7 +33,7 @@ export function resolveLocale(locale?: string | null): string {
       try {
         // Throws a RangeError when the tag is structurally invalid.
         Intl.getCanonicalLocales(normalized);
-        return normalized;
+        return intlLocaleFor(normalized);
       } catch {
         // fall through to the default below
       }
