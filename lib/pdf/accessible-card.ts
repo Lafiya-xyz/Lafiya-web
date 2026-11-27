@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
@@ -38,6 +39,103 @@ export interface PrintableCard {
     relationship: string;
   }> | null;
   language: string | null;
+}
+
+/**
+ * Tamper-evident check code — issue #974.
+ *
+ * A short, human-verifiable code derived from the printed critical fields so a
+ * responder can confirm offline that the visible values match what was issued.
+ * It is a truncated HMAC-SHA256 over a canonical serialisation of the fields,
+ * rendered as Crockford base32 (no I/L/O/U) so it is easy to read and type.
+ *
+ * Honest limits: the code only proves the printed fields were not altered
+ * after issuance by someone without the server secret. It does not prove
+ * identity, and a determined forger with the secret could mint new codes.
+ */
+export const CHECK_CODE_LENGTH = 8;
+
+const BASE32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+function base32(bytes: Buffer, length: number): string {
+  let bits = 0;
+  let value = 0;
+  let out = "";
+  for (const byte of bytes) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5 && out.length < length) {
+      out += BASE32[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+    if (out.length >= length) break;
+  }
+  return out;
+}
+
+const norm = (v: string | null | undefined) =>
+  (v ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+
+const normList = (v: string[] | null | undefined) =>
+  (v ?? [])
+    .map(norm)
+    .filter(Boolean)
+    .sort()
+    .join("|");
+
+/**
+ * Canonical serialisation of the printed critical fields. Order and casing are
+ * fixed so the same card always yields the same code, and any change to a
+ * printed value changes the code.
+ */
+export function canonicalCardFields(card: PrintableCard): string {
+  const contacts = (card.emergency_contacts ?? [])
+    .map((c) => `${norm(c.name)}:${norm(c.relationship)}:${norm(c.phone)}`)
+    .sort()
+    .join("|");
+  return [
+    `bg=${norm(card.blood_group)}`,
+    `gt=${norm(card.genotype)}`,
+    `al=${normList(card.allergies)}`,
+    `md=${normList(card.medications)}`,
+    `cc=${normList(card.chronic_conditions)}`,
+    `ec=${contacts}`,
+    `lg=${norm(card.language)}`,
+  ].join("\n");
+}
+
+/**
+ * Truncated HMAC-SHA256 over the canonical fields, as a short base32 code.
+ * `secret` must be a server-side secret; never ship it to the client.
+ */
+export function computeCheckCode(card: PrintableCard, secret: string): string {
+  if (!secret) throw new Error("check code secret is required");
+  const mac = createHmac("sha256", secret)
+    .update("lafiya-card-v1\n")
+    .update(canonicalCardFields(card))
+    .digest();
+  return base32(mac, CHECK_CODE_LENGTH);
+}
+
+/** Constant-time-ish comparison of a responder-entered code against the card. */
+export function verifyCheckCode(
+  card: PrintableCard,
+  secret: string,
+  entered: string,
+): boolean {
+  const expected = computeCheckCode(card, secret);
+  const given = entered
+    .toUpperCase()
+    .replace(/[^0-9A-Z]/g, "")
+    .replace(/O/g, "0")
+    .replace(/[IL]/g, "1")
+    .replace(/U/g, "V");
+  if (given.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) {
+    diff |= expected.charCodeAt(i) ^ given.charCodeAt(i);
+  }
+  return diff === 0;
 }
 
 let fontCache: { bytes: Buffer; metrics: TtfMetrics } | null = null;
@@ -111,11 +209,30 @@ const list = (v: string[] | null) =>
   v && v.length > 0 ? v.join(", ") : "None recorded";
 
 type Block =
-  | { tag: "H1" | "H2" | "P"; text: string; size: number; gray?: boolean }
-  | { tag: "Figure"; alt: string; url: string };
+  | {
+      tag: "H1" | "H2" | "P";
+      text: string;
+      size: number;
+      gray?: boolean;
+      /** Draw a bordered box around this value (critical fields). */
+      boxed?: boolean;
+    }
+  | { tag: "Figure"; alt: string; url: string }
+  | { tag: "CheckCode"; code: string };
+
+export interface CardBlocksOptions {
+  /** Truncated MAC over the printed critical fields (issue #974). */
+  checkCode?: string;
+  /** ISO date printed on the card, e.g. "2024-06-01". */
+  printedOn?: string;
+}
 
 /** Reading order == visual order: identity, then the most critical fields. */
-export function cardBlocks(card: PrintableCard, cardUrl: string): Block[] {
+export function cardBlocks(
+  card: PrintableCard,
+  cardUrl: string,
+  options: CardBlocksOptions = {},
+): Block[] {
   const blocks: Block[] = [
     { tag: "H1", text: "Emergency Card", size: 20 },
     {
@@ -125,16 +242,16 @@ export function cardBlocks(card: PrintableCard, cardUrl: string): Block[] {
       gray: true,
     },
   ];
-  const field = (label: string, value: string) =>
+  const field = (label: string, value: string, boxed = false) =>
     blocks.push(
       { tag: "H2", text: label, size: 10, gray: true },
-      { tag: "P", text: value, size: 13 },
+      { tag: "P", text: value, size: 13, boxed },
     );
-  field("Allergies", list(card.allergies));
-  field("Current medications", list(card.medications));
-  field("Chronic conditions / implants", list(card.chronic_conditions));
-  field("Blood group", card.blood_group ?? "Withheld");
-  field("Genotype", card.genotype ?? "Withheld");
+  field("Allergies", list(card.allergies), true);
+  field("Current medications", list(card.medications), true);
+  field("Chronic conditions / implants", list(card.chronic_conditions), true);
+  field("Blood group", card.blood_group ?? "Withheld", true);
+  field("Genotype", card.genotype ?? "Withheld", true);
   if (card.emergency_contacts && card.emergency_contacts.length > 0) {
     blocks.push({
       tag: "H2",
@@ -151,20 +268,38 @@ export function cardBlocks(card: PrintableCard, cardUrl: string): Block[] {
     }
   }
   field("Language spoken", card.language ?? "Not specified");
-  blocks.push(
-    {
-      tag: "Figure",
-      alt: `QR code that opens this emergency card at ${cardUrl}`,
-      url: cardUrl,
-    },
-    { tag: "P", text: cardUrl, size: 8, gray: true },
-    {
+  blocks.push({
+    tag: "Figure",
+    alt: `QR code that opens this emergency card at ${cardUrl}`,
+    url: cardUrl,
+  });
+  if (options.checkCode) {
+    blocks.push(
+      { tag: "H2", text: "Check code", size: 10, gray: true },
+      { tag: "CheckCode", code: options.checkCode },
+      {
+        tag: "P",
+        text: "Responders can verify this code offline; it does not prove identity.",
+        size: 8,
+        gray: true,
+      },
+    );
+  }
+  blocks.push({ tag: "P", text: cardUrl, size: 8, gray: true });
+  if (options.printedOn) {
+    blocks.push({
       tag: "P",
-      text: "Not a medical device. Not a substitute for professional medical judgment.",
+      text: `Printed on ${options.printedOn}`,
       size: 8,
       gray: true,
-    },
-  );
+    });
+  }
+  blocks.push({
+    tag: "P",
+    text: "Not a medical device. Not a substitute for professional medical judgment.",
+    size: 8,
+    gray: true,
+  });
   return blocks;
 }
 
@@ -185,20 +320,58 @@ const PAGE_W = 595;
 const PAGE_H = 842;
 const MARGIN = 56;
 const QR_SIZE = 160;
+const CHECK_CODE_SIZE = 22;
 
 interface LaidOutPage {
   content: string;
   elems: { tag: string; alt?: string; mcid: number }[];
 }
 
+/**
+ * Light guilloche-style background: a grid of thin diagonal lines drawn as an
+ * Artifact so it is invisible to assistive tech but makes erasure/overprint of
+ * a field visible on the physical card.
+ */
+function backgroundArtifact(): string {
+  const lines: string[] = [];
+  const step = 18;
+  for (let x = -PAGE_H; x < PAGE_W; x += step) {
+    lines.push(
+      `${x} 0 m ${x + PAGE_H} ${PAGE_H} l`,
+    );
+  }
+  return `/Artifact BMC 0.92 G 0.25 w ${lines.join(" ")} S EMC`;
+}
+
 function layoutPage(blocks: Block[], m: TtfMetrics): LaidOutPage {
-  const ops: string[] = [];
+  const ops: string[] = [backgroundArtifact()];
   const elems: LaidOutPage["elems"] = [];
   let y = PAGE_H - MARGIN;
   const maxW = PAGE_W - 2 * MARGIN;
 
   for (const b of blocks) {
     const mcid = elems.length;
+    if (b.tag === "CheckCode") {
+      y -= 8;
+      const size = CHECK_CODE_SIZE;
+      const text = toWinAnsi(b.code);
+      const w = textWidth(text, size, m.widths);
+      const boxW = Math.max(w + 24, 120);
+      const boxH = size + 16;
+      const x0 = MARGIN;
+      const top = y;
+      // Decorative box is an Artifact; the code itself is tagged content.
+      ops.push(
+        `/Artifact BMC 0.6 G 1 w ${x0.toFixed(2)} ${(top - boxH).toFixed(2)} ${boxW.toFixed(2)} ${boxH.toFixed(2)} re S EMC`,
+      );
+      const baseline = top - boxH + 10;
+      ops.push(
+        `/P <</MCID ${mcid}>> BDC BT /F1 ${size} Tf 0 g ${(x0 + 12).toFixed(2)} ${baseline.toFixed(2)} Td ${pdfString(text)} Tj ET EMC`,
+      );
+      elems.push({ tag: "P", mcid });
+      y -= boxH + 8;
+      continue;
+    }
     if (b.tag === "Figure") {
       y -= 8;
       const qr = QRCode.create(b.url, { errorCorrectionLevel: "Q" });
@@ -225,6 +398,7 @@ function layoutPage(blocks: Block[], m: TtfMetrics): LaidOutPage {
     const lines = wrap(text, b.size, maxW, m.widths);
     const leading = b.size * 1.3;
     if (b.tag === "H2") y -= 6;
+    const startY = y;
     const shown = lines
       .map((line, i) => {
         y -= leading;
@@ -232,6 +406,14 @@ function layoutPage(blocks: Block[], m: TtfMetrics): LaidOutPage {
       })
       .join(" ");
     const color = b.gray ? "0.35 g" : "0 g";
+    if (b.boxed) {
+      // Bordered field box (Artifact) makes alteration of a value visible.
+      const boxTop = startY + b.size * 0.2;
+      const boxBottom = y - b.size * 0.3;
+      ops.push(
+        `/Artifact BMC 0.55 G 0.75 w ${MARGIN - 6} ${boxBottom.toFixed(2)} ${(maxW + 12).toFixed(2)} ${(boxTop - boxBottom).toFixed(2)} re S EMC`,
+      );
+    }
     ops.push(
       `/${b.tag} <</MCID ${mcid}>> BDC BT /F1 ${b.size} Tf ${color} ${shown} ET EMC`,
     );
@@ -259,14 +441,31 @@ function xmp(title: string): string {
 <?xpacket end="w"?>`;
 }
 
+export interface BuildCardPdfOptions {
+  cardPin?: string;
+  /** Server-side secret used to derive the tamper-evident check code. */
+  checkCodeSecret?: string;
+  /** ISO date printed on the card; defaults to today (UTC). */
+  printedOn?: string;
+}
+
 export function buildCardPdf(
   card: PrintableCard,
   cardUrl: string,
-  cardPin?: string,
+  options: BuildCardPdfOptions | string = {},
 ): Buffer {
+  const opts: BuildCardPdfOptions =
+    typeof options === "string" ? { cardPin: options } : options;
   const { bytes: fontBytes, metrics: m } = font();
-  const pages = [layoutPage(cardBlocks(card, cardUrl), m)];
-  if (cardPin) pages.push(layoutPage(pinBlocks(cardPin), m));
+  const checkCode = opts.checkCodeSecret
+    ? computeCheckCode(card, opts.checkCodeSecret)
+    : undefined;
+  const printedOn =
+    opts.printedOn ?? new Date().toISOString().slice(0, 10);
+  const pages = [
+    layoutPage(cardBlocks(card, cardUrl, { checkCode, printedOn }), m),
+  ];
+  if (opts.cardPin) pages.push(layoutPage(pinBlocks(opts.cardPin), m));
 
   const objs: (string | Buffer)[] = [];
   const reserve = () => objs.push("");

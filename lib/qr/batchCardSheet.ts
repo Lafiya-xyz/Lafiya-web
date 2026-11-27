@@ -56,6 +56,10 @@ export type PlacedItem = {
   yMm: number;
   qrXMm: number;
   qrYMm: number;
+  /** Truncated human-verifiable check code printed near the QR (issue #974). */
+  checkCode?: string;
+  /** ISO date (YYYY-MM-DD) the card was printed; aids tamper detection. */
+  printDate?: string;
 };
 
 export type SheetPage = {
@@ -63,6 +67,30 @@ export type SheetPage = {
   items: PlacedItem[];
   cropMarks: Array<[number, number, number, number]>;
 };
+
+/** Optional per-card metadata carried through batch layout (issue #974). */
+export type CardMeta = {
+  checkCode?: string;
+  printDate?: string;
+};
+
+/** Placement of the check code / print date text block within one item. */
+export type CheckCodePlacement = {
+  xMm: number;
+  yMm: number;
+  widthMm: number;
+  heightMm: number;
+  /** Font size in mm; kept small but above the legibility floor. */
+  fontSizeMm: number;
+};
+
+/** Minimum legible printed height for the check code text. */
+export const MIN_CHECK_CODE_FONT_MM = 1.8;
+/** Minimum gap between the QR quiet zone and the check-code text block. */
+export const MIN_CHECK_CODE_GAP_MM = 1;
+/** Reserved height for the print-date line beneath the check code. */
+export const PRINT_DATE_LINE_MM = 2.5;
+=======
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
@@ -87,6 +115,32 @@ export function assertLayout(
     layout.rows * layout.itemHeightMm + (layout.rows - 1) * layout.gutterMm;
   if (usedW > layout.pageWidthMm || usedH > layout.pageHeightMm)
     throw new Error("LAYOUT_EXCEEDS_PAGE");
+  // The check-code block must fit beside the QR without overlapping it.
+  checkCodePlacement(layout);
+}
+
+/**
+ * Deterministic placement of the check-code / print-date text block for one
+ * item. The block sits to the right of the QR (including its quiet zone) and
+ * is vertically centred on the QR. Throws if it cannot fit inside the item.
+ */
+export function checkCodePlacement(layout: SheetLayout): CheckCodePlacement {
+  const quietZoneMm = (layout.qrSizeMm / (layout.qrSizeMm + 8)) * 8;
+  const qrRightMm = (layout.itemWidthMm + layout.qrSizeMm) / 2;
+  const xMm = qrRightMm + quietZoneMm + MIN_CHECK_CODE_GAP_MM;
+  const widthMm = layout.itemWidthMm - xMm;
+  const heightMm = MIN_CHECK_CODE_FONT_MM + PRINT_DATE_LINE_MM;
+  if (widthMm <= 0) throw new Error("CHECK_CODE_NO_ROOM");
+  if (heightMm > layout.itemHeightMm) throw new Error("CHECK_CODE_TOO_TALL");
+  const yMm = (layout.itemHeightMm - heightMm) / 2;
+  if (yMm < 0) throw new Error("CHECK_CODE_TOO_TALL");
+  return {
+    xMm: round(xMm),
+    yMm: round(yMm),
+    widthMm: round(widthMm),
+    heightMm: round(heightMm),
+    fontSizeMm: MIN_CHECK_CODE_FONT_MM,
+  };
 }
 
 export function* paginateCardSheets(
@@ -94,6 +148,7 @@ export function* paginateCardSheets(
   layout: SheetLayout,
   qrModules: number,
   minModuleMm = DEFAULT_MIN_MODULE_MM,
+  meta?: Iterable<CardMeta> | Map<string, CardMeta>,
 ): Generator<SheetPage> {
   assertLayout(layout, qrModules, minModuleMm);
   const perPage = layout.columns * layout.rows;
@@ -139,18 +194,33 @@ export function* paginateCardSheets(
     return { index: index++, items: page, cropMarks };
   };
 
+  const metaIter = meta
+    ? meta instanceof Map
+      ? meta.values()
+      : meta[Symbol.iterator]()
+    : undefined;
+
   for (const id of ids) {
     const slot = page.length;
     const col = slot % layout.columns;
     const row = Math.floor(slot / layout.columns);
     const xMm = round(marginX + col * (layout.itemWidthMm + layout.gutterMm));
     const yMm = round(marginY + row * (layout.itemHeightMm + layout.gutterMm));
+    const m = metaIter ? metaIter.next() : undefined;
+    const cardMeta: CardMeta =
+      m && !m.done ? (m.value as CardMeta) : {};
     page.push({
       id,
       xMm,
       yMm,
       qrXMm: round(xMm + (layout.itemWidthMm - layout.qrSizeMm) / 2),
       qrYMm: round(yMm + (layout.itemHeightMm - layout.qrSizeMm) / 2),
+      ...(cardMeta.checkCode !== undefined
+        ? { checkCode: cardMeta.checkCode }
+        : {}),
+      ...(cardMeta.printDate !== undefined
+        ? { printDate: cardMeta.printDate }
+        : {}),
     });
     if (page.length === perPage) {
       yield build();
