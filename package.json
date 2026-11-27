@@ -22,6 +22,8 @@
     "lint": "eslint --max-warnings=0",
     "tokens:check": "node scripts/verify-tokens-contrast.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p sw/tsconfig.json",
+    "typecheck:strict": "tsc --noEmit -p tsconfig.strict.json",
+    "typecheck:strict:ratchet": "node scripts/check-strict-ratchet.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
@@ -33,6 +35,7 @@
     "test:integration:flake": "node scripts/check-integration-flake.mjs",
     "test:e2e": "playwright test",
     "test:soak": "vitest run -c vitest.soak.config.ts",
+    "quarantine:check": "node scripts/check-quarantine.mjs",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "test-storybook": "test-storybook --url http://127.0.0.1:6006",
@@ -67,7 +70,13 @@
     "db:audit-rls": "node scripts/audit-rls.mjs",
     "db:drift": "node scripts/check-schema-drift.mjs",
     "deps:health": "node scripts/dependency-health.mjs",
-    "db:upgrade-rehearsal": "node scripts/pg-upgrade-rehearsal.mjs"
+    "db:upgrade-rehearsal": "node scripts/pg-upgrade-rehearsal.mjs",
+    "turbo": "turbo run",
+    "turbo:build": "turbo run build",
+    "turbo:typecheck": "turbo run typecheck",
+    "turbo:lint": "turbo run lint",
+    "turbo:test": "turbo run test",
+    "turbo:verify": "turbo run lint typecheck test --continue"
   },
   "dependencies": {
     "@lafiya/protocol": "*",
@@ -106,6 +115,7 @@
     "prettier-plugin-tailwindcss": "^0.8.0",
     "storybook": "^9.1.0",
     "tailwindcss": "^4",
+    "turbo": "^2.5.0",
     "typescript": "^7",
     "vitest": "^5.0.2",
     "vitest-axe": "^0.1.0"

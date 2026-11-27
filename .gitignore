@@ -24,6 +24,9 @@ test_snapshots/
 /playwright-report/
 /test-results/
 
+# turborepo
+.turbo/
+
 # next.js
 /.next/
 /out/

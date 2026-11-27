@@ -23,6 +23,29 @@ npm run typecheck
 npm test
 ```
 
+## Task orchestration (Turborepo)
+
+The repo is an npm workspace (`packages/*`) orchestrated by
+[Turborepo](https://turbo.build). `turbo.json` defines the `build`, `typecheck`,
+`lint` and `test` task graph; each task runs per workspace and is skipped when
+its inputs (source files, `package-lock.json`, `tsconfig.json`, env vars listed
+in `globalEnv`) are unchanged.
+
+```bash
+npm run turbo:verify     # lint + typecheck + test across all workspaces
+npm run turbo:build      # build every workspace in dependency order
+npm run turbo -- run test --filter=@lafiya/protocol
+```
+
+- Local cache lives in `.turbo/` (git-ignored). Use `--force` to bypass it.
+- CI restores `.turbo` via `actions/cache` in `.github/workflows/ci.yml`, so
+  unchanged tasks are cache hits on repeat runs.
+- Remote caching is opt-in: set `TURBO_TOKEN` and `TURBO_TEAM` (see
+  `docs/operations/turborepo-caching.md`). Never commit these values.
+- `npm run lint`, `npm run typecheck` and `npm test` still work and run the
+  root workspace only; prefer the `turbo:*` scripts when touching
+  `packages/`.
+
 ## Database Tests (pgTAP)
 
 The security-critical PL/pgSQL functions (for example `rate_limit_record_failure`,

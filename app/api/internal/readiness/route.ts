@@ -160,6 +160,8 @@ export async function GET() {
       status: ready ? "ready" : "not_ready",
       build: {
         revision: config.buildRevision,
+        // Issue #963: CalVer release tag this build was cut from.
+        version: config.releaseVersion,
         schemaCompatibility: config.schemaCompatibility,
       },
       environment: config.deployment,
