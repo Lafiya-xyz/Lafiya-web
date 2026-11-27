@@ -25,10 +25,22 @@ export interface TemplateRoute {
 
 export const TEMPLATE_ROUTES: Record<string, TemplateRoute> = {
   "security.new_signin": { routeClass: "transactional", senderIdEnv: "TERMII_SENDER_ID" },
+  "security.sim_swap_blocked": { routeClass: "transactional", senderIdEnv: "TERMII_SENDER_ID" },
   "emergency.card_accessed": { routeClass: "transactional", senderIdEnv: "TERMII_SENDER_ID" },
   "chw.verification_complete": { routeClass: "transactional", senderIdEnv: "TERMII_SENDER_ID" },
   "chw.reattestation_requested": { routeClass: "transactional", senderIdEnv: "TERMII_SENDER_ID" },
 };
+
+/**
+ * Templates whose rendered content must never contain a plaintext phone number
+ * or PHI (issue #968). Security notifications reference the account only by a
+ * masked identifier; the renderer is responsible for redaction, and this list
+ * lets callers/tests assert the constraint.
+ */
+export const NO_PII_TEMPLATES: ReadonlySet<string> = new Set([
+  "security.new_signin",
+  "security.sim_swap_blocked",
+]);
 
 /** Comma-separated list of sender IDs approved by the NCC / Termii. */
 function approvedSenderIds(env: NodeJS.ProcessEnv): Set<string> {

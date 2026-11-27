@@ -10,6 +10,200 @@ const MAINNET_NETWORK_PASSPHRASE =
 
 export const CURRENT_SCHEMA_COMPATIBILITY = "20260821170000";
 
+/**
+ * Issue #969: jurisdiction-specific rules live in versioned country packs so a
+ * Ghana or Kenya deployment does not need a fork. Everything that used to be a
+ * hardcoded `NG` / `+234` / NGN assumption belongs in a pack; call sites read
+ * it from `getRuntimeConfig().countryPack`.
+ *
+ * Packs are pure data (no imports, no I/O) so they can be unit tested and
+ * diffed in review. Bump `version` whenever a rule changes in a way that
+ * affects stored data or regulator-facing behaviour.
+ */
+const countryCodeSchema = z
+  .string()
+  .regex(/^[A-Z]{2}$/, "must be an ISO 3166-1 alpha-2 code");
+
+const e164CallingCodeSchema = z
+  .string()
+  .regex(/^\+[1-9]\d{0,3}$/, "must be an E.164 country calling code");
+
+const currencyCodeSchema = z
+  .string()
+  .regex(/^[A-Z]{3}$/, "must be an ISO 4217 currency code");
+
+const phoneFormatSchema = z.object({
+  /** E.164 country calling code, e.g. "+234". */
+  callingCode: e164CallingCodeSchema,
+  /** National significant number length(s) accepted after the calling code. */
+  nationalNumberLengths: z.array(z.number().int().positive()).min(1),
+  /** Optional trunk prefix stripped before normalising to E.164. */
+  trunkPrefix: z.string().min(1).optional(),
+  /** Human-readable example in E.164 form, used in validation messages. */
+  example: z.string().min(1),
+});
+
+const regulatorSchema = z.object({
+  /** Stable identifier used in audit records and consent receipts. */
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** Public URL of the regulator's data-protection guidance. */
+  guidanceUrl: z.url().optional(),
+});
+
+const consentSchema = z.object({
+  /** Version tag recorded alongside every consent receipt. */
+  version: z.string().min(1),
+  /** Locale the wording is written in (BCP 47). */
+  locale: z.string().min(1),
+  /** Short label shown on the consent checkbox. */
+  checkboxLabel: z.string().min(1),
+  /** Full consent text presented before data collection. */
+  body: z.string().min(1),
+});
+
+const smsSchema = z.object({
+  /** Default alphanumeric sender ID; carriers may override per route. */
+  defaultSenderId: z.string().min(1).max(11),
+  /** Sender IDs allowed for this jurisdiction (regulator-approved list). */
+  allowedSenderIds: z.array(z.string().min(1).max(11)).min(1),
+});
+
+const clinicalDefaultsSchema = z.object({
+  /** Default triage/consultation language (BCP 47). */
+  defaultLocale: z.string().min(1),
+  /** Default measurement units for vitals recorded without explicit units. */
+  weightUnit: z.enum(["kg", "lb"]),
+  heightUnit: z.enum(["cm", "in"]),
+  temperatureUnit: z.enum(["celsius", "fahrenheit"]),
+  /** Default antenatal visit cadence in weeks, if the pack defines one. */
+  antenatalVisitIntervalWeeks: z.number().int().positive().optional(),
+});
+
+const idTypeSchema = z.object({
+  /** Stable code persisted with the identity document. */
+  code: z.string().min(1),
+  label: z.string().min(1),
+  /** Regex source the document number must match (no anchors needed). */
+  pattern: z.string().min(1),
+});
+
+export const countryPackSchema = z.object({
+  /** ISO 3166-1 alpha-2 code of the jurisdiction. */
+  countryCode: countryCodeSchema,
+  /** Pack schema/data version, bumped on any rule change. */
+  version: z.string().min(1),
+  displayName: z.string().min(1),
+  /** Default locale for UI copy in this jurisdiction. */
+  defaultLocale: z.string().min(1),
+  phone: phoneFormatSchema,
+  regulator: regulatorSchema,
+  consent: consentSchema,
+  sms: smsSchema,
+  clinicalDefaults: clinicalDefaultsSchema,
+  /** Accepted identity document types, most common first. */
+  idTypes: z.array(idTypeSchema).min(1),
+  /** ISO 4217 code of the currency used for payouts and pricing. */
+  currency: currencyCodeSchema,
+  /** Timezone (IANA) used for scheduling and reporting. */
+  timeZone: z.string().min(1),
+});
+
+export type CountryPack = z.infer<typeof countryPackSchema>;
+
+/**
+ * Nigeria pack. This is the only place in the codebase allowed to contain
+ * `NG` / `+234` / NGN literals (enforced by the country-pack lint check).
+ */
+export const nigeriaCountryPack: CountryPack = countryPackSchema.parse({
+  countryCode: "NG",
+  version: "2026-01-01",
+  displayName: "Nigeria",
+  defaultLocale: "en-NG",
+  phone: {
+    callingCode: "+234",
+    nationalNumberLengths: [10],
+    trunkPrefix: "0",
+    example: "+2348012345678",
+  },
+  regulator: {
+    id: "ndpc",
+    name: "Nigeria Data Protection Commission",
+    guidanceUrl: "https://ndpc.gov.ng/",
+  },
+  consent: {
+    version: "ng-consent-2026-01",
+    locale: "en-NG",
+    checkboxLabel: "I agree to Lafiya processing my health data",
+    body:
+      "Lafiya processes your health information to coordinate your care. " +
+      "Your data is handled under the Nigeria Data Protection Act and the " +
+      "NDPC guidance, and is shared only with the health workers involved in " +
+      "your care. You may withdraw consent at any time.",
+  },
+  sms: {
+    defaultSenderId: "LAFIYA",
+    allowedSenderIds: ["LAFIYA", "LAFIYA-NG"],
+  },
+  clinicalDefaults: {
+    defaultLocale: "en-NG",
+    weightUnit: "kg",
+    heightUnit: "cm",
+    temperatureUnit: "celsius",
+    antenatalVisitIntervalWeeks: 4,
+  },
+  idTypes: [
+    { code: "nin", label: "National Identification Number", pattern: "^\\d{11}$" },
+    { code: "bvn", label: "Bank Verification Number", pattern: "^\\d{11}$" },
+    { code: "ng-driver-licence", label: "Driver's Licence", pattern: "^[A-Z]{3}\\d{8,12}$" },
+    { code: "ng-passport", label: "International Passport", pattern: "^[A-Z]\\d{8}$" },
+  ],
+  currency: "NGN",
+  timeZone: "Africa/Lagos",
+});
+
+/**
+ * Registry of packs available to this build. A deployment selects one via
+ * LAFIYA_COUNTRY_PACK; organizations may pin their own pack (see
+ * `resolveCountryPack`). Adding a jurisdiction means adding a pack here and
+ * to the registry -- never branching on the country code at a call site.
+ */
+export const countryPacks: Readonly<Record<string, CountryPack>> = {
+  NG: nigeriaCountryPack,
+};
+
+export const DEFAULT_COUNTRY_PACK_CODE = "NG";
+
+const countryPackCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^[A-Z]{2}$/, "must be an ISO 3166-1 alpha-2 code");
+
+/**
+ * Resolves the active pack. Precedence: explicit organization override, then
+ * the deployment-level LAFIYA_COUNTRY_PACK, then the default pack. Unknown
+ * codes fail closed rather than silently falling back to Nigeria.
+ */
+export function resolveCountryPack(
+  organizationCountryCode?: string | null,
+  deploymentCountryCode?: string | null,
+): CountryPack {
+  const requested =
+    (organizationCountryCode && organizationCountryCode.trim()) ||
+    (deploymentCountryCode && deploymentCountryCode.trim()) ||
+    DEFAULT_COUNTRY_PACK_CODE;
+  const code = countryPackCodeSchema.parse(requested.toUpperCase());
+  const pack = countryPacks[code];
+  if (!pack) {
+    throw new RuntimeConfigError(
+      "COUNTRY_PACK_UNKNOWN",
+      `no country pack registered for '${code}' (known: ${Object.keys(countryPacks).join(", ")})`,
+    );
+  }
+  return pack;
+}
+=======
+
 const deploymentSchema = z.enum([
   "development",
   "test",
@@ -98,6 +292,9 @@ const rawServerEnvSchema = z.object({
   NEXT_PUBLIC_SENTRY_DSN: optionalUrl,
   SENTRY_DSN: optionalUrl,
   LAFIYA_BUILD_REVISION: optionalString,
+  // Issue #963: CalVer release identifier (e.g. "2026.11.25" or
+  // "2026.11.25-rc.1") of the tagged release this build was cut from.
+  LAFIYA_RELEASE_VERSION: optionalString,
   LAFIYA_SCHEMA_COMPATIBILITY: optionalString,
   // Issue #517: how many reverse-proxy hops between the real client and
   // this process are trusted to have appended (not replaced) an entry to
@@ -117,6 +314,9 @@ const rawServerEnvSchema = z.object({
   PURGE_LIMITS_CRON_SECRET: optionalString,
   // Issue #786: comma-separated partner sandbox keys (lfy_sbx_ prefix).
   LAFIYA_SANDBOX_API_KEYS: optionalString,
+  // Issue #969: which country pack this deployment loads by default. An
+  // organization-level override takes precedence (see resolveCountryPack).
+  LAFIYA_COUNTRY_PACK: optionalString,
 });
 
 export type DeploymentEnvironment = z.infer<typeof deploymentSchema>;
@@ -193,6 +393,8 @@ export type RuntimeConfig = {
   isProduction: boolean;
   isPreview: boolean;
   buildRevision: string;
+  /** Issue #963: CalVer release version, or "unknown" outside a release. */
+  releaseVersion: string;
   schemaCompatibility: string;
   attestation: {
     mode: z.infer<typeof attestationModeSchema>;
@@ -203,6 +405,12 @@ export type RuntimeConfig = {
   };
   payoutIndexer: { enabled: boolean };
   sentry: { enabled: boolean };
+  /**
+   * Issue #969: the jurisdiction rules for this deployment/organization.
+   * Call sites must read phone formats, regulator rules, consent wording, SMS
+   * sender IDs, clinical defaults, ID types and currency from here.
+   */
+  countryPack: CountryPack;
   database: {
     /** Transaction-mode pooler URL for runtime/serverless access. */
     poolerUrl?: string;
@@ -336,6 +544,7 @@ function validateRpcUrl(
  */
 export function getRuntimeConfig(
   env: NodeJS.ProcessEnv = process.env,
+  options: { organizationCountryCode?: string | null } = {},
 ): RuntimeConfig {
   const parsed = rawServerEnvSchema.safeParse({
     NEXT_PUBLIC_SUPABASE_URL: env.NEXT_PUBLIC_SUPABASE_URL,
@@ -368,9 +577,11 @@ export function getRuntimeConfig(
     NEXT_PUBLIC_SENTRY_DSN: env.NEXT_PUBLIC_SENTRY_DSN,
     SENTRY_DSN: env.SENTRY_DSN,
     LAFIYA_BUILD_REVISION: env.LAFIYA_BUILD_REVISION,
+    LAFIYA_RELEASE_VERSION: env.LAFIYA_RELEASE_VERSION,
     LAFIYA_SCHEMA_COMPATIBILITY: env.LAFIYA_SCHEMA_COMPATIBILITY,
     TRUSTED_PROXY_HOPS: env.TRUSTED_PROXY_HOPS,
     CLIENT_IP_HEADER: env.CLIENT_IP_HEADER,
+    LAFIYA_COUNTRY_PACK: env.LAFIYA_COUNTRY_PACK,
   });
   if (!parsed.success) {
     const missingOrInvalid = [
@@ -385,6 +596,12 @@ export function getRuntimeConfig(
 
   const config = parsed.data;
   const deployment = inferDeployment(env);
+  // Resolve the country pack before any other validation so a deployment
+  // pointed at an unregistered jurisdiction fails fast with a clear code.
+  const countryPack = resolveCountryPack(
+    options.organizationCountryCode,
+    config.LAFIYA_COUNTRY_PACK,
+  );
   const isProduction = deployment === "production" || deployment === "mainnet";
   const isPreview = deployment === "preview";
   const attestationMode =
@@ -415,6 +632,11 @@ export function getRuntimeConfig(
       "DEPLOYMENT_IDENTITY_REQUIRED",
     );
     requireConfigured(config.LAFIYA_BUILD_REVISION, "BUILD_REVISION_REQUIRED");
+    // Issue #963: every production deploy must map to a tagged CalVer release.
+    requireConfigured(
+      config.LAFIYA_RELEASE_VERSION,
+      "RELEASE_VERSION_REQUIRED",
+    );
     requireConfigured(
       config.LAFIYA_SCHEMA_COMPATIBILITY === CURRENT_SCHEMA_COMPATIBILITY,
       "SCHEMA_COMPATIBILITY_MISMATCH",
@@ -532,6 +754,7 @@ export function getRuntimeConfig(
     deployment,
     isProduction,
     buildRevision: config.LAFIYA_BUILD_REVISION ?? "unknown",
+    releaseVersion: config.LAFIYA_RELEASE_VERSION ?? "unknown",
     schemaCompatibility:
       config.LAFIYA_SCHEMA_COMPATIBILITY ?? CURRENT_SCHEMA_COMPATIBILITY,
     attestation: {
@@ -542,6 +765,7 @@ export function getRuntimeConfig(
     },
     payoutIndexer: { enabled: config.PAYOUT_INDEXER_ENABLED },
     sentry: { enabled: config.SENTRY_ENABLED },
+    countryPack,
     database: {
       poolerUrl: config.DATABASE_URL,
       directUrl: config.DIRECT_URL,

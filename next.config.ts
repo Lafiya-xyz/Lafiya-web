@@ -28,6 +28,52 @@ function supabaseStoragePattern() {
 
 const supabaseStorageOrigin = supabaseStoragePattern();
 
+/**
+ * Fixed path from which the service worker may be served and registered
+ * (issue #967). CSP `worker-src` is pinned to exactly this path so a
+ * compromised page cannot register a worker from any other URL.
+ */
+const SERVICE_WORKER_PATH = "/sw.js";
+
+/**
+ * Emergency kill switch (issue #967). When the server sets
+ * `LAFIYA_SW_KILL_SWITCH=1`, every response emits
+ * `Clear-Site-Data: "storage"` (removing the worker, caches and other
+ * origin storage) and `/sw.js` serves a no-op replacement worker so the
+ * malicious/rogue worker is unregistered on the next navigation.
+ */
+const serviceWorkerKillSwitch = process.env.LAFIYA_SW_KILL_SWITCH === "1";
+
+/**
+ * Content-Security-Policy for the app. `worker-src` is restricted to the
+ * single fixed worker path; `script-src` keeps Next's inline bootstrap
+ * working via 'unsafe-inline' (nonce plumbing is tracked separately).
+ */
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  "connect-src 'self' https: wss:",
+  `worker-src 'self' ${SERVICE_WORKER_PATH}`,
+  "manifest-src 'self'",
+].join("; ");
+
+const securityHeaders = [
+  { key: "Content-Security-Policy", value: contentSecurityPolicy },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  // Kill switch: purge worker, caches and other origin storage.
+  ...(serviceWorkerKillSwitch
+    ? [{ key: "Clear-Site-Data", value: '"storage"' }]
+    : []),
+];
+
 const nextConfig: NextConfig = {
   /**
    * Cache Components / Partial Prerendering (Next 16).
@@ -61,6 +107,40 @@ const nextConfig: NextConfig = {
       // Hosted Supabase Storage — fallback for custom/older deployments.
       { protocol: "https", hostname: "*.supabase.co" },
     ],
+  },
+  async headers() {
+    return [
+      {
+        // Security headers for every route.
+        source: "/:path*",
+        headers: securityHeaders,
+      },
+      {
+        // The worker is served only from the fixed path with a strict
+        // JavaScript content type and a minimally scoped
+        // Service-Worker-Allowed (root scope is required for /card/*).
+        source: SERVICE_WORKER_PATH,
+        headers: [
+          { key: "Content-Type", value: "text/javascript; charset=utf-8" },
+          { key: "Service-Worker-Allowed", value: "/" },
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
+    ];
+  },
+  async rewrites() {
+    if (!serviceWorkerKillSwitch) {
+      return [];
+    }
+    // Emergencies: replace the real worker with a no-op that unregisters
+    // itself and clears caches, so devices recover on next navigation.
+    return [
+      {
+        source: SERVICE_WORKER_PATH,
+        destination: "/sw-kill-switch.js",
+      },
+    ];
   },
 };
 

@@ -9,6 +9,8 @@
  * by the template PHI lint before this adapter is called).
  */
 
+import { upstreamFetch } from "@/lib/http/dispatchers";
+
 import type { SendResult } from "../types";
 
 export interface TermiiConfig {
@@ -33,7 +35,7 @@ export async function sendViaTerm(
 
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await upstreamFetch("notifications", url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

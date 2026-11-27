@@ -74,3 +74,32 @@ simulation costs for frequently-polled hashes.
 - The ETag is derived purely from response semantics (state + ledger), not
   from query parameters or request headers, so it cannot be poisoned by a
   crafted query string.
+
+## Removing `@stellar/stellar-sdk` from the card path (Issue #880)
+
+`lib/stellar/attestation.ts` now builds the read-only `get_attestation`
+`simulateTransaction` envelope and decodes the returned `ScVal` with
+`lib/stellar/soroban-lite.ts`, a dependency-free codec of about 300 lines. The
+full SDK is still used by the CHW, payout and SEP-10 paths.
+
+| Measurement (Node 24, local)                                   | SDK          | soroban-lite |
+| -------------------------------------------------------------- | ------------ | ------------ |
+| Minified bundle of the imports the card path used (esbuild)    | 645 543 B    | 3 515 B      |
+| Module init (`require`, 3 runs)                                | 240–300 ms   | negligible   |
+| Heap after import (baseline 4 MB)                              | 16–17 MB     | ~baseline    |
+
+These are module-level numbers. The deployed card function's bundle size and
+cold start still need to be recorded from a `next build` and a preview deploy.
+
+`lib/stellar/soroban-lite.test.ts` is a differential test. It checks 128
+randomized attestation `ScVal`s, plus every scalar and container type, against
+the SDK's `scValToNative`, and confirms the SDK parses the hand-built
+envelope as `get_attestation(recordHash)`. The fixtures are generated with the
+SDK, not captured from testnet. An ESLint `no-restricted-imports` rule in
+`eslint.config.mjs` forbids importing `@stellar/stellar-sdk` from the card
+route, `attestation.ts` and the codec.
+
+The lookup still uses `simulateTransaction`, not `getLedgerEntries`. The
+contract's storage key layout isn't published in this repo, and simulating
+the contract call keeps the contract (not the web app) as the owner of that
+layout.
