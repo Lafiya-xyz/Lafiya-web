@@ -28,6 +28,7 @@ export const TEMPLATE_ROUTES: Record<string, TemplateRoute> = {
   "emergency.card_accessed": { routeClass: "transactional", senderIdEnv: "TERMII_SENDER_ID" },
   "chw.verification_complete": { routeClass: "transactional", senderIdEnv: "TERMII_SENDER_ID" },
   "chw.reattestation_requested": { routeClass: "transactional", senderIdEnv: "TERMII_SENDER_ID" },
+  "chw.certification_expiring": { routeClass: "transactional", senderIdEnv: "TERMII_SENDER_ID" },
 };
 
 /** Comma-separated list of sender IDs approved by the NCC / Termii. */

@@ -156,6 +156,29 @@ const TEMPLATES: TemplateMap = {
       body: "A gba ìbéèrè lati fọwọ́ sí àkọsílẹ̀ Lafiya ní {requested_at_utc} UTC, ó sì ń dúró fún àgbeyẹwò.",
     },
   },
+
+  /**
+   * Sent to a CHW when a certification is about to expire.
+   * Variables: {module_title}, {expires_on_utc}
+   */
+  "chw.certification_expiring": {
+    en: {
+      subject: "Your CHW certification is expiring",
+      body: "Your certification for {module_title} expires on {expires_on_utc} UTC. Renew it to keep attesting those record fields.",
+    },
+    ha: {
+      subject: "Takardar shaidar CHW naka za ta ƙare",
+      body: "Takardar shaidar ka don {module_title} za ta ƙare a {expires_on_utc} UTC. Sabunta ta don ci gaba da tabbatar da waɗannan filayen.",
+    },
+    ig: {
+      subject: "Asambodo CHW gị na-agwụ",
+      body: "Asambodo gị maka {module_title} ga-agwụ na {expires_on_utc} UTC. Megharịa ya ka ị nọgide na-agba akaebe maka ubi ndị ahụ.",
+    },
+    yo: {
+      subject: "Ìwé-ẹ̀rí CHW rẹ ń parí",
+      body: "Ìwé-ẹ̀rí rẹ fún {module_title} yóò parí ní {expires_on_utc} UTC. Sọ dọ́tun rẹ̀ kí o lè máa jẹ́rìí àwọn pápá yẹn.",
+    },
+  },
 };
 
 export type TemplateId = keyof typeof TEMPLATES;
